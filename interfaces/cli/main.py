@@ -2188,5 +2188,126 @@ def laminate(
         "damage and no cure or moisture stresses.")
 
 
+@app.command()
+def design(
+    payload_kg: float = typer.Option(5.0, "--payload-kg"),
+    link_length_m: float = typer.Option(0.35, "--link-length-m"),
+    speed_rad_s: float = typer.Option(3.0, "--speed-rad-s"),
+    ambient_c: float = typer.Option(40.0, "--ambient-c"),
+    bearing_life_h: float = typer.Option(20000.0, "--bearing-life-h"),
+    shaft_diameter_mm: float = typer.Option(16.0, "--shaft-diameter-mm"),
+    bolt_size: str = typer.Option("M6", "--bolt-size"),
+    material: str = typer.Option("al_7075_t6", "--material"),
+    step: bool = typer.Option(False, "--step",
+                              help="write the structural link as STEP"),
+    out_dir: str = typer.Option("runs/capstone", "--out-dir"),
+):
+    """Design a driven revolute joint end to end and verify it conjunctively.
+
+    Every method the project has, applied to one assembly. The joint passes
+    only if EVERY applicable check passes, and every failure mode with no
+    applicable method is reported as unassessed rather than passed over.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from integration import CheckStatus, JointSpec, design_joint, review
+
+    console = Console()
+    spec = JointSpec(payload_kg=payload_kg, link_length_m=link_length_m,
+                     max_speed_rad_s=speed_rad_s, ambient_c=ambient_c,
+                     required_bearing_life_h=bearing_life_h,
+                     shaft_diameter_m=shaft_diameter_mm / 1000.0,
+                     mount_bolt_size=bolt_size, material_id=material)
+
+    with console.status("designing and verifying"):
+        result = design_joint(spec)
+    report = review(result.verdict)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("goal", f"revolute joint carrying {payload_kg:g} kg at "
+                         f"{link_length_m:g} m, {speed_rad_s:g} rad/s")
+    head.add_row("static torque", f"{spec.static_torque_nm:.2f} N m")
+    head.add_row("link", f"{result.link_design.get('mass_kg', 0):.4f} kg of "
+                         f"{material}")
+    if result.drivetrain:
+        head.add_row("drivetrain", f"{result.drivetrain['motor']} + "
+                                   f"{result.drivetrain['gearbox']} "
+                                   f"(ratio {result.drivetrain['ratio']:g})")
+    if result.selected_bearing:
+        head.add_row("bearing", result.selected_bearing)
+    head.add_row("total mass", f"{result.total_mass_kg:.3f} kg "
+                               f"(link plus drivetrain)")
+    console.print(head)
+
+    table = Table(title="every applicable check")
+    table.add_column("component")
+    table.add_column("failure mode")
+    table.add_column("method")
+    table.add_column("SF", justify="right")
+    table.add_column("status")
+    for check in result.verdict.results:
+        if check.status is CheckStatus.NOT_ASSESSED:
+            continue
+        mark = {CheckStatus.PASSED: "[green]pass[/green]",
+                CheckStatus.FAILED: "[red]FAIL[/red]",
+                CheckStatus.NOT_APPLICABLE: "[dim]n/a[/dim]"}[check.status]
+        table.add_row(check.component, check.failure_mode,
+                      check.method or "",
+                      "" if check.safety_factor is None
+                      else f"{check.safety_factor:.3f}", mark)
+    console.print(table)
+
+    verdict_colour = {"passed": "green", "passed_with_gaps": "yellow",
+                      "failed": "red"}[report.status.value]
+    console.print(f"\n[bold {verdict_colour}]{report.headline}[/bold "
+                  f"{verdict_colour}]")
+
+    if report.governing is not None:
+        console.print(f"\n[bold]governing constraint[/bold]: "
+                      f"{report.governing.detail}")
+        console.print(f"[bold]most load-bearing assumption[/bold]: "
+                      f"{report.weakest_assumption}")
+
+    if report.unassessed:
+        gaps = Table(title=f"NOT ASSESSED: {len(report.unassessed)} failure "
+                           f"modes with no applicable method")
+        gaps.add_column("component")
+        gaps.add_column("failure mode")
+        for check in result.verdict.unassessed():
+            gaps.add_row(check.component, check.failure_mode)
+        console.print(gaps)
+        console.print(
+            "[yellow]none of these is known to be satisfied.[/yellow] They are "
+            "listed because an unchecked mode nobody names reads exactly like "
+            "a mode that passed")
+
+    console.print("\n[bold]what to do next[/bold]")
+    for line in report.recommendations:
+        console.print(f"  - {line}")
+
+    if step:
+        from geometry.cad_export.hollow_rect import export_step
+
+        vector = result.link_design.get("design_vector")
+        if vector is None:
+            console.print("[red]no link geometry to export[/red]")
+        else:
+            path = Path(out_dir) / f"{spec.name}_link.step"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            written = export_step(link_length_m, vector[0], vector[1],
+                                  vector[2], path)
+            console.print(f"\nwrote [bold]{written.path}[/bold] "
+                          f"({written.path.stat().st_size} bytes)")
+            console.print(
+                "[yellow]note[/yellow] this is the STRUCTURAL LINK only. The "
+                "motor, gearbox, bearings and fasteners are selected catalogue "
+                "items with no geometry in this model, and inventing solids "
+                "for them would put shapes in a STEP file that nothing "
+                "designed.")
+
+
 if __name__ == "__main__":
     app()
