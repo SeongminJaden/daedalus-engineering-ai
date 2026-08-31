@@ -151,5 +151,115 @@ def evaluate(
     )
 
 
+@app.command()
+def optimize(
+    seed: int = typer.Option(0, "--seed", help="differential evolution seed"),
+    method: str = typer.Option("both", "--method",
+                               help="slsqp | de | both (both cross-verifies)"),
+    baseline_width_mm: float = typer.Option(50.0, "--baseline-width"),
+    baseline_height_mm: float = typer.Option(80.0, "--baseline-height"),
+    baseline_thickness_mm: float = typer.Option(5.0, "--baseline-thickness"),
+):
+    """Minimize link mass subject to the MVP constraints, on the GPU."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.units import MM, to_mm, to_mpa
+    from optimization.constraints import build_optimization_problem, evaluate_design
+    from optimization.evolutionary import optimize_differential_evolution
+    from optimization.gradient import optimize_slsqp
+    from projects.robotic_link.problem import build_mvp_problem
+
+    console = Console()
+    problem = build_mvp_problem()
+    op = build_optimization_problem(problem)
+
+    baseline_x = np.array([baseline_width_mm * MM, baseline_height_mm * MM,
+                           baseline_thickness_mm * MM])
+    baseline = evaluate_design(op, baseline_x)
+
+    setup = Table.grid(padding=(0, 2))
+    setup.add_column(style="bold cyan", justify="right")
+    setup.add_column()
+    setup.add_row("problem", problem.name)
+    setup.add_row("objective", "minimize mass")
+    setup.add_row("allowable stress",
+                  f"{to_mpa(op.allowable_stress_pa):.1f} MPa  "
+                  f"(min of ceiling and yield/SF)")
+    setup.add_row("max deflection", f"{to_mm(op.max_deflection_m):.2f} mm")
+    setup.add_row("bounds b,h", f"{to_mm(op.lower[0]):.0f}-{to_mm(op.upper[0]):.0f} mm")
+    setup.add_row("bounds t",
+                  f"{to_mm(op.lower[2]):.1f}-{to_mm(op.upper[2]):.0f} mm  "
+                  f"(ASSUMED min wall: CNC aluminium)")
+    console.print(setup)
+
+    runs = []
+    if method in ("slsqp", "both"):
+        runs.append(optimize_slsqp(op))
+    if method in ("de", "both"):
+        runs.append(optimize_differential_evolution(op, seed=seed))
+
+    table = Table(title="optimized designs")
+    table.add_column("quantity", style="bold")
+    table.add_column("baseline", justify="right")
+    for r in runs:
+        table.add_column(r.method, justify="right")
+
+    def row(label, fmt, get):
+        table.add_row(label, fmt(get(baseline)), *[fmt(get(r.evaluation)) for r in runs])
+
+    # Units go in parentheses, never brackets: rich reads "[mm]" as a markup
+    # tag and silently eats it.
+    table.add_row("b (m)", f"{baseline_x[0]:.6g}",
+                  *[f"{r.x[0]:.6g}" for r in runs])
+    table.add_row("b (mm)", f"{to_mm(baseline_x[0]):.3f}",
+                  *[f"{to_mm(r.x[0]):.3f}" for r in runs])
+    table.add_row("h (m)", f"{baseline_x[1]:.6g}",
+                  *[f"{r.x[1]:.6g}" for r in runs])
+    table.add_row("h (mm)", f"{to_mm(baseline_x[1]):.3f}",
+                  *[f"{to_mm(r.x[1]):.3f}" for r in runs])
+    table.add_row("t (m)", f"{baseline_x[2]:.6g}",
+                  *[f"{r.x[2]:.6g}" for r in runs])
+    table.add_row("t (mm)", f"{to_mm(baseline_x[2]):.3f}",
+                  *[f"{to_mm(r.x[2]):.3f}" for r in runs])
+    row("mass (kg, SI)", lambda v: f"{v:.6f}", lambda e: e.mass_kg)
+    row("sigma_max (Pa, SI)", lambda v: f"{v:.6g}",
+        lambda e: e.max_bending_stress_pa)
+    row("sigma_max (MPa)", lambda v: f"{to_mpa(v):.3f}",
+        lambda e: e.max_bending_stress_pa)
+    row("delta_tip (m, SI)", lambda v: f"{v:.6g}", lambda e: e.tip_deflection_m)
+    row("delta_tip (mm)", lambda v: f"{to_mm(v):.5f}", lambda e: e.tip_deflection_m)
+    row("safety factor (-)", lambda v: f"{v:.2f}", lambda e: e.safety_factor)
+    row("f1 (Hz, SI)", lambda v: f"{v:.2f}", lambda e: e.first_natural_frequency_hz)
+    table.add_row(
+        "mass reduction", "-",
+        *[f"[green]{1.0 - r.evaluation.mass_kg / baseline.mass_kg:.1%}[/green]"
+          for r in runs])
+    table.add_row(
+        "active constraint", ", ".join(baseline.active_constraints()) or "none",
+        *[", ".join(r.evaluation.active_constraints()) or "none" for r in runs])
+    table.add_row(
+        "all constraints",
+        "[green]PASS[/green]" if baseline.is_feasible() else "[red]FAIL[/red]",
+        *[("[green]PASS[/green]" if r.evaluation.is_feasible()
+           else "[red]FAIL[/red]") for r in runs])
+    table.add_row("evaluations", "1", *[str(r.n_evaluations) for r in runs])
+    console.print(table)
+
+    if len(runs) == 2:
+        rel = abs(runs[0].mass_kg - runs[1].mass_kg) / runs[0].mass_kg
+        verdict = "[green]AGREE[/green]" if rel < 0.01 else "[red]DISAGREE[/red]"
+        console.print(
+            f"cross-verification: |SLSQP - DE| / SLSQP = [bold]{rel:.3e}[/bold] "
+            f"({rel:.4%})  {verdict}  [dim](independent local and global methods)[/dim]"
+        )
+
+    console.print(
+        "[dim]Beam theory: no root stress concentration, no shear deformation, "
+        "no buckling. Peak real stress at the root will be higher.[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()

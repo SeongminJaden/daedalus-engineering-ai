@@ -249,3 +249,45 @@ def beam_gradients(
         var: arr.grad.numpy().astype(np.float64)
         for var, arr in zip(DESIGN_VARIABLES, ins)
     }
+
+
+def beam_gradients_many(
+    genomes: Iterable[DesignGenome],
+    problem,
+    metrics: Sequence[str],
+    device: str | None = None,
+) -> dict[str, dict[str, np.ndarray]]:
+    """Gradients of several metrics from a single forward launch.
+
+    An optimizer needs d(mass), d(stress) and d(deflection) at the same point.
+    Recording the tape once and replaying `backward()` per metric avoids
+    re-running the forward pass for each, which is most of the cost.
+    """
+    import warp as wp
+
+    unknown = [m for m in metrics if m not in METRIC_NAMES]
+    if unknown:
+        raise ValueError(f"unknown metric(s) {unknown}; expected {METRIC_NAMES}")
+
+    genomes = list(genomes)
+    case = load_case_from_problem(problem)
+    dev = _resolve_device(device)
+    b, h, t = _design_arrays(genomes)
+    tape, ins, outs = _launch(b, h, t, case, dev, requires_grad=True)
+
+    result: dict[str, dict[str, np.ndarray]] = {}
+    for metric in metrics:
+        tape.zero()
+        # A fresh seed each pass: tape.zero() also zeros whatever array is
+        # currently attached as an output's adjoint, so reusing one buffer
+        # would silently make every pass after the first return zeros.
+        outs[METRIC_NAMES.index(metric)].grad = wp.array(
+            np.ones(len(genomes), dtype=np.float32), dtype=wp.float32, device=dev
+        )
+        tape.backward()
+        wp.synchronize_device(dev)
+        result[metric] = {
+            var: arr.grad.numpy().astype(np.float64).copy()
+            for var, arr in zip(DESIGN_VARIABLES, ins)
+        }
+    return result

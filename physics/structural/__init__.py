@@ -6,11 +6,12 @@ from .beam import (
     BeamLoadCase,
     BeamMetrics,
     beam_gradients,
+    beam_gradients_many,
     evaluate_beam,
     load_case_from_problem,
 )
 
 __all__ = [
     "DESIGN_VARIABLES", "METRIC_NAMES", "BeamLoadCase", "BeamMetrics",
-    "beam_gradients", "evaluate_beam", "load_case_from_problem",
+    "beam_gradients", "beam_gradients_many", "evaluate_beam", "load_case_from_problem",
 ]

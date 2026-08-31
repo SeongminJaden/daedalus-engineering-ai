@@ -35,7 +35,17 @@ class Interval(BaseModel):
 
 
 class DesignBounds(BaseModel):
-    """Per-variable legal ranges for a hollow-rectangle genome. SI units."""
+    """Per-variable legal ranges for a hollow-rectangle genome. SI units.
+
+    The wall-thickness floor is a **[ASSUMED]** manufacturability limit, not a
+    derived or measured one: t_min = 1.0 mm assumes a CNC-machined aluminium
+    tube, where a thinner wall starts to chatter and distort. It is NOT a
+    universal constant - additive manufacturing, extrusion and sheet forming
+    all have different floors, and a different process must change this number.
+    Because the optimum for a stiffness-limited link sits ON this bound (mass
+    falls monotonically as the wall thins), the assumption directly sets the
+    answer. Revisit it before treating any optimized mass as achievable.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -45,8 +55,9 @@ class DesignBounds(BaseModel):
     outer_height_m: Interval = Field(
         default_factory=lambda: Interval(min=0.010, max=0.100)
     )
+    # [ASSUMED] 1 mm minimum wall - CNC aluminium. See class docstring.
     wall_thickness_m: Interval = Field(
-        default_factory=lambda: Interval(min=0.0005, max=0.010)
+        default_factory=lambda: Interval(min=0.001, max=0.020)
     )
 
     def clamp_section(self, section: HollowRectangleSection) -> HollowRectangleSection:
