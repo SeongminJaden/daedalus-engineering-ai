@@ -1365,5 +1365,74 @@ def methods(
                       "optimum that the 3D FEM gate then rejected.")
 
 
+@app.command()
+def nodes(
+    geometry: str = typer.Option(None, "--geometry",
+                                 help="prismatic_beam, voxel_domain, assembly, brep"),
+    slenderness: float = typer.Option(None, "--slenderness"),
+    stress_field: bool = typer.Option(False, "--stress-field"),
+):
+    """List the nodes and the capabilities they provide.
+
+    A node that cannot serve its capabilities is listed anyway, with the reason.
+    An unbuilt capability and a blocked one need different responses, and a
+    roster that hides the blocked ones cannot tell them apart.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.registry import ProblemContext
+    from nodes import build_roster
+
+    console = Console()
+    registry = build_roster()
+
+    roster = Table(title="nodes")
+    roster.add_column("node")
+    roster.add_column("transport")
+    roster.add_column("address")
+    roster.add_column("status")
+    for descriptor in registry.nodes():
+        status = ("[green]available[/green]" if descriptor.available
+                  else f"[yellow]{descriptor.unavailable_reason}[/yellow]")
+        roster.add_row(descriptor.name, descriptor.transport.value,
+                       descriptor.address or "(in process)", status)
+    console.print(roster)
+
+    context = ProblemContext(
+        geometry=geometry,
+        representations=(geometry,) if geometry else None,
+        slenderness=slenderness, needs_stress_field=stress_field)
+    candidates = registry.query(context)
+
+    table = Table(title="capabilities"
+                        + (f" applicable to this problem" if geometry else ""))
+    table.add_column("capability")
+    table.add_column("node")
+    table.add_column("category")
+    table.add_column("fidelity")
+    table.add_column("cost")
+    listing = candidates.applicable if geometry else registry.all()
+    for capability in listing:
+        table.add_row(capability.name, capability.node.name,
+                      capability.method.category.value,
+                      capability.method.fidelity.name.lower(),
+                      capability.method.cost.name.lower())
+    console.print(table)
+
+    if geometry and candidates.excluded:
+        ruled = Table(title="excluded, with every reason")
+        ruled.add_column("capability")
+        ruled.add_column("reasons")
+        for exclusion in candidates.excluded:
+            ruled.add_row(exclusion.capability.name, "; ".join(exclusion.failed))
+        console.print(ruled)
+
+    console.print(
+        "external verification is not wired to a running node, so designs "
+        "carry the status [bold]self_fem_only[/bold]: checked by this "
+        "project's own FEM and by nothing else")
+
+
 if __name__ == "__main__":
     app()

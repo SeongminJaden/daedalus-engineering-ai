@@ -1,0 +1,12 @@
+# Optional node dependencies, installed separately from the core requirements.
+#
+# The analysis stack (physics, optimization, brain, surrogate) runs entirely
+# in process and does not need these. They are required only to expose this
+# engine as an MCP server, or to consume a capability from another node.
+#
+#   env -u PYTHONPATH .venv/bin/pip install -r requirements-nodes.txt
+#
+# The node layer imports this lazily and degrades to in-process routing when it
+# is absent, so a user who never talks to another node does not install it.
+
+mcp>=2.1
