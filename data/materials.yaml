@@ -1,0 +1,44 @@
+# Material property database. All values SI.
+#
+# STATUS / SOURCE ARE PART OF THE SCHEMA ON PURPOSE.
+# Every entry here is `reference_typical`: handbook/database TYPICAL values,
+# NOT a specific supplier's certified datasheet. Typical values vary with
+# temper, product form (plate vs extrusion vs bar), thickness and heat lot.
+# Before anything is manufactured, each value must be re-checked against the
+# actual supplier datasheet for the actual product form, and the status
+# upgraded accordingly. Design decisions made on these numbers carry that
+# caveat with them.
+#
+# SCOPE: this database currently holds ISOTROPIC, linear-elastic METALS only.
+# CFRP and 3D-printed plastics are anisotropic and must NOT be added to this
+# single-E/single-yield schema - they need the direction-dependent schema and
+# the anisotropic solver first (see the material roadmap in DESIGN.md, step 3).
+#
+# fatigue_strength_pa is a representative endurance value (R.R. Moore rotating
+# beam, ~5e8 cycles for these alloys). Aluminium has no true endurance limit,
+# so this is a reference point, not a guarantee of infinite life.
+
+materials:
+  - id: al_7075_t6
+    name: Aluminium 7075-T6
+    density_kg_m3: 2810.0
+    youngs_modulus_pa: 71.7e9
+    yield_strength_pa: 503.0e6
+    ultimate_strength_pa: 572.0e6
+    poisson_ratio: 0.33
+    shear_modulus_pa: 26.9e9
+    fatigue_strength_pa: 159.0e6
+    source: MatWeb/MMPDS typical (verify vs supplier datasheet)
+    status: reference_typical
+
+  - id: al_6061_t6
+    name: Aluminium 6061-T6
+    density_kg_m3: 2700.0
+    youngs_modulus_pa: 68.9e9
+    yield_strength_pa: 276.0e6
+    ultimate_strength_pa: 310.0e6
+    poisson_ratio: 0.33
+    shear_modulus_pa: 26.0e9
+    fatigue_strength_pa: 96.5e6
+    source: MatWeb typical (verify vs supplier datasheet)
+    status: reference_typical

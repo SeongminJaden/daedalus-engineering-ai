@@ -1,0 +1,28 @@
+name: mvp_cantilever_link
+geometry:
+  length_m: 0.5
+  max_width_m: 0.1
+  max_height_m: 0.1
+  section_type: hollow_rectangle
+material_id: al_7075_t6
+loads:
+- type: point_force
+  magnitude_n: 196.2
+  direction:
+    x: 0.0
+    y: -1.0
+    z: 0.0
+  application: tip
+boundary_conditions:
+- type: fixed
+  location: root
+constraints:
+  max_stress_pa: 120000000.0
+  max_deflection_m: 0.001
+  min_safety_factor: 2.0
+  min_natural_frequency_hz: null
+  no_collision: false
+objectives:
+- sense: minimize
+  quantity: mass
+  weight: 1.0

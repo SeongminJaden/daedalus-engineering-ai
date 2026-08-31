@@ -14,7 +14,8 @@ env/
 # --- run artifacts ---
 runs/
 logs/
-data/
+data/*
+!data/materials.yaml
 datasets/
 checkpoints/
 outputs/
