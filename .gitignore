@@ -12,14 +12,19 @@ env/
 .env
 
 # --- run artifacts ---
-runs/
-logs/
-data/*
-!data/materials.yaml
-datasets/
-checkpoints/
-outputs/
-artifacts/
+# ANCHORED TO THE REPO ROOT (leading slash) on purpose. Unanchored patterns
+# like "datasets/" match at ANY depth, which silently excluded the real source
+# package surrogate/datasets/ from a commit - the push looked clean and a fresh
+# clone could not import surrogate at all. Any generic directory name used for
+# artifacts must be anchored, or it will eventually collide with a package.
+/runs/
+/logs/
+/data/*
+!/data/materials.yaml
+/datasets/
+/checkpoints/
+/outputs/
+/artifacts/
 *.pt
 *.pth
 *.ckpt
