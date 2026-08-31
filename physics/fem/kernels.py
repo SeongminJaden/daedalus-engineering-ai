@@ -21,10 +21,18 @@ def stiffness_matvec(
     u: wp.array(dtype=wp.float64),
     ke: wp.array(dtype=wp.float64),          # flattened 24x24
     conn: wp.array2d(dtype=wp.int32),        # (n_elements, 8)
+    scale: wp.array(dtype=wp.float64),       # per-element stiffness multiplier
     y: wp.array(dtype=wp.float64),
 ):
-    """y += K @ u, accumulated element by element."""
+    """y += K @ u, accumulated element by element.
+
+    `scale` multiplies each element's contribution. It is 1 for a uniform part
+    and carries the SIMP density interpolation E(x)/E0 during topology
+    optimization: stiffness is linear in E, so one shared Ke still serves every
+    element and the matrix-free structure is unchanged.
+    """
     e = wp.tid()
+    s = scale[e]
     for a in range(8):
         na = conn[e, a]
         for di in range(3):
@@ -34,22 +42,24 @@ def stiffness_matvec(
                 nb = conn[e, b]
                 for dj in range(3):
                     acc += ke[i * ELEM_DOFS + b * 3 + dj] * u[nb * 3 + dj]
-            wp.atomic_add(y, na * 3 + di, acc)
+            wp.atomic_add(y, na * 3 + di, s * acc)
 
 
 @wp.kernel
 def stiffness_diagonal(
     ke: wp.array(dtype=wp.float64),
     conn: wp.array2d(dtype=wp.int32),
+    scale: wp.array(dtype=wp.float64),
     diag: wp.array(dtype=wp.float64),
 ):
     """diag(K), for Jacobi preconditioning."""
     e = wp.tid()
+    s = scale[e]
     for a in range(8):
         na = conn[e, a]
         for di in range(3):
             i = a * 3 + di
-            wp.atomic_add(diag, na * 3 + di, ke[i * ELEM_DOFS + i])
+            wp.atomic_add(diag, na * 3 + di, s * ke[i * ELEM_DOFS + i])
 
 
 @wp.kernel
@@ -127,3 +137,31 @@ def element_stress(
             for dj in range(3):
                 acc += db[c * ELEM_DOFS + b * 3 + dj] * u[nb * 3 + dj]
         stress[e, c] = acc
+
+
+@wp.kernel
+def element_strain_energy(
+    u: wp.array(dtype=wp.float64),
+    ke: wp.array(dtype=wp.float64),
+    conn: wp.array2d(dtype=wp.int32),
+    energy: wp.array(dtype=wp.float64),
+):
+    """u_e^T Ke0 u_e for each element, at the UNSCALED base stiffness.
+
+    This is the quantity the SIMP sensitivity needs. Keeping it unscaled means
+    the density interpolation and its derivative live in one place in Python
+    rather than being baked into the kernel.
+    """
+    e = wp.tid()
+    total = wp.float64(0.0)
+    for a in range(8):
+        na = conn[e, a]
+        for di in range(3):
+            i = a * 3 + di
+            row = wp.float64(0.0)
+            for b in range(8):
+                nb = conn[e, b]
+                for dj in range(3):
+                    row += ke[i * ELEM_DOFS + b * 3 + dj] * u[nb * 3 + dj]
+            total += u[na * 3 + di] * row
+    energy[e] = total

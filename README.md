@@ -44,6 +44,7 @@ Phases 0-6 are implemented and verified.
 | 10 | Assemblies and kinematics (FK, Jacobian, IK, statics, assembly STEP) | done |
 | 11 | Rigid-body dynamics (inertia, M/C/G, load cases, torque and power) | done |
 | 12 | Motor and gearbox selection (margins, reflected inertia, alternatives) | done |
+| 13 | Topology optimization (SIMP on the GPU FEM, sensitivity-verified) | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -270,6 +271,8 @@ one long search yields at most `SIMULATED`.
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
+
+**A topology result is a design concept, not a part.** SIMP leaves intermediate densities that have to be thresholded, so the shape you get is not the field that was optimized. It exports as a blocky voxel STL rather than a clean STEP, for the same reason organic geometry always does. And it minimises **compliance, not stress**: it carries no stress constraint and says nothing about peak stress. It still has to pass the 3D FEM gate.
 
 **The motor and gearbox catalogues are illustrative archetypes, not real parts.** No vendor part numbers were invented, because a fabricated catalogue gets read later as if it had been sourced. The selection logic is the deliverable: replace the catalogue with datasheet values before ordering. The thermal check is a continuous-torque proxy, so results are labelled subject to thermal validation, and when nothing meets the requirement the selector reports infeasible rather than returning the least bad option. First-pass screening, not a final component decision.
 

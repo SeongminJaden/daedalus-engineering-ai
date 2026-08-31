@@ -36,6 +36,10 @@ class FemSolution:
     element_von_mises: np.ndarray    # (n_elements,)
     report: SolveReport
     mesh: Mesh
+    # u_e^T Ke0 u_e per element, at the unscaled stiffness. The SIMP
+    # sensitivity is built from this.
+    element_strain_energy: np.ndarray | None = None
+    load_vector: np.ndarray | None = None
 
     def tip_deflection(self, direction: int = 1) -> float:
         """Mean displacement of the tip face along `direction` (default y)."""
@@ -44,6 +48,12 @@ class FemSolution:
 
     def max_displacement_magnitude(self) -> float:
         return float(np.linalg.norm(self.displacements, axis=1).max())
+
+    def compliance(self) -> float:
+        """c = U^T K U = F^T U. Using F^T U avoids a second matvec."""
+        if self.load_vector is None:
+            raise ValueError("solution carries no load vector")
+        return float(self.load_vector @ self.displacements.reshape(-1))
 
 
 def _resolve_device(device: str | None) -> str:
@@ -67,6 +77,7 @@ def solve_linear_elasticity(
     # 1.7e-7 and 9.8e-10, so tightening further buys precision the model does
     # not have while costing thousands of iterations.
     stiffness_matrix: np.ndarray | None = None,
+    element_scale: np.ndarray | None = None,
     tol: float = 1e-8,
     max_iterations: int | None = None,
     device: str | None = None,
@@ -104,6 +115,21 @@ def solve_linear_elasticity(
     conn_d = wp.array(mesh.connectivity.astype(np.int32), dtype=wp.int32,
                       device=dev)
 
+    # Per-element stiffness multiplier. Ones for a uniform part; the SIMP
+    # density interpolation during topology optimization.
+    if element_scale is None:
+        scale_host = np.ones(mesh.n_elements, dtype=np.float64)
+    else:
+        scale_host = np.asarray(element_scale, dtype=np.float64).reshape(-1)
+        if scale_host.shape[0] != mesh.n_elements:
+            raise ValueError(
+                f"element_scale has {scale_host.shape[0]} entries for "
+                f"{mesh.n_elements} elements")
+        if np.any(scale_host <= 0):
+            raise ValueError("element_scale must be strictly positive; a zero "
+                             "makes the stiffness matrix singular")
+    scale_d = wp.array(scale_host, dtype=wp.float64, device=dev)
+
     fixed = np.zeros(n_dofs, dtype=np.int32)
     for node in np.asarray(fixed_nodes, dtype=np.int64):
         fixed[3 * node:3 * node + 3] = 1
@@ -118,7 +144,8 @@ def solve_linear_elasticity(
 
     from .kernels import (
         apply_dirichlet, axpy, dot_partial, elementwise_multiply,
-        element_stress, reciprocal_safe, stiffness_diagonal, stiffness_matvec,
+        element_strain_energy, element_stress, reciprocal_safe,
+        stiffness_diagonal, stiffness_matvec,
         xpay, zero,
     )
 
@@ -135,7 +162,7 @@ def solve_linear_elasticity(
     # Jacobi preconditioner
     diag = new_vec()
     wp.launch(stiffness_diagonal, dim=mesh.n_elements,
-              inputs=[ke_d, conn_d], outputs=[diag], device=dev)
+              inputs=[ke_d, conn_d, scale_d], outputs=[diag], device=dev)
     m_inv = new_vec()
     wp.launch(reciprocal_safe, dim=n_dofs, inputs=[diag], outputs=[m_inv],
               device=dev)
@@ -150,7 +177,7 @@ def solve_linear_elasticity(
     def matvec(x, out):
         wp.launch(zero, dim=n_dofs, inputs=[out], device=dev)
         wp.launch(stiffness_matvec, dim=mesh.n_elements,
-                  inputs=[x, ke_d, conn_d], outputs=[out], device=dev)
+                  inputs=[x, ke_d, conn_d, scale_d], outputs=[out], device=dev)
         wp.launch(apply_dirichlet, dim=n_dofs, inputs=[out, fixed_d], device=dev)
 
     wp.launch(apply_dirichlet, dim=n_dofs, inputs=[r, fixed_d], device=dev)
@@ -194,6 +221,11 @@ def solve_linear_elasticity(
               inputs=[u, db_d, conn_d], outputs=[stress_d], device=dev)
     wp.synchronize_device(dev)
 
+    energy_d = wp.zeros(mesh.n_elements, dtype=wp.float64, device=dev)
+    wp.launch(element_strain_energy, dim=mesh.n_elements,
+              inputs=[u, ke_d, conn_d], outputs=[energy_d], device=dev)
+    wp.synchronize_device(dev)
+
     stress = stress_d.numpy()
     return FemSolution(
         displacements=u.numpy().reshape(-1, 3),
@@ -202,4 +234,6 @@ def solve_linear_elasticity(
         report=SolveReport(iterations=iterations, residual=residual,
                            converged=converged, n_dofs=n_dofs),
         mesh=mesh,
+        element_strain_energy=energy_d.numpy(),
+        load_vector=f,
     )

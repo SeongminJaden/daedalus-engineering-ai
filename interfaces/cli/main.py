@@ -966,5 +966,118 @@ def drivetrain(
         "first-pass screening, not a final component decision.[/dim]")
 
 
+@app.command()
+def topology(
+    volume_fraction: float = typer.Option(0.4, "--volume-fraction"),
+    nx: int = typer.Option(32, "--nx"), ny: int = typer.Option(10, "--ny"),
+    nz: int = typer.Option(2, "--nz"),
+    iterations: int = typer.Option(80, "--iterations"),
+    no_filter: bool = typer.Option(False, "--no-filter",
+                                   help="disable the density filter, to see checkerboarding"),
+    stl: bool = typer.Option(False, "--stl", help="write the thresholded shape"),
+    out_dir: str = typer.Option("runs/topology", "--out-dir"),
+):
+    """Topology-optimize a cantilever domain with SIMP on the GPU FEM."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from optimization.topology import (
+        SimpProblem, checkerboard_metric, export_stl, grey_fraction, optimize,
+    )
+    from physics.fem.mesh import solid_box_mesh
+
+    console = Console()
+    material = get_material("al_7075_t6")
+    length, height, width, load = 0.16, 0.05, 0.02, 200.0
+    mesh = solid_box_mesh(length, height, width, nx, ny, nz)
+    problem = SimpProblem(
+        mesh=mesh, youngs_modulus_pa=material.youngs_modulus_pa,
+        poisson_ratio=material.poisson_ratio,
+        fixed_nodes=mesh.nodes_at_x(0.0), load_nodes=mesh.nodes_at_x(length),
+        total_load_n=-load, load_direction=1,
+        volume_fraction=volume_fraction, filter_radius_elements=1.5)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("domain", f"{length} x {height} x {width} m")
+    head.add_row("mesh", f"{nx} x {ny} x {nz} = {mesh.n_elements} elements, "
+                         f"{mesh.n_dofs} dofs")
+    head.add_row("volume fraction", f"{volume_fraction}")
+    head.add_row("penalty p", "3.0")
+    head.add_row("filter", "off" if no_filter else "on, radius 1.5 elements")
+    console.print(head)
+
+    with console.status("optimizing"):
+        result = optimize(problem, max_iterations=iterations,
+                          use_filter=not no_filter)
+
+    history = result.compliance_history
+    table = Table(title="convergence")
+    table.add_column("iteration", justify="right")
+    table.add_column("compliance (J)", justify="right")
+    table.add_column("volume", justify="right")
+    table.add_column("max density change", justify="right")
+    shown = sorted(set([0, 1, 2, 4, 9, 19, 39, len(history) - 1]))
+    for i in shown:
+        if 0 <= i < len(history):
+            table.add_row(str(i + 1), f"{history[i]:.6e}",
+                          f"{result.volume_history[i]:.4f}",
+                          f"{result.change_history[i]:.5f}")
+    console.print(table)
+
+    summary = Table.grid(padding=(0, 2))
+    summary.add_column(style="bold cyan", justify="right")
+    summary.add_column()
+    summary.add_row("iterations", f"{result.iterations} "
+                                  f"(converged={result.converged})")
+    summary.add_row("compliance", f"{history[0]:.6e} -> {history[-1]:.6e} J "
+                                  f"({history[-1] / history[0]:.4f}x)")
+    summary.add_row("final volume fraction", f"{result.volume_fraction:.6f}")
+    summary.add_row("checkerboard metric",
+                    f"{checkerboard_metric(mesh, result.density):.4f}")
+    summary.add_row("grey fraction (0.1 to 0.9)",
+                    f"{grey_fraction(result.density):.3f}")
+    console.print(summary)
+
+    grid = result.density.reshape(nx, ny, nz)
+    profile = Table(title="density through the section height "
+                          "(bending puts material at the extremes)")
+    profile.add_column("row (bottom to top)", justify="right")
+    profile.add_column("mean density", justify="right")
+    profile.add_column("", justify="left")
+    for j, value in enumerate(grid.mean(axis=(0, 2))):
+        profile.add_row(str(j), f"{value:.3f}", "#" * int(round(value * 40)))
+    console.print(profile)
+
+    if stl:
+        report = export_stl(mesh, result.density, Path(out_dir) / "topology.stl")
+        console.print(
+            f"wrote [bold]{report.path}[/bold] "
+            f"({report.path.stat().st_size} bytes): "
+            f"{report.retained_elements}/{report.total_elements} voxels "
+            f"({report.retained_fraction:.1%}), volume "
+            f"{report.volume_m3:.6e} m^3, watertight={report.watertight}")
+        if not report.watertight:
+            console.print(
+                "[yellow]![/yellow] the surface is not watertight: voxels that "
+                "meet only along an edge leave non-manifold edges. The volume "
+                "above is exact from the voxel count, but closing those "
+                "contacts needs smoothing, which changes the shape.")
+
+    console.print(
+        "\n[dim]SIMP leaves intermediate densities, and no material is 40% "
+        "present, so the field must be thresholded and the thresholded shape "
+        "differs from what was optimized. The output is a voxel model, blocky "
+        "by construction, and an STL rather than a clean STEP: recovering "
+        "analytic faces from a density field is surface reconstruction. This "
+        "minimises COMPLIANCE, not stress, so it carries no stress constraint "
+        "and says nothing about peak stress. A design concept, not a verified "
+        "part: it still has to pass the 3D FEM gate and gain manufacturing "
+        "features. Still SIMULATED.[/dim]")
+
+
 if __name__ == "__main__":
     app()
