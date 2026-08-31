@@ -1,0 +1,1 @@
+"""geometry.cad — stub."""

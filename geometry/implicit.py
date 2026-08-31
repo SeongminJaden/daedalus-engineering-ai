@@ -1,0 +1,1 @@
+"""geometry.implicit — stub."""

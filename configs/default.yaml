@@ -1,0 +1,28 @@
+# Project-wide defaults. GPU-tier-dependent values live in configs/profiles/
+# and are layered on top of this file by core.profile.load_config().
+project:
+  name: engineering-ai
+  seed: 0
+  artifacts_dir: runs
+
+# Profile resolution order (highest priority first):
+#   1. CLI  --profile <name>
+#   2. env  ENG_PROFILE=<name>
+#   3. auto-detect from available VRAM
+#   4. this fallback
+profile:
+  fallback: laptop_4gb
+  auto_detect: true
+
+physics:
+  backend: warp          # NVIDIA Warp; no system CUDA toolkit required
+  gravity: [0.0, -9.81, 0.0]
+
+optimization:
+  objective: minimize_mass
+  constraints: [max_von_mises_stress, min_stiffness]
+
+monitoring:
+  mode: tui              # tui | plain | none  (no GUI by design)
+  log_dir: logs
+  log_format: jsonl

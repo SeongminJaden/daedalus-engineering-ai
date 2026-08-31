@@ -1,0 +1,36 @@
+# Tier: single laptop GPU with ~4 GB VRAM (e.g. RTX 3050 Laptop).
+# This is the CURRENT default target. Values are deliberately conservative:
+# the display server also lives on this GPU, so headroom matters.
+name: laptop_4gb
+description: RTX 3050 Laptop class. 4 GB VRAM, shared with the desktop compositor.
+
+gpu:
+  vram_gb: 4
+  reserve_vram_gb: 0.8      # left for compositor/driver; never allocated by us
+  device: cuda
+
+compute:
+  max_batch: 4
+  amp: true                 # mixed precision on: halves activation memory
+  dtype: float32
+  grad_checkpointing: true
+
+simulation:
+  fidelity: low
+  fem_max_dofs: 150000
+  mesh_resolution: 48       # voxels along the longest bbox axis
+  max_substeps: 8
+  contact_max_pairs: 65536
+
+optimization:
+  candidate_pool: 16        # designs evaluated per generation
+  generations: 20
+  checkpoint_every: 5
+
+surrogate:
+  enabled: true             # lean on surrogates hard when VRAM is scarce
+  train_batch: 32
+  infer_batch: 64
+
+monitoring:
+  refresh_hz: 4

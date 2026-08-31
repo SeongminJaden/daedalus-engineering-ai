@@ -1,0 +1,43 @@
+# Tier: DGX Spark class. 128 GB unified memory, LOW bandwidth (~273 GB/s).
+#
+# NOTE — BANDWIDTH CONSTRAINED. Capacity is huge but memory bandwidth is
+# roughly 1/6 of the RTX 5090, and an FEM solve is bandwidth-bound. Expect
+# per-solve throughput to be LOW here even though the limits below are the
+# largest of any profile. This tier exists for problems that must fit in
+# memory at once (very large single models) and for hosting a local LLM
+# alongside the engine - not for fast iteration.
+# There is no `notes` key in the profile schema, so this rationale lives in
+# comments to keep all profiles on one identical key set.
+name: dgx_spark_128gb
+description: DGX Spark class. 128 GB unified memory, ~273 GB/s. Capacity over speed.
+
+gpu:
+  vram_gb: 128
+  reserve_vram_gb: 8.0      # unified memory is shared with the host OS
+  device: cuda
+
+compute:
+  max_batch: 256
+  amp: true                 # on: relieves the bandwidth bottleneck
+  dtype: float32
+  grad_checkpointing: false
+
+simulation:
+  fidelity: high
+  fem_max_dofs: 20000000
+  mesh_resolution: 512
+  max_substeps: 64
+  contact_max_pairs: 8388608
+
+optimization:
+  candidate_pool: 1024
+  generations: 500
+  checkpoint_every: 25
+
+surrogate:
+  enabled: true
+  train_batch: 4096
+  infer_batch: 8192
+
+monitoring:
+  refresh_hz: 10

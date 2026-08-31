@@ -1,0 +1,1 @@
+"""physics.thermal — stub."""

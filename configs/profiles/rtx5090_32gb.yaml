@@ -1,0 +1,40 @@
+# Tier: RTX 5090 class. 32 GB VRAM, very high memory bandwidth (~1.8 TB/s).
+#
+# NOTE: this is the speed-optimal tier for THIS workload. Bandwidth, not
+# capacity, is what bounds an FEM solve, so per-solve latency is the lowest
+# of any profile here. Prefer this tier when the goal is "solve fast, solve
+# many". AMP is left off: at 32 GB we are not memory-bound, and fp32 keeps
+# the stress/deflection results cleanly comparable against analytic checks.
+name: rtx5090_32gb
+description: RTX 5090 class. 32 GB VRAM, ~1.8 TB/s bandwidth, dedicated to compute.
+
+gpu:
+  vram_gb: 32
+  reserve_vram_gb: 1.5
+  device: cuda
+
+compute:
+  max_batch: 64
+  amp: false                # optional here; fp32 for verification fidelity
+  dtype: float32
+  grad_checkpointing: false
+
+simulation:
+  fidelity: high
+  fem_max_dofs: 6000000
+  mesh_resolution: 256
+  max_substeps: 48
+  contact_max_pairs: 2097152
+
+optimization:
+  candidate_pool: 256
+  generations: 300
+  checkpoint_every: 20
+
+surrogate:
+  enabled: true
+  train_batch: 1024
+  infer_batch: 2048
+
+monitoring:
+  refresh_hz: 10

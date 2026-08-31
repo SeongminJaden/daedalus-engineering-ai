@@ -1,0 +1,1 @@
+"""brain.strategy — stub."""

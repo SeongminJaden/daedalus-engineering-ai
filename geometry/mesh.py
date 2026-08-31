@@ -1,0 +1,1 @@
+"""geometry.mesh — stub."""

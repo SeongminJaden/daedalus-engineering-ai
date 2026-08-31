@@ -1,0 +1,1 @@
+"""physics.collision — stub."""

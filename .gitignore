@@ -1,0 +1,35 @@
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- environment ---
+.venv/
+env/
+.env
+
+# --- run artifacts ---
+runs/
+logs/
+data/
+datasets/
+checkpoints/
+outputs/
+artifacts/
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.npy
+
+# --- warp kernel cache ---
+warp_cache/
+.warp/
+
+# --- editor / os ---
+.vscode/
+.idea/
+.DS_Store

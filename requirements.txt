@@ -1,0 +1,30 @@
+# Install inside the project venv ONLY, and always with PYTHONPATH unset:
+#   env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
+# (ROS 2 Humble exports PYTHONPATH, which would otherwise shadow venv packages.)
+
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+# --- GPU physics core ---
+warp-lang
+
+# --- tensor / autodiff (CUDA 13.0 build, matches driver 595.84) ---
+torch==2.13.0+cu130
+
+# --- numerics ---
+numpy
+scipy
+
+# --- config / schema ---
+pyyaml
+pydantic
+
+# --- CLI + TUI monitoring ---
+typer
+rich
+tqdm
+
+# --- geometry / mesh ---
+trimesh
+
+# --- test ---
+pytest
