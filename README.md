@@ -38,7 +38,7 @@ Phases 0–6 are implemented and verified.
 | 4 | Autonomous design loop: state machine, episodes, budget, explore/exploit | done |
 | 5 | Engineering Brain: episodic/semantic memory, evidence levels, retrieval | done |
 | 6 | PyTorch surrogate + two-stage screen-and-verify | done |
-| 7 | High-fidelity 3D FEM (stress concentration, buckling) | planned |
+| 7 | High-fidelity 3D FEM verification gate (Warp, matrix-free CG) | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium

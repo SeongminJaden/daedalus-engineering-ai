@@ -488,5 +488,130 @@ def brain(
         )
 
 
+@app.command()
+def verify(
+    width_mm: float = typer.Option(10.0, "--width", help="outer width b in mm"),
+    height_mm: float = typer.Option(80.96, "--height", help="outer height h in mm"),
+    thickness_mm: float = typer.Option(1.0, "--thickness", help="wall t in mm"),
+    profile: str = typer.Option(None, "--profile", "-p"),
+    elements_through_wall: int = typer.Option(2, "--wall-elements"),
+    record: bool = typer.Option(False, "--record",
+                                help="write the result into the Brain"),
+):
+    """Verify one design with 3D FEM, the high fidelity gate of the funnel."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.design_genome import DesignGenome, HollowRectangleSection
+    from core.units import MM, to_mm, to_mpa
+    from optimization.constraints import build_optimization_problem, evaluate_design
+    from physics.fem import high_fidelity_verify
+    from projects.robotic_link.problem import build_mvp_problem
+
+    console = Console()
+    problem = build_mvp_problem()
+    op = build_optimization_problem(problem)
+    import numpy as np
+
+    x = np.array([width_mm * MM, height_mm * MM, thickness_mm * MM])
+    genome = DesignGenome(
+        section=HollowRectangleSection(outer_width_m=x[0], outer_height_m=x[1],
+                                       wall_thickness_m=x[2]),
+        material_id=problem.material_id)
+    if not genome.is_valid():
+        typer.echo(f"invalid design: {genome.validity_reason()}")
+        raise typer.Exit(code=1)
+
+    beam = evaluate_design(op, x)
+    console.print("[dim]running 3D FEM, this takes longer than beam theory[/dim]")
+    result = high_fidelity_verify(genome, problem, profile=profile,
+                                  elements_through_wall=elements_through_wall)
+
+    table = Table(title="fidelity comparison: beam theory vs 3D FEM")
+    table.add_column("quantity", style="bold")
+    table.add_column("beam (Phase 2)", justify="right")
+    table.add_column("3D FEM (Phase 7)", justify="right")
+    table.add_column("limit", justify="right")
+    table.add_column("verdict", justify="center")
+
+    def verdict(ok):
+        return "[green]PASS[/green]" if ok else "[red]FAIL[/red]"
+
+    limit_d = op.max_deflection_m
+    table.add_row("tip deflection (mm)",
+                  f"{to_mm(beam.tip_deflection_m):.5f}",
+                  f"{to_mm(result.tip_deflection_m):.5f}",
+                  f"{to_mm(limit_d):.3f}",
+                  verdict(result.tip_deflection_m <= limit_d))
+    table.add_row("stress (MPa)",
+                  f"{to_mpa(beam.max_bending_stress_pa):.3f}",
+                  f"{to_mpa(result.gauge_von_mises_pa):.3f} gauge / "
+                  f"{to_mpa(result.peak_von_mises_pa):.3f} peak",
+                  f"{to_mpa(op.allowable_stress_pa):.0f}",
+                  verdict(result.peak_von_mises_pa <= op.allowable_stress_pa))
+    table.add_row("safety factor",
+                  f"{beam.safety_factor:.2f}",
+                  f"{result.safety_factor_peak:.2f} peak / "
+                  f"{result.safety_factor_gauge:.2f} gauge",
+                  f"{problem.constraints.min_safety_factor:.1f}",
+                  verdict(result.safety_factor_peak
+                          >= problem.constraints.min_safety_factor))
+    table.add_row("mass (kg)", f"{beam.mass_kg:.6f}", "same geometry", "-", "-")
+    console.print(table)
+
+    detail = Table.grid(padding=(0, 2))
+    detail.add_column(style="bold cyan", justify="right")
+    detail.add_column()
+    detail.add_row("fidelity", result.fidelity)
+    detail.add_row("mesh", f"{result.mesh['grid']}  {result.n_dofs} DOFs")
+    detail.add_row("CG", f"{result.iterations} iterations, "
+                         f"converged={result.converged}")
+    detail.add_row("deflection vs beam", f"{result.deflection_ratio:.4f}x")
+    detail.add_row("gauge agreement",
+                   f"{result.gauge_agreement:.4f} (FEM / beam at same fibre)")
+    detail.add_row("stress concentration", f"{result.stress_concentration_factor:.3f}x")
+    console.print(detail)
+
+    for message in result.warnings:
+        console.print(f"[yellow]![/yellow] {message}")
+
+    if record:
+        from brain import Brain, Evidence, EvidenceKind, Knowledge
+        with Brain() as memory:
+            statement = (
+                f"3D FEM verification of a {to_mm(x[0]):.1f} x {to_mm(x[1]):.1f} x "
+                f"{to_mm(x[2]):.2f} mm section: tip deflection "
+                f"{to_mm(result.tip_deflection_m):.4f} mm, "
+                f"{result.deflection_ratio:.3f}x the beam theory value."
+            )
+            memory.semantic.upsert_by_claim(Knowledge(
+                claim_key=f"fem3d:{to_mm(x[0]):.1f}x{to_mm(x[1]):.1f}x{to_mm(x[2]):.2f}",
+                statement=statement,
+                domain="cantilever_link",
+                source="physics.fem high fidelity verification",
+                evidence=[Evidence(
+                    kind=EvidenceKind.SIMULATION,
+                    ref=f"fem3d-{result.n_dofs}dof",
+                    note=f"fidelity={result.fidelity}, higher than beam theory "
+                         f"but still simulation",
+                )],
+                assumptions=[
+                    "3D linear elasticity, small strain, isotropic material.",
+                    "Idealised fully clamped root face: a stress singularity, so "
+                    "peak stress is mesh dependent.",
+                    "No fillet, no fastener detail, no contact at the support.",
+                ],
+            ))
+            console.print("[dim]recorded to the Brain as SIMULATION evidence: "
+                          "higher fidelity than beam theory, still not a "
+                          "physical test[/dim]")
+
+    console.print(
+        "[dim]3D FEM is still a simulation: linear elastic, small strain, "
+        "idealised clamped boundary. Higher fidelity than beam theory, but a "
+        "passing design remains a candidate, not a verified part.[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()
