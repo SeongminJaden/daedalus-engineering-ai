@@ -22,13 +22,23 @@ from .roster import build_roster
 from .registry import (IN_PROCESS_NODE, Capability, CapabilityCandidates,
                        CapabilityExclusion, CapabilityRegistry,
                        DuplicateCapability, UnknownCapability)
-from .verification import (EXTERNALLY_VERIFIED, SELF_FEM_ONLY,
-                           VerificationStatus, request_external_verification)
+from .calculix import (CALCULIX_CAPABILITY, CALCULIX_NODE_NAME, CalculixResult,
+                       ElementType, calculix_descriptor, is_available,
+                       solve as calculix_solve, version as calculix_version,
+                       write_deck)
+from .verification import (CROSS_VALIDATED, EXTERNALLY_VERIFIED,
+                           SELF_FEM_ONLY, STATUS_ORDER, CrossValidation,
+                           VerificationStatus, cross_validated_status,
+                           request_external_verification)
 
 __all__ = [
     "Capability", "CapabilityCandidates", "CapabilityExclusion",
     "CapabilityRegistry", "CapabilityUnavailable", "DuplicateCapability",
-    "ENGINE_NODE_NAME", "EXTERNALLY_VERIFIED", "FUSION_ANALYSES",
+    "CALCULIX_CAPABILITY", "CALCULIX_NODE_NAME", "CROSS_VALIDATED",
+    "CalculixResult", "CrossValidation", "ElementType", "ENGINE_NODE_NAME",
+    "EXTERNALLY_VERIFIED", "STATUS_ORDER", "calculix_descriptor",
+    "calculix_solve", "calculix_version", "cross_validated_status",
+    "is_available", "write_deck", "FUSION_ANALYSES",
     "FUSION_CAPABILITY", "FUSION_NODE_NAME", "FUSION_UNAVAILABLE_REASON",
     "FusionVerificationReport", "FusionVerificationRequest", "IN_PROCESS_NODE",
     "NodeDescriptor", "REASONING_CAPABILITY", "REASONING_NODE_NAME",

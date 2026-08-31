@@ -17,7 +17,21 @@ from .fusion_node import (FUSION_CAPABILITY, FusionVerificationReport,
 from .registry import CapabilityRegistry
 
 SELF_FEM_ONLY = "self_fem_only"
+# Agreed with an independently written solver. This is a real strengthening of
+# the evidence and it is NOT physical validation: see the note below.
+CROSS_VALIDATED = "cross_validated"
 EXTERNALLY_VERIFIED = "externally_verified"
+
+# Statuses in increasing order of evidence. None of them is a physical test.
+#
+# A NOTE ON THE NAMES, because EXTERNALLY_VERIFIED promises more than it
+# delivers. The Fusion node it was written for runs FEA, which is a simulation
+# too. Neither that status nor CROSS_VALIDATED means anything has been built or
+# measured, and no combination of solvers agreeing with each other can reach
+# EXPERIMENTALLY_VALIDATED on the Brain's evidence ladder, which only physical
+# test evidence opens. The ladder here is about how many independent
+# implementations agree, not about contact with reality.
+STATUS_ORDER = (SELF_FEM_ONLY, CROSS_VALIDATED, EXTERNALLY_VERIFIED)
 
 
 @dataclass(frozen=True)
@@ -34,6 +48,7 @@ class VerificationStatus:
     status: str
     reason: str = ""
     report: FusionVerificationReport | None = None
+    cross_validation: "CrossValidation | None" = None
 
     def __post_init__(self) -> None:
         if self.status == EXTERNALLY_VERIFIED and self.report is None:
@@ -44,13 +59,35 @@ class VerificationStatus:
             raise ValueError(
                 f"status {self.status!r} carries a verification report; that "
                 f"would let unverified results travel as verified ones")
-        if self.status != EXTERNALLY_VERIFIED and not self.reason:
+        if self.status == CROSS_VALIDATED and self.cross_validation is None:
+            raise ValueError(
+                "a design cannot be marked cross validated without the "
+                "measured agreement that cross validated it")
+        if self.status != CROSS_VALIDATED and self.cross_validation is not None:
+            raise ValueError(
+                f"status {self.status!r} carries a cross-validation record; a "
+                f"measurement must travel with the claim it supports")
+        if self.status == SELF_FEM_ONLY and not self.reason:
             raise ValueError("a design without external verification must say "
                              "why it does not have any")
 
     @property
     def is_externally_verified(self) -> bool:
         return self.status == EXTERNALLY_VERIFIED
+
+    @property
+    def is_cross_validated(self) -> bool:
+        return self.status == CROSS_VALIDATED
+
+    @property
+    def is_physically_validated(self) -> bool:
+        """Always False, and it is a property so the answer is explicit.
+
+        No status this module can produce means anything was built or measured.
+        A caller looking for physical validation gets a definite no rather than
+        an absence they have to notice.
+        """
+        return False
 
     def as_dict(self) -> dict:
         """The form the episode log and the Brain store.
@@ -61,7 +98,51 @@ class VerificationStatus:
         """
         return {"design_id": self.design_id, "status": self.status,
                 "reason": self.reason,
-                "external_source": self.report.source if self.report else None}
+                "external_source": self.report.source if self.report else None,
+                "cross_validated_against":
+                    self.cross_validation.solver if self.cross_validation
+                    else None,
+                "physically_validated": False}
+
+
+@dataclass(frozen=True)
+class CrossValidation:
+    """A measured agreement with an independently written solver.
+
+    The numbers travel with the claim. A status saying "cross validated" and
+    carrying no measurement would be an assertion, and the whole point of
+    running a second solver is to have a figure rather than a belief.
+    """
+
+    solver: str
+    solver_version: str
+    displacement_relative_error: float
+    stress_relative_error: float
+    tolerance: float
+    element_type: str
+
+    @property
+    def agrees(self) -> bool:
+        return (self.displacement_relative_error <= self.tolerance
+                and self.stress_relative_error <= self.tolerance)
+
+
+def cross_validated_status(design_id: str, validation: CrossValidation
+                           ) -> VerificationStatus:
+    """Promote a design to cross validated, or explain why it cannot be.
+
+    Disagreement does not silently downgrade: the reason carries the measured
+    error so a caller sees what failed rather than only that something did.
+    """
+    if not validation.agrees:
+        return VerificationStatus(
+            design_id=design_id, status=SELF_FEM_ONLY,
+            reason=(f"{validation.solver} disagreed: displacement error "
+                    f"{validation.displacement_relative_error:.3e}, stress "
+                    f"error {validation.stress_relative_error:.3e}, against a "
+                    f"tolerance of {validation.tolerance:.3e}"))
+    return VerificationStatus(design_id=design_id, status=CROSS_VALIDATED,
+                              cross_validation=validation)
 
 
 def request_external_verification(

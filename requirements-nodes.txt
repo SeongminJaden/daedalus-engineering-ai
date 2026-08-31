@@ -10,3 +10,23 @@
 # is absent, so a user who never talks to another node does not install it.
 
 mcp>=2.1
+
+# CalculiX (ccx) is an EXTERNAL BINARY, not a Python package, and is optional.
+# It provides an independently written FEA solver for cross-validating this
+# project's own. Without it the CalculiX node reports itself unavailable and
+# its tests skip; nothing else changes.
+#
+# Installed here WITHOUT sudo and without touching the system, by fetching the
+# distribution packages and extracting them into a user prefix:
+#
+#   apt-get download calculix-ccx libspooles2.2
+#   dpkg-deb -x calculix-ccx_*.deb  ~/.local/opt/calculix
+#   dpkg-deb -x libspooles2.2_*.deb ~/.local/opt/calculix
+#
+# then a launcher on PATH that points at the extracted private libraries:
+#
+#   ~/.local/bin/ccx  ->  LD_LIBRARY_PATH=~/.local/opt/calculix/usr/lib/...
+#                         exec ~/.local/opt/calculix/usr/bin/ccx "$@"
+#
+# `sudo apt install calculix-ccx` does the same thing system-wide if that is
+# preferred. Verify with `ccx -v`.
