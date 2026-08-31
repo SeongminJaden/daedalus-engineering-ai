@@ -861,5 +861,110 @@ def dynamics(
         "is a later phase. Still SIMULATED.[/dim]")
 
 
+@app.command()
+def drivetrain(
+    nominal_payload_kg: float = typer.Option(2.0, "--payload"),
+    max_payload_kg: float = typer.Option(5.0, "--max-payload"),
+    joint_speed: float = typer.Option(1.0, "--joint-speed",
+                                      help="maximum joint speed, rad/s"),
+    safety_factor: float = typer.Option(1.0, "--safety-factor"),
+    max_backlash: float = typer.Option(None, "--max-backlash",
+                                       help="backlash limit in arcminutes"),
+):
+    """Select a motor and gearbox for each joint from the duty cycle."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from drivetrain.selection import (
+        Requirement, compare_alternatives, evaluate_candidate,
+        infeasibility_report, select_drivetrain,
+    )
+    from drivetrain.gearboxes import gearboxes as all_gearboxes
+    from drivetrain.motors import motors as all_motors
+    from physics.dynamics import evaluate_duty_cycle, mass_matrix
+    from projects.robotic_arm.arm import build_arm
+
+    console = Console()
+    arm = build_arm()
+    density = get_material(arm.material_id).density_kg_m3
+    duty = evaluate_duty_cycle(arm, density,
+                               nominal_payload_kg=nominal_payload_kg,
+                               max_payload_kg=max_payload_kg)
+    inertia = mass_matrix(arm, [np.pi / 4, 0.2], density)
+    peak, continuous = duty.peak_torque_nm(), duty.continuous_torque_nm()
+
+    for i, joint in enumerate(arm.actuated_joints()):
+        req = Requirement(joint=joint.name,
+                          continuous_torque_nm=float(continuous[i]),
+                          peak_torque_nm=float(peak[i]),
+                          max_speed_rad_s=joint_speed,
+                          load_inertia_kg_m2=float(inertia[i, i]),
+                          max_backlash_arcmin=max_backlash)
+        best, feasible = select_drivetrain(req, safety_factor=safety_factor)
+
+        console.print(f"\n[bold cyan]{joint.name}[/bold cyan]  required: "
+                      f"continuous {req.continuous_torque_nm:.3f} N m, peak "
+                      f"{req.peak_torque_nm:.3f} N m, speed "
+                      f"{req.max_speed_rad_s:.2f} rad/s, load inertia "
+                      f"{req.load_inertia_kg_m2:.4e} kg m^2")
+
+        if best is None:
+            candidates = [evaluate_candidate(m, g, req, safety_factor)
+                          for m in all_motors() for g in all_gearboxes()]
+            console.print("[red]INFEASIBLE[/red]")
+            console.print(infeasibility_report(req, candidates))
+            continue
+
+        table = Table(title=f"{best.motor.id} + {best.gearbox.id} "
+                            f"(ratio {best.gearbox.ratio:.0f}, "
+                            f"{best.total_mass_kg:.2f} kg)")
+        table.add_column("check", style="bold")
+        table.add_column("required", justify="right")
+        table.add_column("available", justify="right")
+        table.add_column("unit")
+        table.add_column("margin", justify="right")
+        table.add_column("status", justify="center")
+        for check in best.checks:
+            table.add_row(check.name, f"{check.required:.4g}",
+                          f"{check.available:.4g}", check.unit,
+                          f"{check.margin:.2f}x",
+                          "[green]PASS[/green]" if check.passes
+                          else "[red]FAIL[/red]")
+        table.add_row("inertia ratio (load/rotor)", "-",
+                      f"{best.inertia_ratio:.2f}", "-", "-",
+                      "[green]OK[/green]" if best.inertia_ratio < 10
+                      else "[yellow]HIGH[/yellow]")
+        console.print(table)
+        console.print(f"  limited by [bold]{best.limiting_check.name}[/bold] "
+                      f"at {best.limiting_check.margin:.2f}x")
+
+        alternatives = compare_alternatives(feasible, count=3)
+        if len(alternatives) > 1:
+            alt_table = Table(title="alternatives considered")
+            alt_table.add_column("option", style="bold")
+            alt_table.add_column("mass (kg)", justify="right")
+            alt_table.add_column("backlash", justify="right")
+            alt_table.add_column("why")
+            for candidate, reason in alternatives:
+                alt_table.add_row(
+                    f"{candidate.motor.id} + {candidate.gearbox.id}",
+                    f"{candidate.total_mass_kg:.2f}",
+                    f"{candidate.gearbox.backlash_arcmin:.0f}'", reason)
+            console.print(alt_table)
+
+    console.print(
+        "\n[dim]Status: PASS subject to thermal validation. The thermal check "
+        "here is a continuous-torque proxy; a real one needs the duty profile, "
+        "ambient temperature and thermal resistance.[/dim]")
+    console.print(
+        "[dim]The motor and gearbox catalogues are ILLUSTRATIVE ARCHETYPES, not "
+        "real parts, and carry no vendor part numbers on purpose. The selection "
+        "logic is the deliverable. Replace the catalogue with datasheet values "
+        "before ordering. Friction and joint compliance are still zero. This is "
+        "first-pass screening, not a final component decision.[/dim]")
+
+
 if __name__ == "__main__":
     app()

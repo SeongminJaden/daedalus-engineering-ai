@@ -43,6 +43,7 @@ Phases 0-6 are implemented and verified.
 | 9 | Parametric CAD B-rep and STEP export, mass-consistent | done |
 | 10 | Assemblies and kinematics (FK, Jacobian, IK, statics, assembly STEP) | done |
 | 11 | Rigid-body dynamics (inertia, M/C/G, load cases, torque and power) | done |
+| 12 | Motor and gearbox selection (margins, reflected inertia, alternatives) | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -269,6 +270,8 @@ one long search yields at most `SIMULATED`.
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
+
+**The motor and gearbox catalogues are illustrative archetypes, not real parts.** No vendor part numbers were invented, because a fabricated catalogue gets read later as if it had been sourced. The selection logic is the deliverable: replace the catalogue with datasheet values before ordering. The thermal check is a continuous-torque proxy, so results are labelled subject to thermal validation, and when nothing meets the requirement the selector reports infeasible rather than returning the least bad option. First-pass screening, not a final component decision.
 
 **Dynamics gives required torque, not a motor choice.** Phase 11 adds inertia, Coriolis and acceleration terms, and reports peak and continuous (duty-weighted RMS) requirements separately, because a motor has both ratings and they differ by about 2.5x here. Friction, backlash and joint compliance remain **zero**: the terms exist, the data does not, and inventing it would put fabricated numbers into a torque an actuator gets selected from. Selecting the motor and gearbox is a later phase.
 
