@@ -48,6 +48,14 @@ class ProblemContext:
     # gear mesh transmits torque. Neither check exists without them.
     has_bolted_joint: bool | None = None
     has_gear_mesh: bool | None = None
+    # How many objectives the problem states. A single objective does not need
+    # a Pareto front, and saying so is what keeps the expensive method off a
+    # problem that has no trade-off in it.
+    n_objectives: int | None = None
+    # Whether any design variable is discrete or categorical. This gates the
+    # continuous operators rather than letting them produce a fractional
+    # material and round it somewhere out of sight.
+    has_discrete_variables: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

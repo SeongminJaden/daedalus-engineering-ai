@@ -28,6 +28,15 @@
 # CFRP carries DIRECTIONAL coefficients because a single value would be worse
 # than useless there: carbon fibre contracts along its length when heated, so
 # alpha_1 is NEGATIVE while alpha_2 across the fibres is large and positive.
+#
+# price_per_kg_usd is RAW MATERIAL only, reference_typical, in USD per kg.
+# VALIDITY: it is not a part cost and must not be presented as one. Machining,
+# finishing, assembly, tooling, scrap and quantity discounts are all excluded,
+# and for a small machined bracket those dominate the material by an order of
+# magnitude. The scatter on the material price itself is also larger than any
+# other field here: alloy prices move with commodity markets, form (bar, plate,
+# powder) changes them severalfold, and small quantities carry a large premium.
+# Use these to RANK materials against each other, not to quote anything.
 
 materials:
   - id: al_7075_t6
@@ -40,6 +49,7 @@ materials:
     shear_modulus_pa: 26.9e9
     fatigue_strength_pa: 159.0e6
     thermal_expansion_1_k: 2.36e-05
+    price_per_kg_usd: 6
     source: MatWeb/MMPDS typical (verify vs supplier datasheet)
     status: reference_typical
 
@@ -53,6 +63,7 @@ materials:
     shear_modulus_pa: 26.0e9
     fatigue_strength_pa: 96.5e6
     thermal_expansion_1_k: 2.36e-05
+    price_per_kg_usd: 3
     source: MatWeb typical (verify vs supplier datasheet)
     status: reference_typical
   - id: al_2024_t3
@@ -65,6 +76,7 @@ materials:
     shear_modulus_pa: 27481203007.518795
     fatigue_strength_pa: 1.38e+08
     thermal_expansion_1_k: 2.36e-05
+    price_per_kg_usd: 6
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb/MMPDS typical (verify vs supplier datasheet)
@@ -79,6 +91,7 @@ materials:
     shear_modulus_pa: 42399403874.813705
     fatigue_strength_pa: 5.1e+08
     thermal_expansion_1_k: 8.6e-06
+    price_per_kg_usd: 40
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical, annealed (verify vs supplier datasheet)
@@ -93,6 +106,7 @@ materials:
     shear_modulus_pa: 79457364341.08527
     fatigue_strength_pa: 2.45e+08
     thermal_expansion_1_k: 1.17e-05
+    price_per_kg_usd: 1
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: JIS G4051 / MatWeb typical, normalized (verify vs supplier datasheet)
@@ -107,6 +121,7 @@ materials:
     shear_modulus_pa: 79457364341.08527
     fatigue_strength_pa: 3.95e+08
     thermal_expansion_1_k: 1.17e-05
+    price_per_kg_usd: 2
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: JIS G4105 / MatWeb typical, Q&T (verify vs supplier datasheet)
@@ -121,6 +136,7 @@ materials:
     shear_modulus_pa: 74230769230.76923
     fatigue_strength_pa: 2.4e+08
     thermal_expansion_1_k: 1.6e-05
+    price_per_kg_usd: 5
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical, annealed (verify vs supplier datasheet)
@@ -135,6 +151,7 @@ materials:
     shear_modulus_pa: 16666666666.666666
     fatigue_strength_pa: 1.1e+08
     thermal_expansion_1_k: 2.6e-05
+    price_per_kg_usd: 5
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical (verify vs supplier datasheet)
@@ -149,6 +166,7 @@ materials:
     shear_modulus_pa: 851851851.8518518
     fatigue_strength_pa: 1.5e+07
     thermal_expansion_1_k: 9e-05
+    price_per_kg_usd: 3
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -165,6 +183,7 @@ materials:
     shear_modulus_pa: 1286764705.882353
     fatigue_strength_pa: 1.8e+07
     thermal_expansion_1_k: 7e-05
+    price_per_kg_usd: 3
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -181,6 +200,7 @@ materials:
     shear_modulus_pa: 503597122.30215824
     fatigue_strength_pa: 1.7e+07
     thermal_expansion_1_k: 9e-05
+    price_per_kg_usd: 3
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -197,6 +217,7 @@ materials:
     shear_modulus_pa: 760869565.2173914
     fatigue_strength_pa: 1.8e+07
     thermal_expansion_1_k: 7e-05
+    price_per_kg_usd: 3
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -213,6 +234,7 @@ materials:
     shear_modulus_pa: 839416058.3941605
     fatigue_strength_pa: 2.2e+07
     thermal_expansion_1_k: 7e-05
+    price_per_kg_usd: 3
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -229,6 +251,7 @@ materials:
     shear_modulus_pa: 151639344262.29507
     fatigue_strength_pa: 2.0e+08
     thermal_expansion_1_k: 8e-06
+    price_per_kg_usd: 20
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -249,6 +272,7 @@ materials:
     shear_modulus_pa: 5.0e+09
     fatigue_strength_pa: 6.0e+08
     thermal_expansion_1_k: -5e-07
+    price_per_kg_usd: 60
     cte1_1_k: -0.5e-06
     cte2_1_k: 25.0e-06
     cte3_1_k: 25.0e-06

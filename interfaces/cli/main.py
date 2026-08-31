@@ -1976,5 +1976,109 @@ def gear(
             "--bending-correction and --contact-correction to include them.")
 
 
+@app.command()
+def pareto(
+    materials: str = typer.Option("steel_s45c,al_6061_t6,al_7075_t6,ti_6al_4v",
+                                  "--materials",
+                                  help="comma separated material ids"),
+    population: int = typer.Option(32, "--population"),
+    generations: int = typer.Option(30, "--generations"),
+    seed: int = typer.Option(0, "--seed"),
+    weight_mass: float = typer.Option(1.0, "--weight-mass"),
+    weight_deflection: float = typer.Option(0.0, "--weight-deflection"),
+    weight_stress: float = typer.Option(0.0, "--weight-stress"),
+    weight_cost: float = typer.Option(1.0, "--weight-cost"),
+):
+    """Map the mass, stiffness, stress and cost trade-off across materials.
+
+    Single-objective optimisation answers "what is the lightest design". This
+    answers "what are the designs where nothing improves without something
+    else getting worse", and only then applies a preference.
+    """
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from optimization.multi_objective.objectives import (OBJECTIVE_NAMES,
+                                                         merged_front,
+                                                         sweep_materials)
+    from projects.robotic_link.problem import build_mvp_problem
+
+    console = Console()
+    ids = [m.strip() for m in materials.split(",") if m.strip()]
+    if len(ids) < 1:
+        console.print("[red]give at least one material[/red]")
+        raise typer.Exit(code=2)
+
+    with console.status(f"searching {len(ids)} materials"):
+        try:
+            fronts = sweep_materials(build_mvp_problem(), ids,
+                                     population=population,
+                                     generations=generations, seed=seed)
+        except (KeyError, ValueError) as problem:
+            console.print(f"[red]{problem}[/red]")
+            raise typer.Exit(code=2)
+    designs, objectives, labels = merged_front(fronts)
+
+    if objectives.shape[0] == 0:
+        console.print("[yellow]no feasible design was found for any "
+                      "material[/yellow]")
+        raise typer.Exit(code=1)
+
+    per_material = Table(title="approximated Pareto front, by material")
+    per_material.add_column("material")
+    per_material.add_column("own front", justify="right")
+    per_material.add_column("on merged front", justify="right")
+    per_material.add_column("lightest (kg)", justify="right")
+    per_material.add_column("cheapest (USD)", justify="right")
+    for front in fronts:
+        survivors = sum(1 for label in labels if label == front.material_id)
+        if len(front) == 0:
+            per_material.add_row(front.material_id, "0", "0", "n/a", "n/a")
+            continue
+        per_material.add_row(
+            front.material_id, str(len(front)), str(survivors),
+            f"{front.objectives[:, 0].min():.4f}",
+            f"{front.objectives[:, 3].min():.3f}")
+    console.print(per_material)
+    console.print(
+        "a material with nothing on the merged front is not on this "
+        "trade-off at all for this problem, which is a stronger statement "
+        "than being worse on average")
+
+    extremes = Table(title="who wins each objective outright")
+    extremes.add_column("objective")
+    extremes.add_column("best value", justify="right")
+    extremes.add_column("material")
+    for column, name in enumerate(OBJECTIVE_NAMES):
+        best = int(np.argmin(objectives[:, column]))
+        extremes.add_row(name, f"{objectives[best, column]:.6g}", labels[best])
+    console.print(extremes)
+
+    weights = np.array([weight_mass, weight_deflection, weight_stress,
+                        weight_cost])
+    low = objectives.min(axis=0)
+    span = np.where(objectives.max(axis=0) - low > 0.0,
+                    objectives.max(axis=0) - low, 1.0)
+    scores = ((objectives - low) / span) @ weights
+    chosen = int(np.argmin(scores))
+    console.print(
+        f"\nwith weights mass {weight_mass:g}, deflection "
+        f"{weight_deflection:g}, stress {weight_stress:g}, cost "
+        f"{weight_cost:g}, the preferred design is [bold]{labels[chosen]}"
+        f"[/bold] at {objectives[chosen, 0]:.4f} kg and "
+        f"{objectives[chosen, 3]:.3f} USD of material")
+    console.print(
+        "the weights are applied AFTER the front is known, which is the point "
+        "of computing one: the trade-off is visible before anyone commits to "
+        "a preference")
+    console.print(
+        "[yellow]note[/yellow] this front is a finite-population "
+        "approximation, not the true front, and it is non-dominated only with "
+        "respect to what was evaluated. Cost is RAW MATERIAL only: machining, "
+        "finishing and assembly are excluded and usually dominate a small "
+        "part, so the cheapest design here need not be the cheapest part.")
+
+
 if __name__ == "__main__":
     app()

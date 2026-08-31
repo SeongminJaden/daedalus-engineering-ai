@@ -100,6 +100,16 @@ class MaterialSpec(BaseModel):
     cte2_1_k: float | None = None
     cte3_1_k: float | None = None
 
+    # --- raw material price, USD per kg ---
+    #
+    # VALIDITY: raw stock only. This is NOT a part cost, and multiplying it by
+    # a mass gives a material bill, not a price. For a small machined bracket
+    # the machining dominates the material several times over, so a design
+    # chosen to minimise this number is not necessarily the cheaper part. It is
+    # here to RANK materials against each other under a fixed process, which is
+    # a question it can answer.
+    price_per_kg_usd: float | None = Field(default=None, gt=0.0)
+
     # --- composite layup. Single orientation for now, list-shaped so a real
     #     stack does not need a schema change later. ---
     orientation_deg: list[float] | None = None

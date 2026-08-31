@@ -437,6 +437,29 @@ def build_default_registry() -> MethodRegistry:
               "fewer iterations and is not implemented."))
 
     registry.register(Method(
+        name="nsga2",
+        category=Category.OPTIMIZATION,
+        summary="Multi-objective search returning an approximated Pareto front.",
+        inputs=("objectives", "bounds", "constraints"),
+        outputs=("pareto_front", "front_designs"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.MODERATE,
+        conditions=(
+            Condition("the problem states more than one objective (a single "
+                      "objective has no trade-off to map)",
+                      lambda c: c.require("n_objectives") > 1),
+            Condition("the design variables are continuous (the crossover and "
+                      "mutation operators interpolate, and nothing lies "
+                      "between two materials)",
+                      lambda c: not c.require("has_discrete_variables")),
+        ),
+        implementation="optimization.multi_objective.nsga2.nsga2",
+        evidence="SIMULATED",
+        notes="The returned front is a finite-population approximation, not "
+              "the true front, which is generally a continuum. Non-dominated "
+              "with respect to what was evaluated only; no global optimality "
+              "is proven. Deterministic for a given seed."))
+
+    registry.register(Method(
         name="pareto_front",
         category=Category.OPTIMIZATION,
         summary="Non-dominated filtering for competing objectives.",
