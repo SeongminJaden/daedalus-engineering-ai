@@ -701,5 +701,95 @@ def export(
     )
 
 
+@app.command()
+def assemble(
+    payload_kg: float = typer.Option(2.0, "--payload", help="tip payload in kg"),
+    shoulder_deg: float = typer.Option(None, "--shoulder",
+                                       help="shoulder angle; worst gravity pose if omitted"),
+    elbow_deg: float = typer.Option(0.0, "--elbow"),
+    step: bool = typer.Option(False, "--step", help="write the posed assembly to STEP"),
+    out_dir: str = typer.Option("runs/cad", "--out-dir"),
+):
+    """Analyse the two-link arm: kinematics, statics and per-link structure."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from core.units import to_mm, to_mpa
+    from projects.robotic_arm.arm import analyse, build_arm
+
+    console = Console()
+    arm = build_arm()
+    q = None
+    if shoulder_deg is not None:
+        q = np.array([np.deg2rad(shoulder_deg), np.deg2rad(elbow_deg)])
+    result = analyse(arm, q, payload_kg=payload_kg)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("assembly", arm.name)
+    head.add_row("degrees of freedom", str(arm.dof))
+    head.add_row("material", arm.material_id)
+    head.add_row("payload", f"{payload_kg} kg")
+    head.add_row("pose (deg)", ", ".join(f"{np.rad2deg(v):.2f}" for v in result["q"]))
+    head.add_row("tool position (m)",
+                 ", ".join(f"{v:.5f}" for v in result["tool_position_m"]))
+    head.add_row("structure mass", f"{result['total_mass_kg']:.4f} kg")
+    console.print(head)
+
+    torque_table = Table(title="joint torques to hold this pose")
+    torque_table.add_column("joint", style="bold")
+    torque_table.add_column("type")
+    torque_table.add_column("torque (N m)", justify="right")
+    for joint, torque in zip(arm.actuated_joints(), result["joint_torques_nm"]):
+        torque_table.add_row(joint.name, joint.type.value, f"{torque:+.4f}")
+    console.print(torque_table)
+
+    table = Table(title="per-link load case and structural check")
+    table.add_column("link", style="bold")
+    table.add_column("root moment (N m)", justify="right")
+    table.add_column("equiv tip load (N)", justify="right")
+    table.add_column("sigma (MPa)", justify="right")
+    table.add_column("allow (MPa)", justify="right")
+    table.add_column("delta (mm)", justify="right")
+    table.add_column("SF", justify="right")
+    table.add_column("verdict", justify="center")
+    for load, verdict in zip(result["link_loads"], result["verdicts"]):
+        table.add_row(
+            verdict.link, f"{load.root_bending_moment_nm:.4f}",
+            f"{verdict.equivalent_tip_load_n:.3f}",
+            f"{to_mpa(verdict.max_bending_stress_pa):.3f}",
+            f"{to_mpa(verdict.allowable_stress_pa):.0f}",
+            f"{to_mm(verdict.tip_deflection_m):.4f}",
+            f"{verdict.safety_factor:.2f}",
+            "[green]PASS[/green]" if verdict.passes else "[red]FAIL[/red]")
+    console.print(table)
+
+    if step:
+        from geometry.cad_export import INSTALL_HINT, find_kernel
+        if find_kernel() is None:
+            console.print(f"[yellow]skipping STEP:[/yellow] {INSTALL_HINT}")
+        else:
+            from geometry.cad_export import export_assembly_step
+            density = get_material(arm.material_id).density_kg_m3
+            path = Path(out_dir) / "arm_assembly.step"
+            report = export_assembly_step(arm, result["q"], density, path)
+            console.print(
+                f"wrote [bold]{path}[/bold] ({path.stat().st_size} bytes), "
+                f"{report.part_count} parts, assembly mass "
+                f"{report.total_mass_kg:.6f} kg vs sum of links "
+                f"{report.analytic_mass_kg:.6f} kg "
+                f"(relative {report.mass_relative_error:.2e})")
+
+    console.print(
+        "[dim]Statics only: no inertia, no Coriolis or acceleration torque, no "
+        "friction, no backlash, no joint compliance. Rigid bodies on ideal "
+        "joints. These torques size a link; they do NOT size a motor or a "
+        "gearbox, which needs the dynamic terms. Still SIMULATED.[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()

@@ -41,6 +41,7 @@ Phases 0-6 are implemented and verified.
 | 7 | High-fidelity 3D FEM verification gate (Warp, matrix-free CG) | done |
 | 8 | Material expansion (15 materials) and orthotropic elasticity | done |
 | 9 | Parametric CAD B-rep and STEP export, mass-consistent | done |
+| 10 | Assemblies and kinematics (FK, Jacobian, IK, statics, assembly STEP) | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -267,6 +268,8 @@ one long search yields at most `SIMULATED`.
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
+
+**Assembly analysis is statics only.** Phase 10 computes the joint torques needed to hold a pose against gravity and a payload, and feeds each link's root bending moment into the structural stack. There is no inertia, no Coriolis or acceleration torque, no friction, no backlash and no joint compliance: rigid bodies on ideal joints. Those torques size a **link**; they do **not** size a motor or a gearbox, which needs the dynamic terms and is a later phase.
 
 **Exported CAD is analysis geometry, not a manufacturing-ready part.** STEP export is exact for parametric solids and is refused outright if the B-rep volume disagrees with the mass the physics used, so the file is always the part that was analysed. But it has no fillets, no fastener features and no tolerances, and its sharp root corner is precisely where Phase 7 found the stress concentration. Organic and topology-optimized shapes do **not** get a clean STEP: that needs surface reconstruction, and the mesh path says so rather than emitting geometry that looks manufacturable.
 
