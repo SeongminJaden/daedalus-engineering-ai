@@ -56,12 +56,39 @@ class FemSolution:
         return float(self.load_vector @ self.displacements.reshape(-1))
 
 
-def _resolve_device(device: str | None) -> str:
+# Below this many degrees of freedom, the CPU solves faster than the GPU and
+# the solver picks it. Measured on this machine (RTX 3050 Laptop, sm_86),
+# warmed up, same CG iteration count on both devices:
+#
+#     dofs    GPU ms   CPU ms   GPU/CPU
+#     1071      43.5     23.2      1.88   CPU wins
+#     3267      86.6     65.4      1.32   CPU wins
+#     9996     142.9    246.9      0.58   GPU wins
+#    24375     396.5   1410.3      0.28
+#    45198     715.5   3435.7      0.21   GPU 4.8x
+#
+# The crossover sits near 10,000. Two things push it that high. Kernel launch
+# overhead dominates a small solve, which is visible as 40% SM occupancy during
+# a topology run; and this consumer part runs float64 at about a sixty-fourth
+# of its float32 rate, while the solver is float64 throughout because float32
+# CG stalls on a slender beam's condition number.
+#
+# This changes which device runs the arithmetic and nothing else. Same kernels,
+# same float64, same algorithm, same iteration count.
+CPU_DOF_THRESHOLD = 10_000
+
+
+def _resolve_device(device: str | None, n_dofs: int | None = None) -> str:
+    """The device to solve on: explicit if given, otherwise chosen by size."""
     import warp as wp
     if device is not None:
         return device
     cuda = [d for d in wp.get_devices() if d.is_cuda]
-    return str(cuda[0]) if cuda else "cpu"
+    if not cuda:
+        return "cpu"
+    if n_dofs is not None and n_dofs < CPU_DOF_THRESHOLD:
+        return "cpu"
+    return str(cuda[0])
 
 
 def solve_linear_elasticity(
@@ -89,8 +116,8 @@ def solve_linear_elasticity(
     """
     import warp as wp
 
-    dev = _resolve_device(device)
     n_dofs = mesh.n_dofs
+    dev = _resolve_device(device, n_dofs)
     # CG on an elasticity operator needs O(sqrt(condition number)) steps, and
     # a slender beam is badly conditioned. A cap that is too low silently
     # returns an under-converged (too stiff) deflection that still looks

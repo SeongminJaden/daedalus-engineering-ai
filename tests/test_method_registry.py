@@ -225,14 +225,18 @@ def test_no_applicable_method_raises_rather_than_falling_back():
 
 # --- routing into the loop ---------------------------------------------------
 
-def test_the_routing_reasoner_records_what_it_ran_not_what_it_wanted():
-    """An episode must not be stamped with a method that did not produce it.
+def test_a_method_with_no_executor_is_recorded_as_unmet():
+    """The gap mechanism, exercised against a restricted executor set.
 
-    The loop evaluates parametric section designs. When the selector escalates
-    to a topology method the loop cannot execute, writing that name into
-    `strategy_used` would make the episode log a false record of how the design
-    was produced. The recommendation goes into the hypothesis and is counted
-    instead.
+    When this was written the loop could only run parametric designs, so every
+    topology escalation took this path. Phase 14.5 wired the topology
+    executors, so with the default set nothing lands here any more; the test
+    restricts the set explicitly to keep testing the mechanism rather than the
+    state of the executor table. The registry is meant to grow faster than the
+    executors, and the next method registered will be unmet until it is wired.
+
+    What must never happen is the escalation being stamped into
+    `strategy_used`: the design in that episode did not come from it.
     """
     import numpy as np
 
@@ -241,7 +245,8 @@ def test_the_routing_reasoner_records_what_it_ran_not_what_it_wanted():
 
     selector = StrategySelector(build_default_registry(), design_context(),
                                 stall_patience=2)
-    reasoner = RegistryRoutingReasoner(selector)
+    reasoner = RegistryRoutingReasoner(selector,
+                                       executable={"parametric_section"})
 
     settled = ReasonerState(iteration=1, best_x=np.array([0.05, 0.08, 0.003]),
                             best_mass_kg=1.0, best_feasible=True,
@@ -258,8 +263,34 @@ def test_the_routing_reasoner_records_what_it_ran_not_what_it_wanted():
     escalated = reasoner.decide(stalled, [])
     assert escalated.strategy.startswith("parametric_section:")
     assert reasoner.unmet_recommendations == ["topology_compliance"]
-    assert "cannot execute" in escalated.hypothesis
+    assert "no executor" in escalated.hypothesis
     assert "topology_compliance" in escalated.hypothesis
+
+
+def test_an_escalation_the_loop_can_run_is_stamped_not_deferred():
+    """The gap Phase 14.5 closed, from the reasoner's side."""
+    import numpy as np
+
+    from agent.execution import executable_methods
+    from agent.reasoner import RegistryRoutingReasoner
+    from agent.reasoner.base import ReasonerState
+
+    selector = StrategySelector(build_default_registry(), design_context(),
+                                stall_patience=2)
+    reasoner = RegistryRoutingReasoner(selector)
+    assert "topology_compliance" in reasoner.executable
+
+    stalled = ReasonerState(iteration=9, best_x=np.array([0.05, 0.08, 0.003]),
+                            best_mass_kg=1.0, best_feasible=True,
+                            iterations_without_improvement=5,
+                            evaluations_used=90, seconds_used=9.0)
+    reasoner.decide(ReasonerState(iteration=1, best_x=stalled.best_x,
+                                  best_mass_kg=1.0, best_feasible=True,
+                                  iterations_without_improvement=0,
+                                  evaluations_used=1, seconds_used=0.1), [])
+    escalated = reasoner.decide(stalled, [])
+    assert escalated.strategy.startswith("topology_compliance:")
+    assert not (set(reasoner.unmet_recommendations) & executable_methods())
 
 
 def test_the_routing_reasoner_stamps_a_method_it_can_execute():

@@ -6,14 +6,19 @@ method comes from a registry query rather than from a name written into the
 code. An LLM-backed policy would replace the ordering rule and route over the
 same registry.
 
-**It records what it ran, not what it wanted to run.** The loop engine
-evaluates parametric section designs; it cannot yet execute a topology method.
-When the selector escalates to a method the loop has no way to run, the episode
-must not be stamped with that method's name, because the design in that episode
-did not come from it and the log would be a false record. The recommendation is
-written into the hypothesis instead, and counted, so the gap between what the
-registry can route to and what the loop can execute is a visible number rather
-than a silent limitation.
+**It records what it ran, not what it wanted to run.** The executable set is
+whatever `agent.execution` can dispatch, and a method outside it is never
+stamped into `strategy_used`: the design in that episode did not come from it,
+and the log would be a false record. Such a recommendation goes into the
+hypothesis and is counted, so the gap between what the registry routes to and
+what the loop executes is a visible number rather than a silent limitation.
+
+That gap was the whole story when this was written: the loop could only run
+parametric section designs, so every topology recommendation was unmet. The
+execution layer now dispatches the topology strategies too, and the count is
+zero for them. The mechanism stays because the registry is meant to grow faster
+than the executors, and the next method added will be unmet until someone wires
+it.
 """
 
 from __future__ import annotations
@@ -24,8 +29,17 @@ from agent.reasoner.base import Action, Reasoner, ReasonerState
 from agent.reasoner.heuristic import HeuristicReasoner
 from agent.strategy import StrategySelector
 
-# What the Phase 4 loop engine can actually evaluate today.
-LOOP_EXECUTABLE_METHODS = frozenset({"parametric_section"})
+def _default_executable() -> frozenset[str]:
+    """What the loop can actually dispatch, asked rather than assumed.
+
+    Read from the execution layer so the two cannot disagree. A hardcoded list
+    here would go stale the moment an executor is added or removed, and it
+    would go stale silently in the direction that produces false episode
+    records.
+    """
+    from agent.execution import executable_methods
+
+    return executable_methods()
 
 
 class RegistryRoutingReasoner(Reasoner):
@@ -35,10 +49,11 @@ class RegistryRoutingReasoner(Reasoner):
 
     def __init__(self, selector: StrategySelector,
                  inner: Reasoner | None = None,
-                 executable: Iterable[str] = LOOP_EXECUTABLE_METHODS):
+                 executable: Iterable[str] | None = None):
         self.selector = selector
         self.inner = inner if inner is not None else HeuristicReasoner()
-        self.executable = frozenset(executable)
+        self.executable = frozenset(executable if executable is not None
+                                    else _default_executable())
         if not self.executable:
             raise ValueError("at least one method must be executable")
         self.unmet_recommendations: list[str] = []
@@ -63,9 +78,8 @@ class RegistryRoutingReasoner(Reasoner):
             kind=action.kind,
             hypothesis=(
                 f"{action.hypothesis} The registry recommends escalating to "
-                f"'{choice.name}' ({choice.reason}), which this loop cannot "
-                f"execute; it evaluates parametric section designs only. "
-                f"Continuing with '{fallback}' and recording the "
+                f"'{choice.name}' ({choice.reason}), which this loop has no "
+                f"executor for. Continuing with '{fallback}' and recording the "
                 f"recommendation as unmet."),
             strategy=f"{fallback}:{action.strategy}",
             start_x=action.start_x)

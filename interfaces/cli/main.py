@@ -985,6 +985,12 @@ def topology(
              "about 18 MPa, so lower values bind and higher ones do not."),
     p_norm: float = typer.Option(12.0, "--p-norm",
                                  help="stress aggregation exponent"),
+    projection: bool = typer.Option(
+        False, "--projection",
+        help="three-field SIMP: filter, Heaviside projection and beta "
+             "continuation, which drives the design black and white"),
+    beta_max: float = typer.Option(64.0, "--beta-max",
+                                   help="final projection sharpness"),
 ):
     """Topology-optimize a cantilever domain with SIMP on the GPU FEM.
 
@@ -995,6 +1001,10 @@ def topology(
     if stress:
         _topology_stress(volume_fraction, nx, iterations, stress_limit_mpa,
                          p_norm, not no_filter)
+        return
+    if projection:
+        _topology_projected(volume_fraction, nx, ny, nz, iterations, beta_max,
+                            stl, out_dir)
         return
 
     import numpy as np
@@ -1096,6 +1106,91 @@ def topology(
         "and says nothing about peak stress. A design concept, not a verified "
         "part: it still has to pass the 3D FEM gate and gain manufacturing "
         "features. Still SIMULATED.[/dim]")
+
+
+def _topology_projected(volume_fraction: float, nx: int, ny: int, nz: int,
+                        iterations: int, beta_max: float, stl: bool,
+                        out_dir: str) -> None:
+    """Compare plain SIMP against the three-field formulation.
+
+    Same mesh, same volume, same load. The difference is whether the optimiser
+    is allowed to settle on intermediate densities.
+    """
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from optimization.topology import (SimpProblem, checkerboard_metric,
+                                       connected_fraction, export_stl,
+                                       grey_fraction, optimize)
+    from optimization.topology.projection import BetaSchedule
+    from optimization.topology.threefield import optimize_projected
+    from physics.fem.mesh import solid_box_mesh
+
+    console = Console()
+    material = get_material("al_7075_t6")
+    length, height, width, load = 0.16, 0.05, 0.02, 200.0
+    mesh = solid_box_mesh(length, height, width, nx, ny, nz)
+    problem = SimpProblem(
+        mesh=mesh, youngs_modulus_pa=material.youngs_modulus_pa,
+        poisson_ratio=material.poisson_ratio,
+        fixed_nodes=mesh.nodes_at_x(0.0), load_nodes=mesh.nodes_at_x(length),
+        total_load_n=-load, load_direction=1,
+        volume_fraction=volume_fraction, filter_radius_elements=1.5)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("mesh", f"{nx} x {ny} x {nz} = {mesh.n_elements} elements, "
+                         f"{mesh.n_dofs} dofs")
+    head.add_row("volume fraction", f"{volume_fraction}")
+    head.add_row("projection", f"tanh Heaviside, eta 0.5, beta 1 to {beta_max:g}")
+    console.print(head)
+
+    with console.status("plain SIMP"):
+        plain = optimize(problem, max_iterations=iterations)
+    with console.status("three-field SIMP"):
+        projected = optimize_projected(
+            problem, max_iterations=iterations, move_limit=0.1,
+            schedule=BetaSchedule(start=1.0, maximum=beta_max, every=20))
+
+    table = Table(title="plain SIMP against the three-field formulation")
+    table.add_column("formulation")
+    table.add_column("compliance (J)", justify="right")
+    table.add_column("volume", justify="right")
+    table.add_column("grey fraction", justify="right")
+    table.add_column("connected", justify="right")
+    table.add_column("checkerboard", justify="right")
+    for name, density, compliance in (
+            ("plain", plain.density, plain.final_compliance),
+            ("three-field", projected.density, projected.final_compliance)):
+        table.add_row(name, f"{compliance:.6e}", f"{density.mean():.6f}",
+                      f"{grey_fraction(density):.4f}",
+                      f"{connected_fraction(mesh, density):.3f}",
+                      f"{checkerboard_metric(mesh, density):.4f}")
+    console.print(table)
+    console.print(
+        "read grey and connected together. The projection lowers the grey "
+        "fraction, and at a small filter radius it also breaks the design into "
+        "pieces; material that is not connected carries no load, so a blacker "
+        "but fragmented design is worse, not better. A radius of about 2 "
+        "elements holds it together here, 3 fully.")
+    console.print(
+        "the checkerboard metric RISES for a black and white design and that "
+        "is expected: it measures the density difference between neighbours, "
+        "which is large across any sharp solid-to-void boundary. It detects "
+        "alternating artifacts on a grey field and cannot tell one from a "
+        "genuine edge, so connectivity is the metric that matters here.")
+
+    if stl:
+        for name, density in (("plain", plain.density),
+                              ("projected", projected.density)):
+            report = export_stl(mesh, density,
+                                Path(out_dir) / f"topology_{name}.stl")
+            console.print(f"wrote [bold]{report.path}[/bold]: "
+                          f"{report.retained_elements}/{report.total_elements} "
+                          f"voxels, watertight={report.watertight}")
 
 
 def _topology_stress(volume_fraction: float, n: int, iterations: int,

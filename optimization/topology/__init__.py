@@ -2,6 +2,7 @@
 
 from .export import (
     MeshExportReport,
+    connected_fraction,
     export_stl,
     grey_fraction,
     largest_connected_component,
@@ -41,7 +42,7 @@ __all__ = [
     "MIN_DENSITY", "MeshExportReport", "PENALTY", "SimpProblem", "SimpResult",
     "VOID_STIFFNESS_RATIO", "apply_sensitivity_filter", "build_filter_weights",
     "checkerboard_metric", "compliance_and_sensitivity", "export_stl",
-    "grey_fraction", "largest_connected_component", "oc_update", "optimize", "solve", "stiffness_scale",
+    "connected_fraction", "grey_fraction", "largest_connected_component", "oc_update", "optimize", "solve", "stiffness_scale",
     "stiffness_scale_derivative", "voxel_surface",
     "STRESS_PENALTY", "ConstrainedResult", "StressEvaluation", "StressProblem",
     "StressResult", "evaluate", "optimize_constrained", "optimize_stress",

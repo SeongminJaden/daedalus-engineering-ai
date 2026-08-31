@@ -29,8 +29,10 @@ from agent.evaluator import judge
 from agent.experiment_manager import ComputeBudget, Episode, EpisodeLog
 from agent.planner import plan_experiment
 from agent.reasoner import Action, ActionKind, HeuristicReasoner, Reasoner, ReasonerState
-from optimization.constraints import OptimizationProblem, evaluate_design
-from optimization.gradient import default_start, optimize_slsqp
+from agent.execution import OutcomeVerdict, execute, executable_methods
+from agent.execution.parametric import METHOD as PARAMETRIC_METHOD
+from optimization.constraints import OptimizationProblem
+from optimization.gradient import default_start
 
 
 class LoopPhase(str, Enum):
@@ -84,6 +86,12 @@ class LoopConfig:
     unsatisfiable_after: int = 3
 
     local_max_iter: int = 200
+
+    # Settings for the topology strategies. Their defaults are small because
+    # every bisection step inside one is a full topology solve, which is why
+    # the registry rates those methods HEAVY.
+    topology_options: dict = field(default_factory=lambda: {
+        "iterations": 25, "bisection_steps": 3})
     max_evaluations: int | None = None
     max_seconds: float | None = None
     profile: str | None = None
@@ -112,6 +120,13 @@ class LoopResult:
 class _RunState:
     best_x: np.ndarray | None = None
     best_evaluation: object | None = None
+    # Which method produced the incumbent, and the incumbent itself. The
+    # incumbent can come from any strategy, while `best_x` stays the best
+    # parametric vector because that is the space the explore/exploit schedule
+    # jitters in. Conflating the two would have the reasoner perturbing a
+    # design vector that no longer describes the best design.
+    best_method: str | None = None
+    best_outcome: object | None = None
     iterations_without_improvement: int = 0
     small_improvement_streak: int = 0
     consecutive_infeasible: int = 0
@@ -233,8 +248,14 @@ class DesignLoop:
                     f"{self.state.consecutive_infeasible} independent starts")
         return None
 
-    def _run_experiment(self, plan):
-        """DESIGN + SIMULATE: solve locally, then evaluate the result."""
+    def _run_experiment(self, plan, method: str):
+        """DESIGN + SIMULATE: run the selected method, then read its outcome.
+
+        The method comes from the reasoner, which took it from the registry.
+        Before this dispatch existed the loop ran the parametric solver
+        whatever was selected, and a topology recommendation could only be
+        recorded as unmet.
+        """
         self._set_phase(LoopPhase.DESIGN)
         start = plan.start_x
         if start is None:
@@ -242,11 +263,26 @@ class DesignLoop:
                      else default_start(self.op))
 
         self._set_phase(LoopPhase.SIMULATE)
-        t0 = time.monotonic()
-        result = optimize_slsqp(self.op, x0=start, max_iter=plan.max_iter)
-        elapsed = time.monotonic() - t0
-        self.budget.spend(result.n_evaluations)
-        return result, elapsed
+        if method == PARAMETRIC_METHOD:
+            kwargs = {"start_x": start, "max_iter": plan.max_iter}
+        else:
+            kwargs = dict(self.config.topology_options)
+        outcome = execute(method, self.op, **kwargs)
+        self.budget.spend(outcome.evaluations)
+        return outcome
+
+    @staticmethod
+    def _method_of(action: Action) -> str:
+        """The registry method named in the action's strategy.
+
+        The routing reasoner writes "method:inner-strategy"; the Phase 4
+        heuristic writes a bare strategy name and means the parametric solver,
+        which is all it ever ran.
+        """
+        head, separator, _ = action.strategy.partition(":")
+        if separator and head in executable_methods():
+            return head
+        return PARAMETRIC_METHOD
 
     def step(self) -> Episode:
         """One full pass of the state machine. Produces exactly one episode."""
@@ -260,17 +296,19 @@ class DesignLoop:
         self._set_phase(LoopPhase.PLAN)
         plan = plan_experiment(action, local_max_iter=self.config.local_max_iter)
 
-        result, elapsed = self._run_experiment(plan)
+        method = self._method_of(action)
+        outcome = self._run_experiment(plan, method)
+        elapsed = outcome.seconds
 
         self._set_phase(LoopPhase.EVALUATE)
-        evaluation = evaluate_design(self.op, result.x)
+        evaluation = OutcomeVerdict(outcome)
 
         self._set_phase(LoopPhase.LEARN)
         incumbent = (
             None if self.state.best_evaluation is None
             else self.state.best_evaluation.mass_kg
         )
-        verdict = judge(evaluation, incumbent, result.success)
+        verdict = judge(evaluation, incumbent, outcome.converged)
 
         # --- fold the verdict into the run state ---
         relative = (
@@ -278,8 +316,11 @@ class DesignLoop:
             else (incumbent - evaluation.mass_kg) / incumbent
         )
         if verdict.is_new_best:
-            self.state.best_x = np.array(result.x, dtype=float)
+            if outcome.design_vector is not None:
+                self.state.best_x = np.array(outcome.design_vector, dtype=float)
             self.state.best_evaluation = evaluation
+            self.state.best_method = outcome.method
+            self.state.best_outcome = outcome
             self.state.iterations_without_improvement = 0
         else:
             self.state.iterations_without_improvement += 1
@@ -305,29 +346,18 @@ class DesignLoop:
             hypothesis=action.hypothesis,
             action=action.kind.value,
             strategy_used=action.strategy,
-            design_genome={
-                "outer_width_m": float(result.x[0]),
-                "outer_height_m": float(result.x[1]),
-                "wall_thickness_m": float(result.x[2]),
-                "material_id": self.op.problem.material_id,
-            },
-            observation={
-                "mass_kg": evaluation.mass_kg,
-                "max_bending_stress_pa": evaluation.max_bending_stress_pa,
-                "tip_deflection_m": evaluation.tip_deflection_m,
-                "safety_factor": evaluation.safety_factor,
-                "first_natural_frequency_hz": evaluation.first_natural_frequency_hz,
-            },
+            design_genome=self._genome_of(outcome),
+            observation={"mass_kg": outcome.mass_kg, **outcome.detail},
             constraint_status={
                 **{k: float(v) for k, v in evaluation.constraints.items()},
                 "active": verdict.active_constraints,
-                "optimizer_success": bool(result.success),
+                "optimizer_success": bool(outcome.converged),
             },
             conclusion=verdict.conclusion,
             confidence=verdict.confidence,
             feasible=verdict.feasible,
             is_new_best=verdict.is_new_best,
-            evaluations=result.n_evaluations,
+            evaluations=outcome.evaluations,
             seconds=round(elapsed, 4),
         )
         self.state.episodes.append(episode)
@@ -339,6 +369,27 @@ class DesignLoop:
                 episode, run_id=self.run_id, problem_name=self.problem_name)
         self._refresh_dashboard()
         return episode
+
+    def _genome_of(self, outcome) -> dict:
+        """The design, described in the terms the method that made it uses.
+
+        A topology design has no outer width or wall thickness. Writing those
+        fields anyway, from a vector that produced a different design, would
+        make the episode log say a shape was built that was not.
+        """
+        common = {"method": outcome.method,
+                  "representation": outcome.representation,
+                  "material_id": self.op.problem.material_id}
+        if outcome.design_vector is not None:
+            x = outcome.design_vector
+            return {**common,
+                    "outer_width_m": float(x[0]),
+                    "outer_height_m": float(x[1]),
+                    "wall_thickness_m": float(x[2])}
+        density = outcome.density_field
+        return {**common,
+                "n_elements": int(density.size),
+                "volume_fraction": float(density.mean())}
 
     def run(self) -> LoopResult:
         """Iterate until a termination condition fires."""
