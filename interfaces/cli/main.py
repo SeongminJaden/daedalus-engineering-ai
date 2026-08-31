@@ -280,6 +280,7 @@ def run(
 
     from agent.experiment_manager import EpisodeLog
     from agent.loop import DesignLoop, LoopConfig
+    from brain import Brain as EngineeringBrain
     from core.units import to_mm, to_mpa
     from monitoring.dashboard import Dashboard, RunState
     from optimization.constraints import build_optimization_problem, evaluate_design
@@ -311,14 +312,28 @@ def run(
         "(not a language model)[/dim]"
     )
 
+    memory = EngineeringBrain()
+    warm = memory.warm_start()
+    if warm is not None:
+        console.print(
+            f"[dim]warm start from brain: b/h/t = "
+            f"{to_mm(warm[0]):.2f} / {to_mm(warm[1]):.2f} / "
+            f"{to_mm(warm[2]):.2f} mm[/dim]"
+        )
+
     if tui:
         state = RunState(profile=profile or "(auto)", status="starting")
         with Dashboard(state, refresh_hz=8) as dash:
-            loop = DesignLoop(op, config, episode_log=log, dashboard=dash)
+            loop = DesignLoop(op, config, episode_log=log, dashboard=dash,
+                              brain=memory, problem_name=problem.name)
             result = loop.run()
     else:
-        loop = DesignLoop(op, config, episode_log=log)
+        loop = DesignLoop(op, config, episode_log=log, brain=memory,
+                          problem_name=problem.name)
         result = loop.run()
+
+    learned = memory.generalize()
+    memory.close()
 
     # --- per-iteration trace ---
     trace = Table(title="iterations")
@@ -384,11 +399,92 @@ def run(
                     f"evaluations, {result.budget['seconds']:.1f}/"
                     f"{result.budget['max_seconds']:.0f} s")
     summary.add_row("episodes", str(result.episode_log_path))
+    summary.add_row("knowledge learned", str(len(learned)))
     console.print(summary)
+    for k in learned:
+        console.print(
+            f"  [bold]{k.evidence_level.value}[/bold] "
+            f"(conf {k.confidence:.2f}): {k.statement}"
+        )
     console.print(
         "[dim]Beam theory: no root stress concentration, no shear deformation, "
         "no buckling. Peak real stress at the root will be higher.[/dim]"
     )
+
+
+@app.command()
+def brain(
+    db: str = typer.Option(None, "--db", help="brain database path"),
+    domain: str = typer.Option("cantilever_link", "--domain"),
+    generalize: bool = typer.Option(False, "--generalize",
+                                    help="run generalization before reporting"),
+):
+    """Inspect the engineering Brain: what it holds and how far to trust it."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from brain import Brain, EvidenceLevel
+
+    console = Console()
+    with Brain(db) as b:
+        if generalize:
+            b.generalize(domain)
+
+        summary = b.summary()
+        head = Table.grid(padding=(0, 2))
+        head.add_column(style="bold cyan", justify="right")
+        head.add_column()
+        head.add_row("database", summary["path"])
+        for table_name, n in summary["counts"].items():
+            head.add_row(table_name, str(n))
+        console.print(head)
+
+        levels = Table(title="knowledge by evidence level")
+        levels.add_column("level", style="bold")
+        levels.add_column("items", justify="right")
+        levels.add_column("ceiling", justify="right")
+        from brain.semantic import LEVEL_CONFIDENCE_CEILING
+        for level in EvidenceLevel:
+            levels.add_row(level.value,
+                           str(summary["knowledge_by_level"][level.value]),
+                           f"{LEVEL_CONFIDENCE_CEILING[level]:.2f}")
+        console.print(levels)
+
+        items = b.knowledge(domain)
+        if items:
+            table = Table(title=f"knowledge: {domain}")
+            table.add_column("level", style="bold")
+            table.add_column("conf", justify="right")
+            table.add_column("evidence", justify="right")
+            table.add_column("runs", justify="right")
+            table.add_column("statement")
+            from brain.semantic import independent_runs
+            for k in items:
+                table.add_row(k.evidence_level.value, f"{k.confidence:.3f}",
+                              str(len(k.evidence)),
+                              str(independent_runs(k.evidence)),
+                              k.statement)
+            console.print(table)
+
+        strategies = b.applicable_strategies()
+        if strategies:
+            table = Table(title="strategies")
+            table.add_column("level", style="bold")
+            table.add_column("conf", justify="right")
+            table.add_column("name")
+            table.add_column("statement")
+            for st in strategies:
+                table.add_row(st.evidence_level.value, f"{st.confidence:.3f}",
+                              st.name, st.statement)
+            console.print(table)
+
+        console.print(
+            "[dim]This is a store of evidence-graded EXPERIENCE, not validated "
+            "fact. Everything above came from simulation at beam-theory "
+            "fidelity; EXPERIMENTALLY_VALIDATED requires physical test "
+            "evidence and is unreachable from simulation alone. Retrieval is "
+            "numeric feature similarity, not semantic search.[/dim]"
+        )
 
 
 if __name__ == "__main__":

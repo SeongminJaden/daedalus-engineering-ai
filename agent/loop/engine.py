@@ -131,6 +131,8 @@ class DesignLoop:
         episode_log: EpisodeLog | None = None,
         dashboard=None,
         stop_flag=None,
+        brain=None,
+        problem_name: str | None = None,
     ):
         self.op = op
         self.config = config or LoopConfig()
@@ -147,6 +149,17 @@ class DesignLoop:
         )
         self.run_id = uuid.uuid4().hex[:12]
         self.state = _RunState()
+        self.brain = brain
+        self.problem_name = problem_name or getattr(op.problem, "name", "unknown")
+
+        # Closing the loop: start from the best design any previous run left in
+        # the Brain instead of rediscovering it. None on a cold Brain, which is
+        # the normal first case and must stay handled.
+        self.warm_start_x = None
+        if brain is not None:
+            candidate = brain.warm_start()
+            if candidate is not None and op.is_geometrically_valid(candidate):
+                self.warm_start_x = op.clip_to_bounds(candidate)
 
     # --- state machine ---------------------------------------------------- #
     def _set_phase(self, phase: LoopPhase) -> None:
@@ -225,7 +238,8 @@ class DesignLoop:
         self._set_phase(LoopPhase.DESIGN)
         start = plan.start_x
         if start is None:
-            start = default_start(self.op)
+            start = (self.warm_start_x if self.warm_start_x is not None
+                     else default_start(self.op))
 
         self._set_phase(LoopPhase.SIMULATE)
         t0 = time.monotonic()
@@ -320,6 +334,9 @@ class DesignLoop:
         self.state.last_design_id = episode.id
         if self.episode_log is not None:
             self.episode_log.append(episode)
+        if self.brain is not None:
+            self.brain.record_episode(
+                episode, run_id=self.run_id, problem_name=self.problem_name)
         self._refresh_dashboard()
         return episode
 
@@ -348,6 +365,19 @@ class DesignLoop:
                 termination, detail = stop
 
         self._set_phase(LoopPhase.DONE)
+        if self.brain is not None:
+            self.brain.episodic.record_run(
+                run_id=self.run_id,
+                problem_name=self.problem_name,
+                termination=termination.value,
+                iterations=len(self.state.episodes),
+                best_mass_kg=(
+                    None if self.state.best_evaluation is None
+                    else self.state.best_evaluation.mass_kg
+                ),
+                meta={"budget": self.budget.as_dict(),
+                      "warm_started": self.warm_start_x is not None},
+            )
         return LoopResult(
             best_x=self.state.best_x,
             best_evaluation=self.state.best_evaluation,

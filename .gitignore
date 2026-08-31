@@ -26,6 +26,12 @@ artifacts/
 *.npz
 *.npy
 
+# --- brain runtime database (schema lives in brain/db.py; the
+#     accumulated experience is a run artifact, not source) ---
+*.sqlite3
+*.sqlite
+*.db
+
 # --- warp kernel cache ---
 warp_cache/
 .warp/
