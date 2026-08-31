@@ -78,6 +78,11 @@ class ProblemContext:
     # Fluid carried through a conduit, a body moving through a fluid, and
     # fluid power actuation.
     has_internal_flow: bool | None = None
+    # Whether the internal flow is laminar. The closed-form correlations cover
+    # both regimes, but a CFD run configured with a laminar closure covers only
+    # one, and running it on a turbulent duct would return a confident wrong
+    # answer rather than failing. So the regime gates that method.
+    flow_is_laminar: bool | None = None
     has_external_flow: bool | None = None
     has_fluid_actuator: bool | None = None
     needs_stress_field: bool | None = None

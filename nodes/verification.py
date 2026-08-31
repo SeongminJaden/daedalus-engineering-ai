@@ -48,7 +48,7 @@ class VerificationStatus:
     status: str
     reason: str = ""
     report: FusionVerificationReport | None = None
-    cross_validation: "CrossValidation | None" = None
+    cross_validation: "CrossValidation | FlowCrossValidation | None" = None
 
     def __post_init__(self) -> None:
         if self.status == EXTERNALLY_VERIFIED and self.report is None:
@@ -125,6 +125,49 @@ class CrossValidation:
     def agrees(self) -> bool:
         return (self.displacement_relative_error <= self.tolerance
                 and self.stress_relative_error <= self.tolerance)
+
+
+@dataclass(frozen=True)
+class FlowCrossValidation:
+    """A measured agreement with an independently written CFD solver.
+
+    Kept separate from CrossValidation rather than widened into it. A flow
+    comparison has no displacement and no element type, and a record carrying
+    fields that do not apply to it is an invitation to fill them with
+    something that was never measured.
+    """
+
+    solver: str
+    solver_version: str
+    mean_velocity_relative_error: float
+    profile_relative_error: float
+    tolerance: float
+    discretisation: str
+
+    @property
+    def agrees(self) -> bool:
+        return (self.mean_velocity_relative_error <= self.tolerance
+                and self.profile_relative_error <= self.tolerance)
+
+
+def flow_cross_validated_status(design_id: str,
+                                validation: FlowCrossValidation
+                                ) -> VerificationStatus:
+    """Promote a flow result to cross validated, or explain why it cannot be.
+
+    The same rule as the structural case: disagreement carries the measured
+    error rather than quietly reverting to the weaker status.
+    """
+    if not validation.agrees:
+        return VerificationStatus(
+            design_id=design_id, status=SELF_FEM_ONLY,
+            reason=(f"{validation.solver} disagreed: mean velocity error "
+                    f"{validation.mean_velocity_relative_error:.3e}, profile "
+                    f"error {validation.profile_relative_error:.3e}, against a "
+                    f"tolerance of {validation.tolerance:.3e}, on "
+                    f"{validation.discretisation}"))
+    return VerificationStatus(design_id=design_id, status=CROSS_VALIDATED,
+                              cross_validation=validation)
 
 
 def cross_validated_status(design_id: str, validation: CrossValidation
