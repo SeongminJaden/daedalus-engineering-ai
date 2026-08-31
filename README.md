@@ -40,6 +40,7 @@ Phases 0-6 are implemented and verified.
 | 6 | PyTorch surrogate + two-stage screen-and-verify | done |
 | 7 | High-fidelity 3D FEM verification gate (Warp, matrix-free CG) | done |
 | 8 | Material expansion (15 materials) and orthotropic elasticity | done |
+| 9 | Parametric CAD B-rep and STEP export, mass-consistent | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -266,6 +267,8 @@ one long search yields at most `SIMULATED`.
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
+
+**Exported CAD is analysis geometry, not a manufacturing-ready part.** STEP export is exact for parametric solids and is refused outright if the B-rep volume disagrees with the mass the physics used, so the file is always the part that was analysed. But it has no fillets, no fastener features and no tolerances, and its sharp root corner is precisely where Phase 7 found the stress concentration. Organic and topology-optimized shapes do **not** get a clean STEP: that needs surface reconstruction, and the mesh path says so rather than emitting geometry that looks manufacturable.
 
 **Material values carry their own caveats.** The database holds 15 materials, all `reference_typical` rather than certified datasheet values. Polymer properties depend strongly on temperature, strain rate and process, and a printed part is not isotropic, so the bulk values stored here are an upper bound on a printed one. Alumina has **no ductile yield point**, so a yield-based safety factor is the wrong failure criterion for it. CFRP is orthotropic with a 30x ratio between fibre-direction and transverse strength, which is why a single yield number is not offered for it. Derived values (such as G from E and nu) are exact and marked as derived; estimated values carry an uncertainty and force the material's status down to `ASSUMED`.
 

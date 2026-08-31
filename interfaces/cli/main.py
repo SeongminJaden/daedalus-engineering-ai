@@ -613,5 +613,93 @@ def verify(
     )
 
 
+@app.command()
+def export(
+    width_mm: float = typer.Option(10.0, "--width", help="outer width b in mm"),
+    height_mm: float = typer.Option(81.6185, "--height", help="outer height h in mm"),
+    thickness_mm: float = typer.Option(1.0, "--thickness", help="wall t in mm"),
+    out_dir: str = typer.Option("runs/cad", "--out-dir"),
+    name: str = typer.Option("design", "--name"),
+    stl: bool = typer.Option(False, "--stl", help="also write a tessellated STL"),
+):
+    """Export a design to STEP, checked against the analysed part."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.units import MM, to_mm
+    from geometry.cad_export import INSTALL_HINT, find_kernel
+    from optimization.constraints import build_optimization_problem, evaluate_design
+    from projects.robotic_link.problem import build_mvp_problem
+
+    console = Console()
+    kernel = find_kernel()
+    if kernel is None:
+        console.print(f"[red]No CAD kernel available.[/red]\n{INSTALL_HINT}")
+        raise typer.Exit(code=1)
+
+    from geometry.cad_export import build_solid, export_step, export_stl
+
+    problem = build_mvp_problem()
+    op = build_optimization_problem(problem)
+    from core.materials import get_material
+    material = get_material(problem.material_id)
+
+    x = np.array([width_mm * MM, height_mm * MM, thickness_mm * MM])
+    if not op.is_geometrically_valid(x):
+        console.print("[red]invalid geometry: the wall leaves no cavity[/red]")
+        raise typer.Exit(code=1)
+
+    analysis = evaluate_design(op, x)
+    step_path = Path(out_dir) / f"{name}.step"
+
+    report = export_step(
+        length_m=problem.geometry.length_m,
+        outer_width_m=x[0], outer_height_m=x[1], wall_thickness_m=x[2],
+        path=step_path,
+        density_kg_m3=material.density_kg_m3,
+        analytic_mass_kg=analysis.mass_kg,
+        kernel=kernel,
+    )
+
+    table = Table(title="STEP export, checked against the analysis")
+    table.add_column("quantity", style="bold")
+    table.add_column("CAD", justify="right")
+    table.add_column("analysis", justify="right")
+    table.add_column("relative error", justify="right")
+    table.add_row("volume (m^3)", f"{report.volume_m3:.9g}",
+                  f"{report.analytic_volume_m3:.9g}",
+                  f"{report.volume_relative_error:.3e}")
+    table.add_row("mass (kg)", f"{report.mass_kg:.9g}",
+                  f"{report.analytic_mass_kg:.9g}",
+                  f"{report.mass_relative_error:.3e}")
+    table.add_row("bounding box (mm)",
+                  " x ".join(f"{to_mm(v):.4f}" for v in report.bounding_box_m),
+                  f"{problem.geometry.length_m * 1000:.4f} x "
+                  f"{height_mm:.4f} x {width_mm:.4f}", "-")
+    table.add_row("solids", str(report.solid_count), "1", "-")
+    console.print(table)
+
+    console.print(f"kernel: [bold]{report.kernel}[/bold]")
+    console.print(f"wrote [bold]{step_path}[/bold] "
+                  f"({step_path.stat().st_size} bytes)")
+
+    if stl:
+        solid = build_solid(problem.geometry.length_m, x[0], x[1], x[2], kernel)
+        stl_path = Path(out_dir) / f"{name}.stl"
+        export_stl(solid, stl_path, kernel)
+        console.print(f"wrote [bold]{stl_path}[/bold] "
+                      f"({stl_path.stat().st_size} bytes) "
+                      f"[dim]tessellated approximation, not dimensionally "
+                      f"exact[/dim]")
+
+    console.print(
+        "[dim]This is the ANALYSIS geometry, not a manufacturing-ready part. "
+        "There are no fillets, no fastener features and no tolerances on it. "
+        "In particular the sharp root corner is exactly where Phase 7 found the "
+        "stress concentration, and a real part would need a fillet there.[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()

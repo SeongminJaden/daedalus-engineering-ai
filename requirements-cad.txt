@@ -1,0 +1,12 @@
+# Optional CAD dependencies, installed separately from the core requirements.
+#
+# The analysis stack (physics, optimization, brain, surrogate) does not need
+# these. They pull an OpenCascade build that is several hundred megabytes, so
+# a user who only runs simulations should not have to download it.
+#
+#   env -u PYTHONPATH .venv/bin/pip install -r requirements-cad.txt
+#
+# build123d is the primary choice; cadquery is the fallback. Both wrap the same
+# OCCT kernel, so either can produce the B-rep and STEP output.
+
+build123d

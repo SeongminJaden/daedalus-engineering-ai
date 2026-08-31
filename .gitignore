@@ -31,6 +31,14 @@ env/
 *.npz
 *.npy
 
+# --- CAD output artifacts (the exporter is source; the files it writes
+#     are run artifacts, regenerated from the design parameters) ---
+*.step
+*.stp
+*.stl
+*.iges
+*.igs
+
 # --- brain runtime database (schema lives in brain/db.py; the
 #     accumulated experience is a run artifact, not source) ---
 *.sqlite3
