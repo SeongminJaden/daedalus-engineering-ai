@@ -355,21 +355,12 @@ command. Proposed direction:
 
 ## Contributors
 
-<div align="center">
+<p align="center">
+<a href="https://github.com/SeongminJaden"><img src="https://github.com/SeongminJaden.png?size=100" width="48" alt="SeongminJaden"/></a>
+</p>
 
-<table><tr>
-<td align="center">
-  <a href="https://github.com/SeongminJaden">
-    <img src="https://github.com/SeongminJaden.png?size=100" width="80" alt="SeongminJaden"/><br/>
-    <sub><b>SeongminJaden</b></sub>
-  </a>
-</td>
-</tr></table>
-
-</div>
-
-<!-- To add a contributor, add another <td align="center"> block above.
-     For an auto-updating grid with circular avatars, replace the table with:
+<!-- To add a contributor, add another <a><img></a> beside the one above.
+     For an auto-updating grid with circular avatars, replace the block with:
 [![Contributors](https://contrib.rocks/image?repo=SeongminJaden/daedalus-engineering-ai)](https://github.com/SeongminJaden/daedalus-engineering-ai/graphs/contributors)
      Note: GitHub strips style attributes from README HTML, so hand-written
      avatars render square. contrib.rocks is what produces round ones. -->
