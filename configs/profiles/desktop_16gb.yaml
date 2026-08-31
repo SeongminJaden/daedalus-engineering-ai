@@ -30,5 +30,12 @@ surrogate:
   train_batch: 256
   infer_batch: 512
 
+# Compute budget for one autonomous loop run. The loop stops when either
+# limit is hit and records which one - an unbounded search is not a design
+# process, it is a hang.
+budget:
+  max_evaluations: 100000
+  max_seconds: 900
+
 monitoring:
   refresh_hz: 8

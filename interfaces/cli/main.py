@@ -261,5 +261,135 @@ def optimize(
     )
 
 
+@app.command()
+def run(
+    iterations: int = typer.Option(6, "--iterations", "-n"),
+    seed: int = typer.Option(1, "--seed"),
+    target_mass_kg: float = typer.Option(None, "--target-mass",
+                                         help="stop once a feasible design is this light"),
+    max_evaluations: int = typer.Option(None, "--max-evaluations"),
+    max_seconds: float = typer.Option(None, "--max-seconds"),
+    profile: str = typer.Option(None, "--profile", "-p"),
+    tui: bool = typer.Option(True, "--tui/--no-tui",
+                             help="live terminal dashboard; --no-tui for headless"),
+):
+    """Run the autonomous design loop on the MVP problem."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from agent.experiment_manager import EpisodeLog
+    from agent.loop import DesignLoop, LoopConfig
+    from core.units import to_mm, to_mpa
+    from monitoring.dashboard import Dashboard, RunState
+    from optimization.constraints import build_optimization_problem, evaluate_design
+    from projects.robotic_link.problem import build_mvp_problem
+
+    console = Console()
+    problem = build_mvp_problem()
+    op = build_optimization_problem(problem)
+    baseline = evaluate_design(op, np.array([0.05, 0.08, 0.005]))
+
+    config = LoopConfig(
+        max_iterations=iterations,
+        seed=seed,
+        target_mass_kg=target_mass_kg,
+        max_evaluations=max_evaluations,
+        max_seconds=max_seconds,
+        profile=profile,
+    )
+
+    run_dir = Path("runs") / f"loop-{seed}"
+    log = EpisodeLog(run_dir / "episodes.jsonl")
+
+    console.print(
+        f"[bold cyan]autonomous design loop[/bold cyan]  problem={problem.name}  "
+        f"seed={seed}  max_iterations={iterations}"
+    )
+    console.print(
+        "[dim]reasoner: rule-based explore/exploit heuristic "
+        "(not a language model)[/dim]"
+    )
+
+    if tui:
+        state = RunState(profile=profile or "(auto)", status="starting")
+        with Dashboard(state, refresh_hz=8) as dash:
+            loop = DesignLoop(op, config, episode_log=log, dashboard=dash)
+            result = loop.run()
+    else:
+        loop = DesignLoop(op, config, episode_log=log)
+        result = loop.run()
+
+    # --- per-iteration trace ---
+    trace = Table(title="iterations")
+    trace.add_column("#", justify="right")
+    trace.add_column("action")
+    trace.add_column("strategy")
+    trace.add_column("mass (kg)", justify="right")
+    trace.add_column("feasible", justify="center")
+    trace.add_column("best", justify="center")
+    trace.add_column("evals", justify="right")
+    for e in result.episodes:
+        trace.add_row(
+            str(e.iteration), e.action, e.strategy_used,
+            f"{e.observation['mass_kg']:.6f}",
+            "[green]yes[/green]" if e.feasible else "[red]no[/red]",
+            "[green]NEW[/green]" if e.is_new_best else "-",
+            str(e.evaluations),
+        )
+    console.print(trace)
+
+    if result.episodes:
+        first = result.episodes[0]
+        console.print(f"[dim]hypothesis (iteration 0): {first.hypothesis}[/dim]")
+        console.print(f"[dim]conclusion  (iteration 0): {first.conclusion}[/dim]")
+
+    # --- outcome ---
+    if result.best_evaluation is None:
+        console.print("[red]no feasible design found[/red]")
+    else:
+        ev = result.best_evaluation
+        out = Table(title="best design")
+        out.add_column("quantity", style="bold")
+        out.add_column("baseline", justify="right")
+        out.add_column("best", justify="right")
+        out.add_row("b (mm)", f"{to_mm(0.05):.3f}", f"{to_mm(result.best_x[0]):.3f}")
+        out.add_row("h (mm)", f"{to_mm(0.08):.3f}", f"{to_mm(result.best_x[1]):.3f}")
+        out.add_row("t (mm)", f"{to_mm(0.005):.3f}", f"{to_mm(result.best_x[2]):.3f}")
+        out.add_row("mass (kg, SI)", f"{baseline.mass_kg:.6f}", f"{ev.mass_kg:.6f}")
+        out.add_row("sigma_max (MPa)", f"{to_mpa(baseline.max_bending_stress_pa):.3f}",
+                    f"{to_mpa(ev.max_bending_stress_pa):.3f}")
+        out.add_row("delta_tip (mm)", f"{to_mm(baseline.tip_deflection_m):.5f}",
+                    f"{to_mm(ev.tip_deflection_m):.5f}")
+        out.add_row("safety factor (-)", f"{baseline.safety_factor:.2f}",
+                    f"{ev.safety_factor:.2f}")
+        out.add_row("f1 (Hz, SI)", f"{baseline.first_natural_frequency_hz:.2f}",
+                    f"{ev.first_natural_frequency_hz:.2f}")
+        out.add_row("mass reduction", "-",
+                    f"[green]{1.0 - ev.mass_kg / baseline.mass_kg:.1%}[/green]")
+        out.add_row("active constraint", "none",
+                    ", ".join(ev.active_constraints()) or "none")
+        out.add_row("all constraints", "PASS" if baseline.is_feasible() else "FAIL",
+                    "[green]PASS[/green]" if ev.is_feasible() else "[red]FAIL[/red]")
+        console.print(out)
+
+    summary = Table.grid(padding=(0, 2))
+    summary.add_column(style="bold cyan", justify="right")
+    summary.add_column()
+    summary.add_row("termination", f"{result.termination.value}")
+    summary.add_row("detail", result.termination_detail)
+    summary.add_row("iterations", str(result.iterations))
+    summary.add_row("budget",
+                    f"{result.budget['evaluations']}/{result.budget['max_evaluations']} "
+                    f"evaluations, {result.budget['seconds']:.1f}/"
+                    f"{result.budget['max_seconds']:.0f} s")
+    summary.add_row("episodes", str(result.episode_log_path))
+    console.print(summary)
+    console.print(
+        "[dim]Beam theory: no root stress concentration, no shear deformation, "
+        "no buckling. Peak real stress at the root will be higher.[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()
