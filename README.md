@@ -27,7 +27,7 @@ The agent and its CLI are branded **Daedalus**.
 
 ## Status
 
-Phases 0–6 are implemented and verified.
+Phases 0-6 are implemented and verified.
 
 | phase | what it does | state |
 |---|---|---|
@@ -117,8 +117,8 @@ aspirational.
 | tier | GPU | CPU / RAM | profile |
 |---|---|---|---|
 | **Minimum** (MVP, development) | NVIDIA, 4 GB VRAM (e.g. RTX 3050) | 8 cores / 16 GB | `laptop_4gb` |
-| **Recommended** | 16 GB+ VRAM (RTX 4070 Ti / 4080, used 3090 24 GB) | 8+ cores / 16–32 GB | `desktop_16gb`, `rtx5090_32gb` |
-| **Large scale** | 24–48 GB+ (4090 / 5090 / A6000) or cloud A100 80 GB | 16+ cores / 64 GB+ | `cloud_a100` |
+| **Recommended** | 16 GB+ VRAM (RTX 4070 Ti / 4080, used 3090 24 GB) | 8+ cores / 16-32 GB | `desktop_16gb`, `rtx5090_32gb` |
+| **Large scale** | 24-48 GB+ (4090 / 5090 / A6000) or cloud A100 80 GB | 16+ cores / 64 GB+ | `cloud_a100` |
 | **CPU only** | none, Warp has a CPU device |, | works, but **slow and limited**; a GPU is strongly recommended |
 
 ---
@@ -223,11 +223,31 @@ python -m interfaces.cli.main brain --generalize
 This is the part that distinguishes the project. Every layer states what it
 does **not** know.
 
-**Physics (Phase 2) is Euler–Bernoulli beam theory.** It ignores root stress
+**Physics (Phase 2) is Euler-Bernoulli beam theory.** It ignores root stress
 concentration, ignores transverse shear deformation, and does not check
 buckling. **Real peak stress at the root will be higher than reported**: treat
 the reported stress as a lower bound. A design that passes here is a
 **candidate, not a verified part**.
+
+**Phase 7 added a 3D FEM gate, and it immediately caught something.** The
+Phase 3 optimum passed beam theory at exactly 1.00000 mm tip deflection, on its
+1 mm limit. Under 3D FEM the same design deflects **1.019 mm and violates the
+constraint**, because Euler-Bernoulli omits shear deformation and this link is
+not slender (L/h is about 6). The optimizer had found a design sitting precisely
+on a blind spot of the cheap model.
+
+**Phase 7.5 closed that loop.** The beam model gained a Timoshenko shear term,
+calibrated against 3D FEM across L/h from 4 to 20: mean error fell from 2.07% to
+0.35%. Re-optimizing under the corrected model gives a design **0.74% heavier**
+(0.2518 kg) that **passes 3D FEM at 0.9975 mm**. Learning that a cheap model is
+wrong, fixing it, and re-deriving a design that survives the gate is the point
+of the funnel.
+
+**Even 3D FEM is still a simulation**: linear elastic, small strain, and an
+idealised fully clamped root. That idealisation is a **stress singularity**, so
+the peak stress it reports **does not converge under mesh refinement** and must
+not be used to certify anything. A gauge measure offset from the support is
+reported alongside it, and that one does converge.
 
 **The surrogate (Phase 6) approximates that beam evaluator, not 3D FEM.** Its
 error stacks on top of beam theory's own. It never decides: `screen_and_verify`

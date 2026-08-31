@@ -19,7 +19,7 @@ Dependencies: **stdlib `sqlite3` + numpy**. No ML stack, no service, no model.
 **This is not a store of validated facts.** It is a store of *evidence-graded
 experience*. Three claims are worth stating plainly:
 
-1. **Everything from a run came from simulation** at Euler–Bernoulli beam
+1. **Everything from a run came from simulation** at Euler-Bernoulli beam
    fidelity (`physics/README.md`): no root stress concentration, no shear
    deformation, no buckling. Every generalized statement inherits those
    assumptions, and records them in its `assumptions` field.

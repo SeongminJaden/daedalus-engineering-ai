@@ -6,7 +6,7 @@ orchestration against the active GPU profile (`solver/`). `rigid_body`,
 
 ## Model fidelity: Phase 2
 
-The current structural model is **Euler–Bernoulli beam theory**: a root-fixed
+The current structural model is **Euler-Bernoulli beam theory**: a root-fixed
 cantilever with a transverse point load at the free tip and a uniform hollow
 rectangular section. It is differentiable and runs a whole population in one
 GPU launch, which is what an optimizer needs: but it is a *beam* model, and it

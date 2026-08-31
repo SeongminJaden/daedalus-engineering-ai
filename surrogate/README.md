@@ -11,7 +11,7 @@ Generates training data from the solver, fits a small MLP, and, critically,
 
 ## Read this first: what is being approximated, and what it is worth today
 
-**The surrogate approximates the Phase 2 Euler–Bernoulli evaluator, not 3D
+**The surrogate approximates the Phase 2 Euler-Bernoulli evaluator, not 3D
 FEM.** There is no higher-fidelity model in the system yet. So its error stacks
 *on top of* beam theory's own error: a surrogate prediction is an approximation
 of an approximation.
