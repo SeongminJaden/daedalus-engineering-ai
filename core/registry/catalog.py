@@ -610,6 +610,70 @@ def build_default_registry() -> MethodRegistry:
               "inherits the convection resistance's factor-of-two uncertainty "
               "and should be read as an order of magnitude."))
 
+    registry.register(Method(
+        name="pipe_flow",
+        category=Category.ANALYSIS,
+        summary="Internal flow pressure drop by Darcy-Weisbach, with the "
+                "regime stated.",
+        inputs=("flow_rate", "diameter", "length", "fluid_properties",
+                "roughness"),
+        outputs=("reynolds", "regime", "pressure_drop"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("fluid is carried through a conduit",
+                      lambda c: c.require("has_internal_flow")),
+        ),
+        implementation="physics.fluids.internal.solve_pipe_flow",
+        evidence="SIMULATED",
+        notes="Laminar and turbulent have different friction laws and there is "
+              "NO valid formula between them: results in the transitional band "
+              "are flagged as interpolated rather than returned silently. The "
+              "turbulent correlation is Haaland's explicit form, measured "
+              "against an iterated Colebrook solution at 1.3% worst. Fully "
+              "developed, incompressible, steady flow, so a short pipe or one "
+              "full of fittings is dominated by effects this does not "
+              "compute."))
+
+    registry.register(Method(
+        name="external_drag",
+        category=Category.ANALYSIS,
+        summary="Drag force and power for a body moving through a fluid.",
+        inputs=("velocity", "drag_coefficient", "frontal_area", "density"),
+        outputs=("drag_force", "drag_power"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a body moves through a fluid",
+                      lambda c: c.require("has_external_flow")),
+        ),
+        implementation="physics.fluids.actuators.drag_force_n",
+        evidence="SIMULATED",
+        notes="The drag coefficient is supplied by the caller because it is "
+              "strongly Reynolds dependent and a single quoted value holds "
+              "only over a range: the familiar 0.47 for a sphere applies "
+              "between Reynolds 1e3 and 2e5 and drops by about threefold above "
+              "it when the boundary layer turns turbulent."))
+
+    registry.register(Method(
+        name="fluid_actuator",
+        category=Category.ANALYSIS,
+        summary="Hydraulic or pneumatic cylinder force and flow demand.",
+        inputs=("pressure", "bore", "rod_diameter", "speed"),
+        outputs=("extend_force", "retract_force", "flow_rate"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a fluid power actuator drives the motion",
+                      lambda c: c.require("has_fluid_actuator")),
+        ),
+        implementation="physics.fluids.actuators.cylinder_force",
+        evidence="SIMULATED",
+        notes="P times A is the THEORETICAL force; seal friction and back "
+              "pressure subtract, and a real cylinder delivers roughly 80 to "
+              "95 percent. The efficiency is an explicit argument defaulting "
+              "to 1.0, the optimistic value, so its absence is visible. "
+              "Retracting is always weaker because the rod occupies part of "
+              "the annulus, which is why a cylinder sized on its extend force "
+              "can be undersized on the return."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

@@ -75,6 +75,11 @@ class ProblemContext:
     # A heat path to build as a network, and a transient thermal question.
     has_heat_path: bool | None = None
     has_thermal_transient: bool | None = None
+    # Fluid carried through a conduit, a body moving through a fluid, and
+    # fluid power actuation.
+    has_internal_flow: bool | None = None
+    has_external_flow: bool | None = None
+    has_fluid_actuator: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale
