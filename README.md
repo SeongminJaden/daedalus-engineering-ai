@@ -1,11 +1,25 @@
 <!-- 한국어: [KR.md](KR.md) -->
 
+<div align="center">
+
+<img src="assets/logo.svg" width="88" alt="Daedalus">
+
 # Daedalus Engineering AI
 
-**An autonomous engineering design agent.** Give it an engineering goal and it
-loops — reason, design, simulate on the GPU, optimize, learn — to design a
-robot part, accumulating what it learns in an **Engineering Brain** where every
-statement carries an explicit evidence level.
+**An autonomous engineering design agent.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
+[![Tests](https://img.shields.io/badge/tests-281%20passing-brightgreen.svg)](#status)
+[![Status](https://img.shields.io/badge/status-phase%200--6%20complete-orange.svg)](#status)
+
+</div>
+
+Give it an engineering goal and it loops — reason, design, simulate on the GPU,
+optimize, learn — to design a robot part, accumulating what it learns in an
+**Engineering Brain** where every statement carries an explicit evidence level.
 
 The agent and its CLI are branded **Daedalus**.
 
@@ -366,6 +380,52 @@ command. Proposed direction:
 
 ---
 
+## Contributors
+
+| | |
+|---|---|
+| [@SeongminJaden](https://github.com/SeongminJaden) | author, maintainer |
+
+Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**. The
+project cares less about volume than about a specific habit: every layer states
+what it does *not* know, critical calculations are verified against an
+independent method, and nothing is overclaimed. A change that keeps that
+property is the kind this project wants.
+
+---
+
+## Sponsors
+
+*No sponsors yet — this section is waiting for its first.*
+
+If this work is useful to you and you would like to support it, sponsorship
+options will be listed here once they are set up. `.github/FUNDING.yml` is
+present as a commented template; nothing is enabled yet, because a funding link
+that does not work is worse than none.
+
+---
+
+## Community
+
+[![Discord](https://img.shields.io/badge/Discord-server%20not%20yet%20created-5865F2.svg)](#community)
+
+**Discord: `TBD — link to be added once the server is created.`**
+
+There is no invite link yet, and one will not be invented here. Until the server
+exists, GitHub **Issues** and **Discussions** are the place for questions,
+proposals and design debate — particularly on the two open questions flagged
+above: the **packaging / installation UX**, and **anything in the fidelity
+model you think is wrong**. Being told a number is misleading is the most useful
+contribution this project can receive.
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 SeongminJaden
+
+---
+
 ## Repository
 
-Private repository: `SeongminJaden/daedalus-engineering-ai`.
+`SeongminJaden/daedalus-engineering-ai`

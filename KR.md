@@ -1,10 +1,25 @@
 <!-- English: [README.md](README.md) -->
 
+<div align="center">
+
+<img src="assets/logo.svg" width="88" alt="Daedalus">
+
 # Daedalus Engineering AI
 
-**자율 엔지니어링 설계 에이전트.** 공학 목표만 주면 추론 → 설계 → GPU 물리 →
-최적화 → 학습을 반복해 로봇 부품을 설계하고, 배운 것을 **Engineering Brain**에
-축적한다. Brain의 모든 주장에는 **증거수준**이 명시된다.
+**자율 엔지니어링 설계 에이전트**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
+[![Tests](https://img.shields.io/badge/tests-281%20passing-brightgreen.svg)](#현재-상태)
+[![Status](https://img.shields.io/badge/status-phase%200--6%20complete-orange.svg)](#현재-상태)
+
+</div>
+
+공학 목표만 주면 추론 → 설계 → GPU 물리 → 최적화 → 학습을 반복해 로봇 부품을
+설계하고, 배운 것을 **Engineering Brain**에 축적한다. Brain의 모든 주장에는
+**증거수준**이 명시된다.
 
 에이전트와 CLI의 브랜드는 **Daedalus**이다.
 
@@ -352,6 +367,49 @@ python -m interfaces.cli.main brain --generalize
 
 ---
 
+## 함께한 사람들
+
+| | |
+|---|---|
+| [@SeongminJaden](https://github.com/SeongminJaden) | 제작자, 메인테이너 |
+
+기여를 환영한다 — **[CONTRIBUTING.md](CONTRIBUTING.md)** 참고. 이 프로젝트가
+중요하게 여기는 건 기여의 양이 아니라 하나의 습관이다: 각 계층이 자신이
+**모르는 것**을 명시하고, 중요한 계산은 독립적인 방법으로 검증하며, 과대주장을
+하지 않는 것. 그 성질을 지키는 변경이 이 프로젝트가 원하는 기여다.
+
+---
+
+## 후원
+
+*아직 후원자가 없다 — 이 자리는 첫 후원자를 기다린다.*
+
+이 작업이 도움이 되어 후원하고 싶다면, 후원 경로가 준비되는 대로 여기에 표시된다.
+`.github/FUNDING.yml`은 주석 처리된 템플릿으로만 들어 있다. 동작하지 않는 후원
+링크는 없느니만 못하기 때문에 아직 아무것도 활성화하지 않았다.
+
+---
+
+## 커뮤니티
+
+[![Discord](https://img.shields.io/badge/Discord-server%20not%20yet%20created-5865F2.svg)](#커뮤니티)
+
+**Discord: `TBD — 서버 개설 후 링크 삽입`**
+
+아직 초대 링크가 없고, 여기서 지어내지도 않는다. 서버가 생기기 전까지는 GitHub
+**Issues**와 **Discussions**가 질문·제안·설계 토론의 장소다. 특히 위에서 열어둔
+두 가지 질문에 대한 의견을 환영한다: **패키징·설치 UX**, 그리고 **충실도 모델에서
+틀렸다고 생각하는 부분**. 어떤 숫자가 오해를 부른다고 지적받는 것이 이 프로젝트가
+받을 수 있는 가장 유용한 기여다.
+
+---
+
+## 라이선스
+
+[MIT](LICENSE) © 2026 SeongminJaden
+
+---
+
 ## 저장소
 
-비공개 저장소: `SeongminJaden/daedalus-engineering-ai`.
+`SeongminJaden/daedalus-engineering-ai`
