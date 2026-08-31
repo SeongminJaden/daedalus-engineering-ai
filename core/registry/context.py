@@ -35,6 +35,11 @@ class ProblemContext:
     # so both gate a method rather than merely informing it.
     has_cyclic_load: bool | None = None
     has_compressive_load: bool | None = None
+    # Whether a member transmits torque while rotating, and whether a rotating
+    # support carries load. Both decide whether a drivetrain check exists at
+    # all, so both gate a method.
+    transmits_torque: bool | None = None
+    has_rotating_support: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

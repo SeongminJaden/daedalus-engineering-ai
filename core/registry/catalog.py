@@ -241,6 +241,49 @@ def build_default_registry() -> MethodRegistry:
               "FEM linear buckling would cover shapes this cannot and is NOT "
               "registered, because it is not implemented."))
 
+    registry.register(Method(
+        name="shaft_combined",
+        category=Category.ANALYSIS,
+        summary="Shaft sizing under combined bending, torsion and axial load, "
+                "by DE-Goodman.",
+        inputs=("shaft_loads", "material", "diameter", "stress_concentration"),
+        outputs=("static_safety_factor", "fatigue_safety_factor",
+                 "critical_speed"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a member transmits torque while rotating (a tension rod "
+                      "is not a shaft)",
+                      lambda c: c.require("transmits_torque")),
+        ),
+        implementation="physics.shaft.design.analyze_shaft",
+        evidence="SIMULATED",
+        notes="Solid round section. Stress-concentration factors default to "
+              "assumed mid-range values for a shoulder and keyway and should "
+              "be measured for a real design. The critical speed is a bare "
+              "uniform shaft on simple supports, so it ignores the attached "
+              "masses that lower it. Fatigue is high-cycle, inherited from "
+              "the stress-life module."))
+
+    registry.register(Method(
+        name="bearing_l10",
+        category=Category.SELECTION,
+        summary="Basic rating life of a rolling bearing from its equivalent load.",
+        inputs=("radial_load", "axial_load", "speed", "bearing"),
+        outputs=("l10_hours", "static_safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a rotating support carries load",
+                      lambda c: c.require("has_rotating_support")),
+        ),
+        implementation="drivetrain.bearings.life.rate_bearing",
+        evidence="SIMULATED",
+        notes="L10 is a statistic: one bearing in ten is expected to fail "
+              "before it. The ISO 281 reliability, lubrication, contamination "
+              "and temperature factors are not applied, and each can move the "
+              "answer by more than an order of magnitude. The catalogue holds "
+              "standard ISO boundary dimensions with representative ratings "
+              "tagged illustrative, not a manufacturer catalogue."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

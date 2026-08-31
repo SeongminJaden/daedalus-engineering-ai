@@ -1569,5 +1569,145 @@ def failure_modes(
             "is applied.")
 
 
+@app.command()
+def loadpath(
+    torque_nm: float = typer.Option(25.0, "--torque-nm",
+                                    help="continuous joint torque required"),
+    peak_torque_nm: float = typer.Option(60.0, "--peak-torque-nm"),
+    speed_rad_s: float = typer.Option(3.0, "--speed-rad-s"),
+    radial_load_n: float = typer.Option(400.0, "--radial-load-n",
+                                        help="transverse load at the overhang"),
+    span_mm: float = typer.Option(80.0, "--span-mm",
+                                  help="bearing to bearing"),
+    overhang_mm: float = typer.Option(50.0, "--overhang-mm",
+                                      help="near bearing to the load"),
+    shaft_material: str = typer.Option("steel_scm440", "--shaft-material"),
+    target_safety: float = typer.Option(2.0, "--target-safety"),
+    required_hours: float = typer.Option(20000.0, "--required-hours"),
+):
+    """Carry a selected drivetrain's torque through to its shaft and bearings.
+
+    Phase 12 picks a motor and gearbox. The torque does not stop there: it goes
+    out through a shaft held by bearings, and this shows what those carry.
+    """
+    import math
+
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from drivetrain.bearings import all_bearings, rate_bearing
+    from drivetrain.loadpath import ShaftLayout, trace
+    from drivetrain.selection.select import Requirement, select_drivetrain
+    from physics.shaft import (analyze_shaft, de_goodman_diameter_m,
+                               first_critical_speed_rad_s)
+
+    console = Console()
+    requirement = Requirement(joint="joint", continuous_torque_nm=torque_nm,
+                              peak_torque_nm=peak_torque_nm,
+                              max_speed_rad_s=speed_rad_s)
+    best, _ = select_drivetrain(requirement)
+    if best is None:
+        console.print("[red]no feasible drivetrain[/red] for that duty; "
+                      "nothing to carry through to a shaft")
+        raise typer.Exit(code=1)
+
+    layout = ShaftLayout(bearing_span_m=span_mm / 1000.0,
+                         overhang_m=overhang_mm / 1000.0,
+                         radial_load_n=radial_load_n)
+    path = trace(best, layout)
+    material = get_material(shaft_material)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("drivetrain", f"{best.motor.name} + {best.gearbox.id}, "
+                               f"ratio {best.gearbox.ratio:g}")
+    head.add_row("output torque", f"{path.output_torque_nm:.2f} N m "
+                                  f"(motor {best.motor.continuous_torque_nm:.2f} "
+                                  f"x ratio x efficiency)")
+    head.add_row("bending moment", f"{path.bending_moment_nm:.2f} N m "
+                                   f"({radial_load_n:g} N at {overhang_mm:g} mm)")
+    head.add_row("bearing loads", f"near {path.near_bearing_load_n:.1f} N, "
+                                  f"far {path.far_bearing_load_n:.1f} N")
+    head.add_row("shaft material", f"{material.name} ({material.status.value})")
+    console.print(head)
+    console.print(
+        "the near bearing carries MORE than the applied load, not a share of "
+        "it: an overhung load lifts the far bearing")
+
+    loads = path.shaft_loads()
+    sized = de_goodman_diameter_m(loads, material, target_safety)
+    console.print(f"\nDE-Goodman diameter for n = {target_safety:g}: "
+                  f"[bold]{sized * 1000:.2f} mm[/bold]")
+
+    table = Table(title="shaft diameters")
+    table.add_column("diameter (mm)", justify="right")
+    table.add_column("static SF", justify="right")
+    table.add_column("fatigue SF", justify="right")
+    table.add_column("governs")
+    table.add_column("verdict")
+    for diameter in sorted({round(sized * 1000) - 2, round(sized * 1000),
+                            round(sized * 1000) + 4}):
+        if diameter <= 0:
+            continue
+        result = analyze_shaft(loads, material, diameter / 1000.0)
+        table.add_row(f"{diameter:.0f}",
+                      f"{result.static_safety_factor:.2f}",
+                      f"{result.fatigue_safety_factor:.3f}",
+                      result.governing_mode,
+                      "[green]pass[/green]" if result.passes
+                      else "[red]fail[/red]")
+    console.print(table)
+    console.print(
+        "fatigue governs a rotating shaft at every diameter, because a steady "
+        "transverse load is fully reversed in the material once per "
+        "revolution. Sizing on the static stress alone is wrong at every size, "
+        "not just near the limit.")
+
+    critical = first_critical_speed_rad_s(material, sized,
+                                          (span_mm + overhang_mm) / 1000.0)
+    console.print(f"first critical speed of a bare shaft that size: "
+                  f"{critical:.0f} rad/s ({critical * 60 / (2 * math.pi):.0f} "
+                  f"rpm) against an operating {path.speed_rad_s:g} rad/s. "
+                  f"[yellow]This ignores the gear or pulley the shaft carries, "
+                  f"which lowers it substantially.[/yellow]")
+
+    bearings = Table(title=f"bearings at the near support, "
+                           f"{path.near_bearing_load_n:.0f} N, required "
+                           f"{required_hours:g} h")
+    bearings.add_column("designation")
+    bearings.add_column("C (kN)", justify="right")
+    bearings.add_column("L10 (h)", justify="right")
+    bearings.add_column("margin", justify="right")
+    bearings.add_column("static SF", justify="right")
+    bearings.add_column("verdict")
+    for bearing in all_bearings():
+        if bearing.bore_m > sized * 1.6:
+            continue
+        try:
+            result = rate_bearing(bearing, path.near_bearing_load_n,
+                                  path.speed_rad_s,
+                                  required_hours=required_hours)
+        except ValueError:
+            continue
+        bearings.add_row(
+            bearing.designation, f"{bearing.dynamic_rating_n / 1000:.2f}",
+            f"{result.l10_hours:,.0f}", f"{result.life_margin:.2f}",
+            f"{result.static_safety_factor:.1f}",
+            "[green]pass[/green]" if result.passes else "[red]fail[/red]")
+    console.print(bearings)
+    console.print(
+        "[yellow]note[/yellow] L10 is a statistic: one bearing in ten is "
+        "expected to fail before it, and a specific bearing has no promised "
+        "life. The ISO 281 reliability, lubrication, contamination and "
+        "temperature factors are not applied and each can move this by more "
+        "than an order of magnitude.")
+    console.print(
+        "[yellow]note[/yellow] the bearing ratings are representative values "
+        "for the size class, tagged illustrative. The designations are ISO "
+        "boundary dimensions, not vendor part numbers.")
+
+
 if __name__ == "__main__":
     app()
