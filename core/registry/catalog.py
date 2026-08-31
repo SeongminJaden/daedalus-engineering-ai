@@ -563,6 +563,53 @@ def build_default_registry() -> MethodRegistry:
               "here are ELASTIC Kt, not the smaller fatigue Kf that a fatigue "
               "check needs."))
 
+    registry.register(Method(
+        name="thermal_network",
+        category=Category.ANALYSIS,
+        summary="Conduction, convection and radiation resistances in a "
+                "series-parallel path.",
+        inputs=("geometry", "conductivities", "coefficients", "emissivity"),
+        outputs=("total_resistance", "dominant_resistance",
+                 "temperature_rise"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("there is a heat path to build",
+                      lambda c: c.require("has_heat_path")),
+        ),
+        implementation="physics.thermal.network.ThermalPath",
+        evidence="SIMULATED",
+        notes="One-dimensional flow through each branch, so lateral spreading "
+              "is not represented and a pure series network is conservative "
+              "for a concentrated source. Contact resistance between parts is "
+              "NOT included and is often comparable to the conduction it "
+              "joins, which under-predicts temperature. The convection "
+              "coefficient is the dominant uncertainty and is not a material "
+              "property: natural air spans 5 to 25 W/m2K. Emissivity is a "
+              "surface property, and polished against anodised aluminium "
+              "differ by a factor of sixteen."))
+
+    registry.register(Method(
+        name="lumped_transient",
+        category=Category.ANALYSIS,
+        summary="First-order thermal response with the Biot validity check.",
+        inputs=("mass", "specific_heat", "resistance", "geometry"),
+        outputs=("time_constant", "biot_number", "temperature_history"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the question is transient rather than steady state",
+                      lambda c: c.require("has_thermal_transient")),
+        ),
+        implementation="physics.thermal.network.lumped_response",
+        evidence="SIMULATED",
+        notes="Valid only for a Biot number below about 0.1, which is a hard "
+              "condition and not a guideline: above it the body has real "
+              "internal gradients and a single temperature does not describe "
+              "it. The check is computed and reported rather than assumed, "
+              "because a lumped model applied to a thick or poorly conducting "
+              "body looks entirely reasonable and is not. The time constant "
+              "inherits the convection resistance's factor-of-two uncertainty "
+              "and should be read as an order of magnitude."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

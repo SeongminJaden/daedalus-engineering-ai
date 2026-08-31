@@ -72,6 +72,9 @@ class ProblemContext:
     has_noncircular_torsion: bool | None = None
     has_internal_pressure: bool | None = None
     has_concentrated_contact: bool | None = None
+    # A heat path to build as a network, and a transient thermal question.
+    has_heat_path: bool | None = None
+    has_thermal_transient: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

@@ -335,7 +335,20 @@ def test_the_thermal_methods_are_gated():
 
 
 def test_unimplemented_thermal_methods_are_not_registered():
+    """`thermal_network` was on this list until Phase 25 implemented it.
+
+    Implementing the method is the only legitimate way off the list, so it is
+    removed and a positive assertion takes its place.
+
+    A DISTRIBUTED transient stays absent. Phase 25 added `lumped_transient`,
+    which is the lumped case only and refuses itself above a Biot number of
+    0.1, so it is not the general transient solver and does not discharge that
+    entry.
+    """
     registry = build_default_registry()
-    for absent in ("thermal_transient", "thermal_network", "thermal_cfd",
-                   "contact_thermal_resistance"):
+    for absent in ("thermal_transient_distributed", "thermal_cfd",
+                   "contact_thermal_resistance", "spreading_resistance"):
         assert absent not in registry
+    # The ones that left the list are genuinely there now.
+    assert "thermal_network" in registry
+    assert "lumped_transient" in registry
