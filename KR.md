@@ -1,12 +1,12 @@
 <!-- English: [README.md](README.md) -->
 
-# Ruelle Engineering AI
+# Daedalus Engineering AI
 
 **자율 엔지니어링 설계 에이전트.** 공학 목표만 주면 추론 → 설계 → GPU 물리 →
 최적화 → 학습을 반복해 로봇 부품을 설계하고, 배운 것을 **Engineering Brain**에
 축적한다. Brain의 모든 주장에는 **증거수준**이 명시된다.
 
-에이전트와 CLI의 브랜드는 **Ruelle**이다.
+에이전트와 CLI의 브랜드는 **Daedalus**이다.
 
 ---
 
@@ -152,7 +152,7 @@ torch CUDA를 확인하고, 선택된 프로파일을 출력한다.
 ## 사용법
 
 현재는 전부 `python -m interfaces.cli.main <command>` 형태다. 아래의 패키징된
-CLI에서는 `ruelle <command>` 로 노출된다.
+CLI에서는 `dae <command>` 로 노출된다.
 
 ### `evaluate` — 설계 하나를 GPU에서 평가
 
@@ -262,18 +262,19 @@ python -m interfaces.cli.main brain --generalize
 이 프로젝트를 **자체적으로 완결된 설치형 CLI 도구**로 패키징하는 것이 목표다.
 사용자가 한 번 설치하면 깔끔한 단일 명령으로 쓰는 형태. 제안하는 방향:
 
-- `pyproject.toml`에 **console entry point**를 정의해 설치하면 `ruelle` 단일
-  명령이 생기게 한다. 이미 Typer 기반이라 자연스럽다.
+- `pyproject.toml`에 **console entry point**를 정의해 설치하면 `dae` 단일
+  명령이 생기게 한다(긴 별칭으로 `daedalus`도 제공). 이미 Typer 기반이라
+  자연스럽다.
 - **`pipx`로 격리 설치**하거나, **부트스트랩 설치 스크립트**가 venv 생성 + GPU
   의존성(Warp / torch) 설치 + **깨끗한 `PYTHONPATH` 래핑까지 자동 처리**해서
   사용자가 환경 오염을 신경 쓰지 않게 한다.
 - 현재 `interfaces/cli`의 명령들이 그 단일 진입점의 서브커맨드가 된다:
 
   ```bash
-  ruelle evaluate --width 50 --height 80 --thickness 5
-  ruelle optimize --method both
-  ruelle run --iterations 6
-  ruelle brain --generalize
+  dae evaluate --width 50 --height 80 --thickness 5
+  dae optimize --method both
+  dae run --iterations 6
+  dae brain --generalize
   ```
 
 - PyInstaller 단일 바이너리는 **후순위** — torch·Warp CUDA 휠 때문에 현실적이지
@@ -353,4 +354,4 @@ python -m interfaces.cli.main brain --generalize
 
 ## 저장소
 
-비공개 저장소: `SeongminJaden/ruelle-engineering-ai`.
+비공개 저장소: `SeongminJaden/daedalus-engineering-ai`.

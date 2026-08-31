@@ -1,13 +1,13 @@
 <!-- 한국어: [KR.md](KR.md) -->
 
-# Ruelle Engineering AI
+# Daedalus Engineering AI
 
 **An autonomous engineering design agent.** Give it an engineering goal and it
 loops — reason, design, simulate on the GPU, optimize, learn — to design a
 robot part, accumulating what it learns in an **Engineering Brain** where every
 statement carries an explicit evidence level.
 
-The agent and its CLI are branded **Ruelle**.
+The agent and its CLI are branded **Daedalus**.
 
 ---
 
@@ -159,7 +159,7 @@ result, verifies torch CUDA, and prints the resolved profile.
 ## Usage
 
 All commands are `python -m interfaces.cli.main <command>` today; the packaged
-CLI (below) will expose them as `ruelle <command>`.
+CLI (below) will expose them as `dae <command>`.
 
 ### `evaluate` — one design, on the GPU
 
@@ -273,7 +273,8 @@ the kind of experience where a user installs once and runs a single clean
 command. Proposed direction:
 
 - A **console entry point** in `pyproject.toml` so installing provides a single
-  `ruelle` command. The CLI is already Typer-based, so this is a natural fit.
+  `dae` command (with `daedalus` available as a longer alias). The CLI is
+  already Typer-based, so this is a natural fit.
 - **`pipx` for isolated global install**, or a **bootstrap install script** that
   creates the venv, installs the GPU dependencies (Warp / torch), and **wraps
   the clean-`PYTHONPATH` invocation automatically** so users never have to think
@@ -282,10 +283,10 @@ command. Proposed direction:
   entry point:
 
   ```bash
-  ruelle evaluate --width 50 --height 80 --thickness 5
-  ruelle optimize --method both
-  ruelle run --iterations 6
-  ruelle brain --generalize
+  dae evaluate --width 50 --height 80 --thickness 5
+  dae optimize --method both
+  dae run --iterations 6
+  dae brain --generalize
   ```
 
 - A PyInstaller single binary is **low priority** — torch and Warp CUDA wheels
@@ -367,4 +368,4 @@ command. Proposed direction:
 
 ## Repository
 
-Private repository: `SeongminJaden/ruelle-engineering-ai`.
+Private repository: `SeongminJaden/daedalus-engineering-ai`.

@@ -58,7 +58,7 @@ class Dashboard:
         for key, value in s.extra.items():
             table.add_row(key, str(value))
 
-        return Panel(table, title="Ruelle", border_style="cyan")
+        return Panel(table, title="Daedalus", border_style="cyan")
 
     def __enter__(self):
         from rich.live import Live

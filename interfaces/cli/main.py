@@ -16,7 +16,7 @@ import typer  # noqa: E402
 from core import profile as profile_mod  # noqa: E402
 
 app = typer.Typer(add_completion=False,
-                  help="Ruelle - autonomous engineering design agent")
+                  help="Daedalus - autonomous engineering design agent")
 
 
 @app.command()
@@ -31,7 +31,7 @@ def info(profile: str = typer.Option(None, "--profile", "-p",
     cfg = profile_mod.load_profile(resolved)
     vram = profile_mod.detect_vram_gb()
 
-    table = Table(title="Ruelle Engineering AI")
+    table = Table(title="Daedalus Engineering AI")
     table.add_column("key", style="bold cyan")
     table.add_column("value")
     table.add_row("detected VRAM", "-" if vram is None else f"{vram:.2f} GB")
