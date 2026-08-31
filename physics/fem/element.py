@@ -158,6 +158,65 @@ def incompatible_mode_b(xi: float, eta: float, zeta: float,
     return b
 
 
+# Keyed on the stiffness matrix bytes, so an anisotropic material gets the same
+# compute-once-reuse-everywhere treatment as an isotropic one.
+_KE_CACHE: dict = {}
+_DB_CACHE: dict = {}
+
+
+def element_stiffness_from_c(dx: float, dy: float, dz: float,
+                             stiffness: np.ndarray,
+                             incompatible_modes: bool = True) -> np.ndarray:
+    """Ke for an arbitrary 6x6 material stiffness (isotropic or anisotropic).
+
+    This is the single implementation. `element_stiffness` below is a thin
+    isotropic wrapper onto it, so the isotropic and anisotropic paths cannot
+    drift apart.
+    """
+    c = np.ascontiguousarray(np.asarray(stiffness, dtype=np.float64))
+    if c.shape != (6, 6):
+        raise ValueError(f"stiffness must be 6x6, got {c.shape}")
+    key = (dx, dy, dz, c.tobytes(), incompatible_modes)
+    cached = _KE_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    ke = np.zeros((24, 24), dtype=np.float64)
+    if not incompatible_modes:
+        for b, det_j, weight in element_b_matrices(dx, dy, dz):
+            ke += weight * det_j * (b.T @ c @ b)
+    else:
+        k_ua = np.zeros((24, 9), dtype=np.float64)
+        k_aa = np.zeros((9, 9), dtype=np.float64)
+        scale = np.array([2.0 / dx, 2.0 / dy, 2.0 / dz], dtype=np.float64)
+        det_j = dx * dy * dz / 8.0
+        for xi, eta, zeta, weight in gauss_points():
+            bu = strain_displacement(shape_derivatives(xi, eta, zeta) * scale)
+            ba = incompatible_mode_b(xi, eta, zeta, dx, dy, dz)
+            w = weight * det_j
+            ke += w * (bu.T @ c @ bu)
+            k_ua += w * (bu.T @ c @ ba)
+            k_aa += w * (ba.T @ c @ ba)
+        ke = ke - k_ua @ np.linalg.solve(k_aa, k_ua.T)
+
+    _KE_CACHE[key] = ke
+    return ke
+
+
+def element_stress_operator_from_c(dx: float, dy: float, dz: float,
+                                   stiffness: np.ndarray) -> np.ndarray:
+    """C @ B at the element centre, for an arbitrary material stiffness."""
+    c = np.ascontiguousarray(np.asarray(stiffness, dtype=np.float64))
+    key = (dx, dy, dz, c.tobytes())
+    cached = _DB_CACHE.get(key)
+    if cached is not None:
+        return cached
+    scale = np.array([2.0 / dx, 2.0 / dy, 2.0 / dz], dtype=np.float64)
+    out = c @ strain_displacement(shape_derivatives(0.0, 0.0, 0.0) * scale)
+    _DB_CACHE[key] = out
+    return out
+
+
 @lru_cache(maxsize=32)
 def element_stiffness(dx: float, dy: float, dz: float,
                       youngs_modulus: float, poisson_ratio: float,
@@ -176,28 +235,9 @@ def element_stiffness(dx: float, dy: float, dz: float,
     spurious shear energy while keeping a plain 24x24 element matrix - so the
     matrix-free solve is unchanged.
     """
-    d = elasticity_matrix(youngs_modulus, poisson_ratio)
-    ke = np.zeros((24, 24), dtype=np.float64)
-
-    if not incompatible_modes:
-        for b, det_j, weight in element_b_matrices(dx, dy, dz):
-            ke += weight * det_j * (b.T @ d @ b)
-        return ke
-
-    k_ua = np.zeros((24, 9), dtype=np.float64)
-    k_aa = np.zeros((9, 9), dtype=np.float64)
-    scale = np.array([2.0 / dx, 2.0 / dy, 2.0 / dz], dtype=np.float64)
-    for xi, eta, zeta, weight in gauss_points():
-        det_j = dx * dy * dz / 8.0
-        bu = strain_displacement(shape_derivatives(xi, eta, zeta) * scale)
-        ba = incompatible_mode_b(xi, eta, zeta, dx, dy, dz)
-        w = weight * det_j
-        ke += w * (bu.T @ d @ bu)
-        k_ua += w * (bu.T @ d @ ba)
-        k_aa += w * (ba.T @ d @ ba)
-
-    # Static condensation: Ke <- Kuu - Kua Kaa^-1 Kau
-    return ke - k_ua @ np.linalg.solve(k_aa, k_ua.T)
+    return element_stiffness_from_c(
+        dx, dy, dz, elasticity_matrix(youngs_modulus, poisson_ratio),
+        incompatible_modes)
 
 
 @lru_cache(maxsize=32)
@@ -215,10 +255,8 @@ def element_stress_operator(dx: float, dy: float, dz: float,
     is zero there and the compatible part is exactly the stress. That is a
     second reason to sample at the centre.
     """
-    d = elasticity_matrix(youngs_modulus, poisson_ratio)
-    scale = np.array([2.0 / dx, 2.0 / dy, 2.0 / dz], dtype=np.float64)
-    dn_dx = shape_derivatives(0.0, 0.0, 0.0) * scale
-    return d @ strain_displacement(dn_dx)
+    return element_stress_operator_from_c(
+        dx, dy, dz, elasticity_matrix(youngs_modulus, poisson_ratio))
 
 
 def von_mises(stress: np.ndarray) -> np.ndarray:

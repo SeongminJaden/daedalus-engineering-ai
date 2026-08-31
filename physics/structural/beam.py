@@ -143,7 +143,10 @@ def load_case_from_problem(problem, shear_deformation: bool = True) -> BeamLoadC
     return BeamLoadCase(
         length_m=problem.geometry.length_m,
         tip_load_n=load.magnitude_n,
-        youngs_modulus_pa=material.youngs_modulus_pa,
+        # Axial modulus, so an orthotropic material aligned with the beam
+        # axis uses E1. Off-axis loading couples extension and shear and
+        # is outside what a 1D beam model can represent.
+        youngs_modulus_pa=material.axial_modulus_pa(),
         density_kg_m3=material.density_kg_m3,
         yield_strength_pa=material.yield_strength_pa,
         poisson_ratio=material.poisson_ratio,

@@ -11,7 +11,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .element import element_stiffness, element_stress_operator, von_mises
+from .element import (
+    element_stiffness_from_c, element_stress_operator_from_c, von_mises,
+)
 from .mesh import Mesh
 
 
@@ -64,6 +66,7 @@ def solve_linear_elasticity(
     # the tip deflection agreed to five significant figures between residual
     # 1.7e-7 and 9.8e-10, so tightening further buys precision the model does
     # not have while costing thousands of iterations.
+    stiffness_matrix: np.ndarray | None = None,
     tol: float = 1e-8,
     max_iterations: int | None = None,
     device: str | None = None,
@@ -80,12 +83,20 @@ def solve_linear_elasticity(
     # a slender beam is badly conditioned. A cap that is too low silently
     # returns an under-converged (too stiff) deflection that still looks
     # plausible, so it is set generously and convergence is reported.
-    max_iterations = max_iterations or max(3000, 60 * int(np.sqrt(n_dofs)))
+    # High aspect ratio elements (a long thin-walled beam meshed to resolve
+    # a 1 mm wall) are badly conditioned, and CG needs O(sqrt(cond))
+    # steps. A cap that is too low returns an under-converged, and so
+    # too stiff, deflection that still looks plausible. Convergence is
+    # reported either way, but the cap is set generously enough that
+    # realistic meshes reach tolerance.
+    max_iterations = max_iterations or max(5000, 200 * int(np.sqrt(n_dofs)))
 
-    ke = element_stiffness(mesh.dx, mesh.dy, mesh.dz,
-                           youngs_modulus, poisson_ratio)
-    db = element_stress_operator(mesh.dx, mesh.dy, mesh.dz,
-                                 youngs_modulus, poisson_ratio)
+    if stiffness_matrix is None:
+        from core.materials import isotropic_stiffness
+        stiffness_matrix = isotropic_stiffness(youngs_modulus, poisson_ratio)
+    ke = element_stiffness_from_c(mesh.dx, mesh.dy, mesh.dz, stiffness_matrix)
+    db = element_stress_operator_from_c(mesh.dx, mesh.dy, mesh.dz,
+                                        stiffness_matrix)
 
     # --- device arrays ---
     ke_d = wp.array(ke.reshape(-1), dtype=wp.float64, device=dev)

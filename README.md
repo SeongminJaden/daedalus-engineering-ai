@@ -39,6 +39,7 @@ Phases 0-6 are implemented and verified.
 | 5 | Engineering Brain: episodic/semantic memory, evidence levels, retrieval | done |
 | 6 | PyTorch surrogate + two-stage screen-and-verify | done |
 | 7 | High-fidelity 3D FEM verification gate (Warp, matrix-free CG) | done |
+| 8 | Material expansion (15 materials) and orthotropic elasticity | done |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -265,6 +266,8 @@ one long search yields at most `SIMULATED`.
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
+
+**Material values carry their own caveats.** The database holds 15 materials, all `reference_typical` rather than certified datasheet values. Polymer properties depend strongly on temperature, strain rate and process, and a printed part is not isotropic, so the bulk values stored here are an upper bound on a printed one. Alumina has **no ductile yield point**, so a yield-based safety factor is the wrong failure criterion for it. CFRP is orthotropic with a 30x ratio between fibre-direction and transverse strength, which is why a single yield number is not offered for it. Derived values (such as G from E and nu) are exact and marked as derived; estimated values carry an uncertainty and force the material's status down to `ASSUMED`.
 
 **The optimum depends on an assumed manufacturing bound.** Two of three design
 variables land on their bounds, and the 1 mm minimum wall thickness is an

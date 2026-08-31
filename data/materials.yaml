@@ -42,3 +42,208 @@ materials:
     fatigue_strength_pa: 96.5e6
     source: MatWeb typical (verify vs supplier datasheet)
     status: reference_typical
+  - id: al_2024_t3
+    name: Aluminium 2024-T3
+    density_kg_m3: 2780.0
+    youngs_modulus_pa: 7.31e+10
+    yield_strength_pa: 3.45e+08
+    ultimate_strength_pa: 4.83e+08
+    poisson_ratio: 0.33
+    shear_modulus_pa: 27481203007.518795
+    fatigue_strength_pa: 1.38e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: MatWeb/MMPDS typical (verify vs supplier datasheet)
+    status: reference_typical
+  - id: ti_6al_4v
+    name: Titanium Ti-6Al-4V (Grade 5)
+    density_kg_m3: 4430.0
+    youngs_modulus_pa: 1.138e+11
+    yield_strength_pa: 8.8e+08
+    ultimate_strength_pa: 9.5e+08
+    poisson_ratio: 0.342
+    shear_modulus_pa: 42399403874.813705
+    fatigue_strength_pa: 5.1e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: MatWeb typical, annealed (verify vs supplier datasheet)
+    status: reference_typical
+  - id: steel_s45c
+    name: Carbon steel S45C (AISI 1045)
+    density_kg_m3: 7850.0
+    youngs_modulus_pa: 2.05e+11
+    yield_strength_pa: 3.43e+08
+    ultimate_strength_pa: 5.69e+08
+    poisson_ratio: 0.29
+    shear_modulus_pa: 79457364341.08527
+    fatigue_strength_pa: 2.45e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: JIS G4051 / MatWeb typical, normalized (verify vs supplier datasheet)
+    status: reference_typical
+  - id: steel_scm440
+    name: Alloy steel SCM440 (AISI 4140)
+    density_kg_m3: 7850.0
+    youngs_modulus_pa: 2.05e+11
+    yield_strength_pa: 6.55e+08
+    ultimate_strength_pa: 8.5e+08
+    poisson_ratio: 0.29
+    shear_modulus_pa: 79457364341.08527
+    fatigue_strength_pa: 3.95e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: JIS G4105 / MatWeb typical, Q&T (verify vs supplier datasheet)
+    status: reference_typical
+  - id: ss_316
+    name: Stainless steel 316
+    density_kg_m3: 8000.0
+    youngs_modulus_pa: 1.93e+11
+    yield_strength_pa: 2.9e+08
+    ultimate_strength_pa: 5.8e+08
+    poisson_ratio: 0.3
+    shear_modulus_pa: 74230769230.76923
+    fatigue_strength_pa: 2.4e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: MatWeb typical, annealed (verify vs supplier datasheet)
+    status: reference_typical
+  - id: mg_az31b
+    name: Magnesium AZ31B
+    density_kg_m3: 1770.0
+    youngs_modulus_pa: 4.5e+10
+    yield_strength_pa: 2e+08
+    ultimate_strength_pa: 2.6e+08
+    poisson_ratio: 0.35
+    shear_modulus_pa: 16666666666.666666
+    fatigue_strength_pa: 1.1e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    source: MatWeb typical (verify vs supplier datasheet)
+    status: reference_typical
+  - id: abs
+    name: ABS (acrylonitrile butadiene styrene)
+    density_kg_m3: 1050.0
+    youngs_modulus_pa: 2.3e+09
+    yield_strength_pa: 4e+07
+    ultimate_strength_pa: 4.4e+07
+    poisson_ratio: 0.35
+    shear_modulus_pa: 851851851.8518518
+    fatigue_strength_pa: 1.5e+07
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
+    source: MatWeb typical bulk values (verify vs supplier datasheet)
+    status: reference_typical
+  - id: pla
+    name: PLA (polylactic acid)
+    density_kg_m3: 1240.0
+    youngs_modulus_pa: 3.5e+09
+    yield_strength_pa: 5e+07
+    ultimate_strength_pa: 5.5e+07
+    poisson_ratio: 0.36
+    shear_modulus_pa: 1286764705.882353
+    fatigue_strength_pa: 1.8e+07
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
+    source: MatWeb typical bulk values (verify vs supplier datasheet)
+    status: reference_typical
+  - id: pa12
+    name: PA12 (nylon 12)
+    density_kg_m3: 1010.0
+    youngs_modulus_pa: 1.4e+09
+    yield_strength_pa: 4.5e+07
+    ultimate_strength_pa: 5e+07
+    poisson_ratio: 0.39
+    shear_modulus_pa: 503597122.30215824
+    fatigue_strength_pa: 1.7e+07
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
+    source: MatWeb typical bulk values (verify vs supplier datasheet)
+    status: reference_typical
+  - id: petg
+    name: PETG
+    density_kg_m3: 1270.0
+    youngs_modulus_pa: 2.1e+09
+    yield_strength_pa: 5e+07
+    ultimate_strength_pa: 5.3e+07
+    poisson_ratio: 0.38
+    shear_modulus_pa: 760869565.2173914
+    fatigue_strength_pa: 1.8e+07
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
+    source: MatWeb typical bulk values (verify vs supplier datasheet)
+    status: reference_typical
+  - id: pc
+    name: Polycarbonate
+    density_kg_m3: 1200.0
+    youngs_modulus_pa: 2.3e+09
+    yield_strength_pa: 6.2e+07
+    ultimate_strength_pa: 6.6e+07
+    poisson_ratio: 0.37
+    shear_modulus_pa: 839416058.3941605
+    fatigue_strength_pa: 2.2e+07
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
+    source: MatWeb typical bulk values (verify vs supplier datasheet)
+    status: reference_typical
+  - id: alumina_al2o3
+    name: Alumina (Al2O3, 99.5%)
+    density_kg_m3: 3900.0
+    youngs_modulus_pa: 3.7e+11
+    yield_strength_pa: 3.5e+08
+    ultimate_strength_pa: 3.6e+08
+    poisson_ratio: 0.22
+    shear_modulus_pa: 151639344262.29507
+    fatigue_strength_pa: 2.0e+08
+    material_class: isotropic
+    derived_fields: [shear_modulus_pa]
+    notes: >-
+      BRITTLE CERAMIC: there is NO ductile yield point. The yield field carries
+      the flexural strength (~350 MPa) so the schema stays usable, but a
+      yield-based safety factor is the wrong failure criterion here. Ceramic
+      strength is scatter-dominated and size dependent; a Weibull treatment is
+      required for real design, and this database does not provide one.
+    source: MatWeb typical 99.5% alumina (verify vs supplier datasheet)
+    status: reference_typical
+  - id: cfrp_ud
+    name: CFRP unidirectional laminate (carbon/epoxy)
+    density_kg_m3: 1600.0
+    youngs_modulus_pa: 1.35e+11
+    yield_strength_pa: 1.5e+09
+    ultimate_strength_pa: 1.6e+09
+    poisson_ratio: 0.3
+    shear_modulus_pa: 5.0e+09
+    fatigue_strength_pa: 6.0e+08
+    material_class: orthotropic
+    e1_pa: 1.35e+11
+    e2_pa: 1.0e+10
+    e3_pa: 1.0e+10
+    g12_pa: 5.0e+09
+    g13_pa: 5.0e+09
+    g23_pa: 3.5e+09
+    nu12: 0.3
+    nu13: 0.3
+    nu23: 0.45
+    strength_long_pa: 1.5e+09
+    strength_trans_pa: 5.0e+07
+    strength_shear_pa: 7.0e+07
+    orientation_deg: [0.0]
+    layup: [UD-0]
+    notes: >-
+      ORTHOTROPIC. Strength along the fibres is roughly 30x the transverse
+      strength, so a single yield number is meaningless: use the directional
+      values. Properties are process dependent (fibre volume fraction, cure,
+      void content) and the isotropic fields above are the axis-1 values kept
+      only for reporting. Off-axis loading couples extension and shear and
+      cannot be represented by the 1D beam model.
+    source: Typical UD carbon/epoxy laminate values (verify vs supplier datasheet)
+    status: reference_typical
