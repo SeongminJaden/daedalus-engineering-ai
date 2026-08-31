@@ -158,3 +158,31 @@ def hollow_rect_mesh(
     section = ~in_cavity                                   # (ny, nz) wall mask
     active = np.broadcast_to(section[None, :, :], (nx, ny, nz)).copy()
     return _build(active, nx, ny, nz, length_m / nx, dy, dz)
+
+
+def l_bracket_mesh(size_m: float, thickness_fraction: float, width_m: float,
+                   n: int, nz: int = 2) -> Mesh:
+    """An L-shaped bracket: the standard stress-constrained benchmark.
+
+    The domain is a square with the upper-right quadrant removed, leaving a
+    **re-entrant corner**. Linear elasticity puts a stress concentration there,
+    which is exactly the feature a compliance objective ignores and a stress
+    constraint has to deal with. It is the same physics Phase 7 found at the
+    clamped root of the cantilever.
+
+    Axes follow the project convention: x along the long arm, y vertical, z the
+    out-of-plane width.
+    """
+    if not 0.0 < thickness_fraction < 1.0:
+        raise ValueError("thickness_fraction must be in (0, 1)")
+    if n < 4:
+        raise ValueError("n must be at least 4")
+
+    cell = size_m / n
+    arm = max(1, int(round(n * thickness_fraction)))
+    active = np.zeros((n, n, nz), dtype=bool)
+    # Vertical arm: full height on the left.
+    active[:arm, :, :] = True
+    # Horizontal arm: full width along the bottom.
+    active[:, :arm, :] = True
+    return _build(active, n, n, nz, cell, cell, width_m / nz)

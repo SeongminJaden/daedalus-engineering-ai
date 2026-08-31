@@ -69,9 +69,10 @@ def solve_linear_elasticity(
     youngs_modulus: float,
     poisson_ratio: float,
     fixed_nodes: np.ndarray,
-    load_nodes: np.ndarray,
-    total_load_n: float,
+    load_nodes: np.ndarray | None = None,
+    total_load_n: float = 0.0,
     load_direction: int = 1,
+    force_vector: np.ndarray | None = None,
     # Relative residual. 1e-8 is not a compromise: measured on the MVP section,
     # the tip deflection agreed to five significant figures between residual
     # 1.7e-7 and 9.8e-10, so tightening further buys precision the model does
@@ -135,11 +136,21 @@ def solve_linear_elasticity(
         fixed[3 * node:3 * node + 3] = 1
     fixed_d = wp.array(fixed, dtype=wp.int32, device=dev)
 
-    load_nodes = np.asarray(load_nodes, dtype=np.int64)
-    if load_nodes.size == 0:
-        raise ValueError("no loaded nodes")
-    f = np.zeros(n_dofs, dtype=np.float64)
-    f[3 * load_nodes + load_direction] = total_load_n / load_nodes.size
+    # A general right-hand side is needed for adjoint solves, where the load is
+    # not a physical force on a face but dg/du from a constraint function.
+    if force_vector is not None:
+        f = np.asarray(force_vector, dtype=np.float64).reshape(-1).copy()
+        if f.shape[0] != n_dofs:
+            raise ValueError(
+                f"force_vector has {f.shape[0]} entries for {n_dofs} dofs")
+    else:
+        if load_nodes is None:
+            raise ValueError("provide either load_nodes or force_vector")
+        load_nodes = np.asarray(load_nodes, dtype=np.int64)
+        if load_nodes.size == 0:
+            raise ValueError("no loaded nodes")
+        f = np.zeros(n_dofs, dtype=np.float64)
+        f[3 * load_nodes + load_direction] = total_load_n / load_nodes.size
     f[fixed == 1] = 0.0
 
     from .kernels import (

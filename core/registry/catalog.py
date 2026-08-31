@@ -1,0 +1,293 @@
+"""Registration of the methods this project has actually implemented.
+
+**Only implemented and verified methods appear here.** A registry entry is a
+claim that the method exists and is usable, and a selector will route to
+whatever it finds. Listing a method that is a stub, or one whose applicability
+range nobody measured, is the same failure as a fabricated part number: it
+reads as a record and it is not one. `physics/thermal.py`,
+`physics/collision.py`, `physics/rigid_body.py` and `optimization/bayesian.py`
+are one-line stubs in this tree and are deliberately absent. MMA is absent for
+the same reason, despite being the natural optimizer for the stress-constrained
+problem: it is not implemented here.
+
+The applicability numbers are not textbook folklore. The slenderness
+thresholds come from this project's own 3D FEM comparison, recorded in
+DESIGN.md Phase 7.5.
+"""
+
+from __future__ import annotations
+
+from .context import ProblemContext
+from .method import Category, Condition, Cost, Fidelity, Method
+from .registry import MethodRegistry
+
+# --- reusable conditions -----------------------------------------------------
+
+# Measured against 3D FEM on a 10x40x1 mm section (DESIGN.md Phase 7.5):
+# Euler-Bernoulli deflection over FEM is 0.9382 at L/h = 4, 0.9750 at 6,
+# 0.9881 at 8, 0.9975 at 12, 1.0022 at 20. So the model costs 6.2% at L/h = 4
+# and 2.5% at 6, falling under 0.5% by 12. The threshold is set at 12.
+#
+# This is the condition that Phase 7 needed and did not have. The MVP link had
+# a slenderness of about 6, the cheap model omitted shear, and the optimizer
+# found a design sitting exactly on that blind spot; the 3D FEM gate rejected
+# it. With this declared, the selector refuses the model before it runs.
+EULER_BERNOULLI_SLENDERNESS = 12.0
+
+# Timoshenko over FEM stays within 0.5% across the whole measured range, 4 to
+# 20, and is 0.9995 at L/h = 4. Below 4 there is no measurement, so the method
+# does not claim to apply there.
+TIMOSHENKO_SLENDERNESS = 4.0
+
+_prismatic = Condition(
+    "the problem can be posed as a prismatic beam",
+    lambda c: c.supports("prismatic_beam"))
+_voxel = Condition(
+    "the problem can be posed as a voxel grid",
+    lambda c: c.supports("voxel_domain"))
+_assembly = Condition(
+    "the problem can be posed as a jointed assembly",
+    lambda c: c.supports("assembly"))
+_no_stress_field = Condition(
+    "a full stress field is not required (a 1D model has no field to give)",
+    lambda c: not c.require("needs_stress_field"))
+
+
+def build_default_registry() -> MethodRegistry:
+    """The methods implemented in this tree, with their declared ranges."""
+    registry = MethodRegistry()
+
+    # --- design generation ---------------------------------------------------
+    registry.register(Method(
+        name="parametric_section",
+        category=Category.DESIGN_GENERATION,
+        summary="Vary the section parameters of a fixed topology.",
+        inputs=("design_genome", "engineering_ir"),
+        outputs=("design_genome",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_prismatic,),
+        implementation="core.design_genome.genome",
+        evidence="SIMULATED",
+        notes="Cannot change topology. It moves within one shape family."))
+
+    registry.register(Method(
+        name="topology_compliance",
+        category=Category.DESIGN_GENERATION,
+        summary="SIMP density optimisation minimising compliance at fixed volume.",
+        inputs=("voxel_mesh", "volume_fraction", "load_case"),
+        outputs=("density_field",),
+        fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
+        conditions=(_voxel,),
+        implementation="optimization.topology.simp.optimize",
+        evidence="SIMULATED",
+        notes="Says nothing about stress. Adjoint sensitivity checked against "
+              "finite differences to 2.6e-05."))
+
+    registry.register(Method(
+        name="topology_stress",
+        category=Category.DESIGN_GENERATION,
+        summary="SIMP compliance minimisation carrying an aggregated stress "
+                "constraint.",
+        inputs=("voxel_mesh", "volume_fraction", "load_case", "stress_limit"),
+        outputs=("density_field",),
+        fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
+        conditions=(
+            _voxel,
+            Condition("the problem states a stress constraint",
+                      lambda c: c.require("has_stress_constraint")),
+        ),
+        implementation="optimization.topology.stress.optimize_constrained",
+        evidence="SIMULATED",
+        notes="Lowers the peak stress and pulls material off a re-entrant "
+              "corner, at a compliance cost. Does not produce a clean fillet: "
+              "the result is greyer than the compliance design. Adjoint "
+              "checked to 3.9e-08."))
+
+    # --- analysis ------------------------------------------------------------
+    registry.register(Method(
+        name="beam_eb",
+        category=Category.ANALYSIS,
+        summary="Euler-Bernoulli cantilever, differentiable, on the GPU.",
+        inputs=("design_genome", "load_case"),
+        outputs=("tip_deflection", "root_stress", "mass"),
+        fidelity=Fidelity.BEAM, cost=Cost.TRIVIAL,
+        conditions=(
+            _prismatic, _no_stress_field,
+            Condition(
+                f"slenderness L/h is at least {EULER_BERNOULLI_SLENDERNESS:g} "
+                f"(shear is omitted; measured error is 2.5% at L/h 6 and 6.2% "
+                f"at L/h 4)",
+                lambda c: c.require("slenderness") >= EULER_BERNOULLI_SLENDERNESS),
+        ),
+        implementation="physics.structural.beam (shear_deformation=False)",
+        evidence="SIMULATED",
+        notes="This is the method Phase 7 used out of range."))
+
+    registry.register(Method(
+        name="beam_timoshenko",
+        category=Category.ANALYSIS,
+        summary="Timoshenko cantilever with a shear term, differentiable.",
+        inputs=("design_genome", "load_case"),
+        outputs=("tip_deflection", "root_stress", "mass"),
+        fidelity=Fidelity.TIMOSHENKO, cost=Cost.TRIVIAL,
+        conditions=(
+            _prismatic, _no_stress_field,
+            Condition(
+                f"slenderness L/h is at least {TIMOSHENKO_SLENDERNESS:g} "
+                f"(the range where the shear term was measured)",
+                lambda c: c.require("slenderness") >= TIMOSHENKO_SLENDERNESS),
+        ),
+        implementation="physics.structural.beam (shear_deformation=True)",
+        evidence="SIMULATED",
+        notes="A_s = 2th is an assumed thin-wall factor, validated against 3D "
+              "FEM to a 0.350% mean error over L/h 4 to 20."))
+
+    registry.register(Method(
+        name="fem3d",
+        category=Category.ANALYSIS,
+        summary="Matrix-free 3D linear elasticity on a hex grid, GPU CG.",
+        inputs=("mesh", "material", "boundary_conditions", "load"),
+        outputs=("displacements", "stress_field", "compliance"),
+        fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
+        conditions=(
+            Condition("the problem can be posed on a structured hex grid",
+                      lambda c: c.supports("prismatic_beam")
+                      or c.supports("voxel_domain")),
+        ),
+        implementation="physics.fem.solver.solve_linear_elasticity",
+        evidence="SIMULATED",
+        notes="Linear elastic and small strain. Reports stress at a clamped "
+              "boundary that is singular under mesh refinement, so peak values "
+              "there are mesh-dependent by nature."))
+
+    registry.register(Method(
+        name="statics",
+        category=Category.ANALYSIS,
+        summary="Joint torques holding an assembly against gravity.",
+        inputs=("assembly", "joint_positions"),
+        outputs=("joint_torques",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_assembly,),
+        implementation="core.assembly.statics",
+        evidence="SIMULATED",
+        notes="Quasi-static. No inertial terms."))
+
+    registry.register(Method(
+        name="dynamics",
+        category=Category.ANALYSIS,
+        summary="Rigid-body inverse dynamics, M(q) q'' + C(q,q') q' + g(q).",
+        inputs=("assembly", "trajectory"),
+        outputs=("joint_torques", "joint_power"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.CHEAP,
+        conditions=(_assembly,),
+        implementation="physics.dynamics.equations.inverse_dynamics",
+        evidence="SIMULATED",
+        notes="Rigid links. Link flexibility is not modelled."))
+
+    registry.register(Method(
+        name="surrogate_screen",
+        category=Category.ANALYSIS,
+        summary="Learned MLP predicting beam metrics, for screening only.",
+        inputs=("design_genome",),
+        outputs=("tip_deflection", "root_stress"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_prismatic, _no_stress_field),
+        implementation="surrogate.inference.screening",
+        evidence="SIMULATED",
+        notes="Screening only. A final decision may never rest on it. It is "
+              "also not faster than the batched solver it approximates "
+              "(measured 0.38x), so it earns its place by shape, not speed."))
+
+    # --- optimization --------------------------------------------------------
+    registry.register(Method(
+        name="slsqp",
+        category=Category.OPTIMIZATION,
+        summary="Gradient-based constrained local optimisation.",
+        inputs=("objective", "constraints", "start_point"),
+        outputs=("design_vector",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.CHEAP,
+        conditions=(
+            Condition("gradients are available",
+                      lambda c: c.require("needs_gradients")),
+        ),
+        implementation="optimization.gradient.slsqp.optimize_slsqp",
+        evidence="SIMULATED",
+        notes="Local. Finds a local optimum and does not know it is local, "
+              "which is why it is cross-checked against differential evolution."))
+
+    registry.register(Method(
+        name="differential_evolution",
+        category=Category.OPTIMIZATION,
+        summary="Population-based global search, no gradients required.",
+        inputs=("objective", "constraints", "bounds"),
+        outputs=("design_vector",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.MODERATE,
+        conditions=(),
+        implementation="optimization.evolutionary.differential"
+                       ".optimize_differential_evolution",
+        evidence="SIMULATED",
+        notes="Polish is off: the local step crosses the validity "
+              "discontinuity at invalid geometries and fails."))
+
+    registry.register(Method(
+        name="optimality_criteria",
+        category=Category.OPTIMIZATION,
+        summary="OC update with a volume Lagrange multiplier bisection.",
+        inputs=("density_field", "sensitivity", "volume_fraction"),
+        outputs=("density_field",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            _voxel,
+            Condition("the sensitivity is negative everywhere, as compliance "
+                      "is (the OC exponent has no meaning for a positive entry)",
+                      lambda c: not c.require("has_stress_constraint")),
+        ),
+        implementation="optimization.topology.simp.oc_update",
+        evidence="SIMULATED",
+        notes="Holds the volume exactly at every iteration."))
+
+    registry.register(Method(
+        name="penalty_projection",
+        category=Category.OPTIMIZATION,
+        summary="Move-limited projected gradient with an exterior penalty, for "
+                "sensitivities of either sign.",
+        inputs=("density_field", "sensitivity", "volume_fraction", "constraint"),
+        outputs=("density_field",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_voxel,),
+        implementation="optimization.topology.stress._project_to_volume",
+        evidence="SIMULATED",
+        notes="Oscillates about the constraint boundary, so the best feasible "
+              "iterate is kept rather than the last one. MMA would converge in "
+              "fewer iterations and is not implemented."))
+
+    registry.register(Method(
+        name="pareto_front",
+        category=Category.OPTIMIZATION,
+        summary="Non-dominated filtering for competing objectives.",
+        inputs=("objective_values",),
+        outputs=("non_dominated_mask",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(),
+        implementation="optimization.multi_objective.pareto",
+        evidence="SIMULATED"))
+
+    # --- selection -----------------------------------------------------------
+    registry.register(Method(
+        name="drivetrain_selection",
+        category=Category.SELECTION,
+        summary="Match motor and gearbox archetypes to a torque and speed duty.",
+        inputs=("joint_torques", "joint_speeds"),
+        outputs=("motor", "gearbox"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_assembly,),
+        implementation="drivetrain.selection.select",
+        evidence="SIMULATED",
+        notes="The catalogue holds representative archetypes, not vendor part "
+              "numbers. Every entry is tagged illustrative and must be "
+              "replaced with a datasheet before it means anything."))
+
+    return registry
+
+
+DEFAULT_REGISTRY = build_default_registry()

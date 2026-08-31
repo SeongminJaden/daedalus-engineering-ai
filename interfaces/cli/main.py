@@ -976,8 +976,27 @@ def topology(
                                    help="disable the density filter, to see checkerboarding"),
     stl: bool = typer.Option(False, "--stl", help="write the thresholded shape"),
     out_dir: str = typer.Option("runs/topology", "--out-dir"),
+    stress: bool = typer.Option(False, "--stress",
+                                help="stress-constrained run on the L-bracket, "
+                                     "compared against pure compliance"),
+    stress_limit_mpa: float = typer.Option(
+        16.0, "--stress-limit-mpa",
+        help="von Mises limit for --stress. The compliance design reaches "
+             "about 18 MPa, so lower values bind and higher ones do not."),
+    p_norm: float = typer.Option(12.0, "--p-norm",
+                                 help="stress aggregation exponent"),
 ):
-    """Topology-optimize a cantilever domain with SIMP on the GPU FEM."""
+    """Topology-optimize a cantilever domain with SIMP on the GPU FEM.
+
+    With --stress the domain changes to the L-bracket benchmark, whose
+    re-entrant corner carries a stress concentration that a compliance
+    objective has no reason to care about.
+    """
+    if stress:
+        _topology_stress(volume_fraction, nx, iterations, stress_limit_mpa,
+                         p_norm, not no_filter)
+        return
+
     import numpy as np
     from rich.console import Console
     from rich.table import Table
@@ -1077,6 +1096,178 @@ def topology(
         "and says nothing about peak stress. A design concept, not a verified "
         "part: it still has to pass the 3D FEM gate and gain manufacturing "
         "features. Still SIMULATED.[/dim]")
+
+
+def _topology_stress(volume_fraction: float, n: int, iterations: int,
+                     limit_mpa: float, p_norm: float, use_filter: bool) -> None:
+    """Compare compliance minimisation against a stress-constrained run.
+
+    Both at the same volume on the same mesh, because the comparison is only a
+    comparison if the amount of material is equal.
+    """
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from optimization.topology import SimpProblem, grey_fraction, optimize
+    from optimization.topology.simp import compliance_and_sensitivity
+    from optimization.topology.stress import (StressProblem, evaluate,
+                                              optimize_constrained)
+    from physics.fem.mesh import l_bracket_mesh
+
+    console = Console()
+    material = get_material("al_7075_t6")
+    size, thickness, width, load = 0.10, 0.4, 0.01, 300.0
+    mesh = l_bracket_mesh(size, thickness, width, n, nz=2)
+    top = mesh.nodes_where(np.abs(mesh.node_coords[:, 1] - size) < 1e-9)
+    tip = mesh.nodes_where(np.abs(mesh.node_coords[:, 0] - size) < 1e-9)
+    base = SimpProblem(
+        mesh=mesh, youngs_modulus_pa=material.youngs_modulus_pa,
+        poisson_ratio=material.poisson_ratio, fixed_nodes=top, load_nodes=tip,
+        total_load_n=-load, load_direction=1, volume_fraction=volume_fraction,
+        filter_radius_elements=1.5)
+    problem = StressProblem(base=base, stress_limit_pa=limit_mpa * 1e6,
+                            p_norm=p_norm)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("domain", f"L-bracket {size} m, arm {thickness:.0%}, "
+                           f"width {width} m")
+    head.add_row("mesh", f"{mesh.nx} x {mesh.ny} x {mesh.nz} = "
+                         f"{mesh.n_elements} elements, {mesh.n_dofs} dofs")
+    head.add_row("volume fraction", f"{volume_fraction}")
+    head.add_row("stress limit", f"{limit_mpa} MPa von Mises")
+    head.add_row("aggregation", f"P-norm, P = {p_norm:g}")
+    console.print(head)
+
+    with console.status("compliance minimisation"):
+        free = optimize(base, max_iterations=iterations, use_filter=use_filter)
+    with console.status("stress-constrained minimisation"):
+        held = optimize_constrained(problem, max_iterations=iterations,
+                                    use_filter=use_filter)
+
+    if not held.found_feasible:
+        console.print(
+            f"[red]![/red] no iterate satisfied the {limit_mpa} MPa limit "
+            f"(best p-norm {min(held.p_norm_history):.4f}). The limit may be "
+            f"unreachable at this volume and mesh; nothing is reported as a "
+            f"design.")
+        return
+    design = held.best_feasible_density
+
+    centroids = mesh.element_centroids()
+    cell = size / n
+    arm = max(1, int(round(n * thickness)))
+    corner = np.array([arm * cell, arm * cell])
+    near = np.linalg.norm(centroids[:, :2] - corner, axis=1) < 2.5 * cell
+
+    table = Table(title=f"both designs at volume {volume_fraction}")
+    table.add_column("design")
+    table.add_column("compliance (J)", justify="right")
+    table.add_column("max stress (MPa)", justify="right")
+    table.add_column("p-norm", justify="right")
+    table.add_column("corner density", justify="right")
+    table.add_column("grey", justify="right")
+    for name, density in (("compliance-min", free.density),
+                          ("stress-constrained", design)):
+        ev = evaluate(problem, density)
+        compliance, _, _ = compliance_and_sensitivity(base, density)
+        verdict = "" if ev.p_norm <= 1.0 else " [red](violates)[/red]"
+        table.add_row(name, f"{compliance:.4e}",
+                      f"{ev.max_relaxed_stress_pa / 1e6:.2f}{verdict}",
+                      f"{ev.p_norm:.4f}", f"{density[near].mean():.4f}",
+                      f"{grey_fraction(density):.3f}")
+    console.print(table)
+
+    console.print(
+        "the p-norm over-estimates the true maximum, so satisfying it "
+        "satisfies the elementwise limit; the gap is what a finite P costs "
+        "in conservatism")
+    console.print(
+        "[yellow]note[/yellow] the stress constraint lowers the peak and pulls "
+        "material off the re-entrant corner, but it does not produce a clean "
+        "fillet: the constrained design is greyer than the compliance one. "
+        "Reading a manufacturable shape off it needs a projection scheme that "
+        "is not implemented here.")
+
+
+
+@app.command()
+def methods(
+    category: str = typer.Option(None, "--category",
+                                 help="design_generation, analysis, "
+                                      "optimization or selection"),
+    geometry: str = typer.Option(None, "--geometry",
+                                 help="prismatic_beam, voxel_domain, assembly"),
+    slenderness: float = typer.Option(None, "--slenderness",
+                                      help="L/h, the ratio that decides "
+                                           "whether a beam model is valid"),
+    stress_constraint: bool = typer.Option(False, "--stress-constraint"),
+    stress_field: bool = typer.Option(False, "--stress-field",
+                                      help="a full stress field is required"),
+    gradients: bool = typer.Option(False, "--gradients"),
+    show_excluded: bool = typer.Option(True, "--excluded/--no-excluded"),
+):
+    """List registered methods and which of them apply to a problem.
+
+    Without any problem options this is a catalogue. Give it a problem and it
+    becomes the routing decision, including which methods were ruled out and
+    which declared condition ruled them out.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.registry import DEFAULT_REGISTRY, Category, ProblemContext
+
+    console = Console()
+    chosen = None
+    if category is not None:
+        try:
+            chosen = Category(category)
+        except ValueError:
+            console.print(f"[red]unknown category {category!r}[/red]. Known: "
+                          f"{', '.join(c.value for c in Category)}")
+            raise typer.Exit(code=2)
+
+    context = ProblemContext(
+        geometry=geometry,
+        representations=(geometry,) if geometry else None,
+        slenderness=slenderness,
+        has_stress_constraint=stress_constraint if stress_constraint else None,
+        needs_stress_field=stress_field,
+        needs_gradients=gradients if gradients else None)
+    candidates = DEFAULT_REGISTRY.query(context, chosen)
+
+    table = Table(title="applicable methods"
+                        if geometry else "registered methods (no problem given)")
+    table.add_column("name")
+    table.add_column("category")
+    table.add_column("fidelity")
+    table.add_column("cost")
+    table.add_column("implementation")
+    listing = candidates.applicable if geometry else DEFAULT_REGISTRY.all()
+    for method in listing:
+        table.add_row(method.name, method.category.value,
+                      method.fidelity.name.lower(), method.cost.name.lower(),
+                      method.implementation)
+    console.print(table)
+
+    if geometry and show_excluded and candidates.excluded:
+        ruled = Table(title="excluded, and the declared condition that "
+                            "excluded them")
+        ruled.add_column("name")
+        ruled.add_column("failed condition")
+        for exclusion in candidates.excluded:
+            ruled.add_row(exclusion.method.name, "; ".join(exclusion.failed))
+        console.print(ruled)
+
+    if geometry and not candidates.applicable:
+        console.print("[yellow]![/yellow] nothing applies to this problem. "
+                      "That is a refusal, not a failure: running a method "
+                      "outside its declared range is how Phase 7 shipped an "
+                      "optimum that the 3D FEM gate then rejected.")
 
 
 if __name__ == "__main__":

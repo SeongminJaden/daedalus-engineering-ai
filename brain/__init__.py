@@ -43,7 +43,8 @@ from .semantic import (
     generalize_all,
 )
 from .skills import Skill, SkillLibrary
-from .strategy import Strategy, StrategyStore, derive_stiffness_strategy
+from .strategy import (Strategy, StrategyStore, derive_method_strategies,
+                       derive_stiffness_strategy)
 
 
 class Brain:
