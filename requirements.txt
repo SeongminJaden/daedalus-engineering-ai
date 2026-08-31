@@ -1,6 +1,7 @@
 # Install inside the project venv ONLY, and always with PYTHONPATH unset:
 #   env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
-# (ROS 2 Humble exports PYTHONPATH, which would otherwise shadow venv packages.)
+# (A sourced shell environment can export PYTHONPATH and shadow venv packages
+#  with older ones. Running with a clean PYTHONPATH avoids that.)
 
 --extra-index-url https://download.pytorch.org/whl/cu130
 

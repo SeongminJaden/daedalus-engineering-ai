@@ -1,30 +1,370 @@
-# engineering-ai
+<!-- 한국어: [KR.md](KR.md) -->
 
-GPU-accelerated engineering design agent. CLI/TUI only, no GUI.
+# Ruelle Engineering AI
 
-## Setup
+**An autonomous engineering design agent.** Give it an engineering goal and it
+loops — reason, design, simulate on the GPU, optimize, learn — to design a
+robot part, accumulating what it learns in an **Engineering Brain** where every
+statement carries an explicit evidence level.
 
-The venv is already created at `.venv`. **Always unset `PYTHONPATH`** when using
-it — ROS 2 Humble exports a `PYTHONPATH` that would otherwise shadow the venv's
-packages with `/opt/ros/humble` ones:
+The agent and its CLI are branded **Ruelle**.
 
-```bash
-env -u PYTHONPATH .venv/bin/python ...
-env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
+---
+
+## Status
+
+Phases 0–6 are implemented and verified.
+
+| phase | what it does | state |
+|---|---|---|
+| 0 | venv, project skeleton, GPU profiles, Warp/torch sanity | done |
+| 1 | Engineering IR (the problem), materials DB, Design Genome (the variables) | done |
+| 2 | Differentiable GPU beam physics via NVIDIA Warp | done |
+| 3 | Constrained mass optimization (SLSQP + differential evolution) | done |
+| 4 | Autonomous design loop: state machine, episodes, budget, explore/exploit | done |
+| 5 | Engineering Brain: episodic/semantic memory, evidence levels, retrieval | done |
+| 6 | PyTorch surrogate + two-stage screen-and-verify | done |
+| 7 | High-fidelity 3D FEM (stress concentration, buckling) | planned |
+
+**MVP problem:** minimize the mass of a single hollow-rectangular robot link,
+cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
+7075-T6, subject to a stress ceiling, a tip-deflection limit and a safety
+factor.
+
+**Result:** **1.686 kg → 0.250 kg, an 85.2% mass reduction.** Two independent
+optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**:
+tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
+over 70% margin.
+
+**281 tests pass**, including independent verification of every critical
+calculation against a separately-derived reference.
+
+---
+
+## Architecture
+
+```
+        ┌──────────────────────────────────────────────────────┐
+        │  Orchestrator (LLM session)   ── outside the engine   │
+        └───────────────────────┬──────────────────────────────┘
+                                │
+   ┌────────────────────────────▼─────────────────────────────┐
+   │ agent/      autonomous loop + pluggable Reasoner          │  Phase 4
+   │   OBSERVE → REASON → PLAN → DESIGN → SIMULATE             │
+   │           → EVALUATE → LEARN → UPDATE_BRAIN ──┐           │
+   └───────────┬───────────────────────────────────┼───────────┘
+               │                                   │
+   ┌───────────▼───────────┐          ┌────────────▼───────────┐
+   │ core/                 │          │ brain/                 │  Phase 5
+   │  engineering_ir  the  │          │  episodic  semantic    │
+   │    problem (fixed)    │          │  strategy  graph       │
+   │  design_genome  the   │          │  retrieval             │
+   │    variables (free)   │          │  evidence levels       │
+   │  materials  profile   │          └────────────────────────┘
+   └───────────┬───────────┘                       ▲
+               │                                   │
+   ┌───────────▼───────────┐          ┌────────────┴───────────┐
+   │ physics/              │          │ surrogate/             │  Phase 6
+   │  Warp GPU kernels     │◄────────►│  datasets  models      │
+   │  differentiable beam  │  trains  │  screen-and-verify     │
+   └───────────┬───────────┘          └────────────────────────┘
+               │                          Phase 2
+   ┌───────────▼───────────┐
+   │ optimization/         │  Phase 3
+   │  gradient (SLSQP)     │
+   │  evolutionary (DE)    │
+   │  constraints          │
+   └───────────────────────┘
 ```
 
-## Check the GPU stack
+**The key separation:** the *Engineering IR* holds the problem (length, load,
+material, constraints, objectives — all fixed). The *Design Genome* holds only
+what a search may change (the cross-section). Physics never sees a genome
+without a problem attached.
+
+---
+
+## Hardware & GPU profiles
+
+Developed and verified on an **RTX 3050 Laptop GPU (4 GB)**. Scale is separated
+from the code: every size-dependent setting lives in `configs/profiles/*.yaml`.
+
+| profile | VRAM | character |
+|---|---|---|
+| `laptop_4gb` | 4 GB | current target; small candidate pools, AMP + gradient checkpointing |
+| `desktop_16gb` | 16 GB | mid-range workstation |
+| `rtx5090_32gb` | 32 GB | high bandwidth; fastest per-solve for this workload |
+| `dgx_spark_128gb` | 128 GB | huge capacity, low bandwidth — big models, slow solves |
+| `cloud_a100` | 80 GB | large-scale parallel |
+
+Selection order: `--profile` → `ENG_PROFILE` env var → VRAM auto-detection →
+fallback.
 
 ```bash
+python -m interfaces.cli.main info                     # auto-detect
+python -m interfaces.cli.main info --profile cloud_a100
+ENG_PROFILE=desktop_16gb python -m interfaces.cli.main info
+```
+
+**No system CUDA toolkit is required** — NVIDIA Warp JITs its own kernels, and
+torch ships its CUDA runtime in the wheel.
+
+---
+
+## System requirements
+
+Grounded in what has actually been run and in the shipped profiles — not
+aspirational.
+
+### Software
+
+| | requirement |
+|---|---|
+| OS | **Linux** — the development and verification platform. Windows/macOS: **TBD / experimental**, not yet validated. |
+| Python | **3.10+** (verified on 3.10.12) |
+| GPU driver | An NVIDIA driver new enough for the bundled torch/warp CUDA runtime. **A system CUDA toolkit is *not* required.** |
+| Disk | **≈ 6 GB** — the venv is ~5 GB (torch + Warp CUDA wheels), plus room for `datasets/` and `runs/` |
+
+### Hardware
+
+| tier | GPU | CPU / RAM | profile |
+|---|---|---|---|
+| **Minimum** (MVP, development) | NVIDIA, 4 GB VRAM (e.g. RTX 3050) | 8 cores / 16 GB | `laptop_4gb` |
+| **Recommended** | 16 GB+ VRAM (RTX 4070 Ti / 4080, used 3090 24 GB) | 8+ cores / 16–32 GB | `desktop_16gb`, `rtx5090_32gb` |
+| **Large scale** | 24–48 GB+ (4090 / 5090 / A6000) or cloud A100 80 GB | 16+ cores / 64 GB+ | `cloud_a100` |
+| **CPU only** | none — Warp has a CPU device | — | works, but **slow and limited**; a GPU is strongly recommended |
+
+---
+
+## Install (development)
+
+```bash
+python3 -m venv .venv
+env -u PYTHONPATH .venv/bin/python -m pip install -U pip wheel
+env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
 env -u PYTHONPATH .venv/bin/python scripts/gpu_sanity.py
 ```
 
-## GPU profiles
+> **Run the venv with a clean `PYTHONPATH`.** A sourced shell environment can
+> export `PYTHONPATH` and shadow the venv's packages with older ones — a
+> different `numpy` silently winning, for example. Prefixing with
+> `env -u PYTHONPATH` avoids it. The planned bootstrap installer (below) is
+> intended to handle this automatically so end users never think about it.
 
-Size-dependent settings live in `configs/profiles/`. Selection order:
-`--profile` → `ENG_PROFILE` env var → VRAM auto-detection → `laptop_4gb`.
+`gpu_sanity.py` initializes Warp, compiles and runs a real kernel, checks the
+result, verifies torch CUDA, and prints the resolved profile.
+
+---
+
+## Usage
+
+All commands are `python -m interfaces.cli.main <command>` today; the packaged
+CLI (below) will expose them as `ruelle <command>`.
+
+### `evaluate` — one design, on the GPU
 
 ```bash
-env -u PYTHONPATH .venv/bin/python -m interfaces.cli.main info
-ENG_PROFILE=cloud_a100 env -u PYTHONPATH .venv/bin/python -m interfaces.cli.main info
+python -m interfaces.cli.main evaluate --width 50 --height 80 --thickness 5
 ```
+
+```
+              evaluated metrics (Euler-Bernoulli beam theory)
+┃ quantity              ┃             SI ┃   readable ┃   limit ┃ verdict ┃
+│ mass                  │       1.686 kg │  1.6860 kg │       - │    -    │
+│ max bending stress    │ 3.96364e+06 Pa │  3.964 MPa │ 120 MPa │  PASS   │
+│ tip deflection        │  0.000115168 m │  0.1152 mm │ 1.00 mm │  PASS   │
+│ safety factor         │        126.904 │     126.90 │     2.0 │  PASS   │
+│ 1st natural frequency │     324.761 Hz │   324.8 Hz │       - │    -    │
+```
+
+### `optimize` — minimize mass, cross-verified by two methods
+
+```bash
+python -m interfaces.cli.main optimize --method both
+```
+
+```
+┃ quantity           ┃    baseline ┃       SLSQP ┃ DifferentialEvolution ┃
+│ b (mm)             │      50.000 │      10.000 │                10.000 │
+│ h (mm)             │      80.000 │      80.960 │                80.958 │
+│ t (mm)             │       5.000 │       1.000 │                 1.000 │
+│ mass (kg, SI)      │    1.686000 │    0.249977 │              0.249973 │
+│ delta_tip (mm)     │     0.11517 │     1.00000 │               1.00004 │
+│ mass reduction     │           - │       85.2% │                 85.2% │
+│ active constraint  │        none │  deflection │            deflection │
+cross-verification: |SLSQP - DE| / SLSQP = 1.341e-05 (0.0013%)  AGREE
+```
+
+### `run` — the autonomous design loop
+
+```bash
+python -m interfaces.cli.main run --iterations 6 --seed 1          # live TUI
+python -m interfaces.cli.main run --no-tui --target-mass 0.30      # headless
+```
+
+```
+ # │ action  │ strategy          │ mass (kg) │ feasible │ best │ evals
+ 0 │ exploit │ initial-exploit   │  0.249977 │   yes    │ NEW  │   196
+ 1 │ explore │ explore-scheduled │  0.249976 │   yes    │ NEW  │   349
+ 4 │ explore │ explore-on-stall  │  0.249977 │   yes    │  -   │    14
+
+  termination  converged
+       detail  4 consecutive iterations improved by less than 0.100%
+       budget  964/20000 evaluations, 10.2/300 s
+```
+
+Options: `--iterations`, `--seed`, `--target-mass`, `--max-evaluations`,
+`--max-seconds`, `--profile`, `--tui/--no-tui`.
+
+### `brain` — inspect accumulated experience
+
+```bash
+python -m interfaces.cli.main brain --generalize
+```
+
+```
+┃ level    ┃  conf ┃ evidence ┃ runs ┃ statement                          ┃
+│ repeated │ 0.692 │        9 │    3 │ For cantilever_link designs, the   │
+│          │       │          │      │ binding constraint is 'deflection' │
+│          │       │          │      │ (active in 9/9 feasible episodes). │
+```
+
+---
+
+## Fidelity & safety — read before trusting any number
+
+This is the part that distinguishes the project. Every layer states what it
+does **not** know.
+
+**Physics (Phase 2) is Euler–Bernoulli beam theory.** It ignores root stress
+concentration, ignores transverse shear deformation, and does not check
+buckling. **Real peak stress at the root will be higher than reported** — treat
+the reported stress as a lower bound. A design that passes here is a
+**candidate, not a verified part**.
+
+**The surrogate (Phase 6) approximates that beam evaluator, not 3D FEM.** Its
+error stacks on top of beam theory's own. It never decides: `screen_and_verify`
+ranks thousands of candidates with the model but returns a design the **solver**
+evaluated. There is also **no speedup today** — the beam kernel is closed-form
+arithmetic, so the surrogate measures ~0.38× the batched solver's throughput.
+The value is deferred to Phase 7.
+
+**The Brain (Phase 5) stores evidence-graded experience, not facts.**
+`EXPERIMENTALLY_VALIDATED` is reachable **only** with physical-test evidence —
+no volume of simulation, no passing test suite, no analytical derivation can
+promote a claim to it. Independence is counted per *run*, not per episode, so
+one long search yields at most `SIMULATED`.
+
+**The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
+Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC —
+that is the documented seam where an LLM policy plugs in.
+
+**The optimum depends on an assumed manufacturing bound.** Two of three design
+variables land on their bounds, and the 1 mm minimum wall thickness is an
+**[ASSUMED]** CNC-aluminium limit, not a derived one. Change the process and
+the achievable mass changes with it.
+
+---
+
+## Installation & distribution (standalone CLI) — open design
+
+The intent is to package this as a **self-contained, installable CLI tool** —
+the kind of experience where a user installs once and runs a single clean
+command. Proposed direction:
+
+- A **console entry point** in `pyproject.toml` so installing provides a single
+  `ruelle` command. The CLI is already Typer-based, so this is a natural fit.
+- **`pipx` for isolated global install**, or a **bootstrap install script** that
+  creates the venv, installs the GPU dependencies (Warp / torch), and **wraps
+  the clean-`PYTHONPATH` invocation automatically** so users never have to think
+  about environment shadowing.
+- The existing `interfaces/cli` commands become subcommands of that single
+  entry point:
+
+  ```bash
+  ruelle evaluate --width 50 --height 80 --thickness 5
+  ruelle optimize --method both
+  ruelle run --iterations 6
+  ruelle brain --generalize
+  ```
+
+- A PyInstaller single binary is **low priority** — torch and Warp CUDA wheels
+  make it impractical for now.
+
+> **This is not settled. The packaging and installation UX is still being
+> designed, and proposals and opinions on the approach are welcome.**
+
+### Release installation methods
+
+> Installation methods will be finalized at release. **Proposals welcome.**
+
+| method | status |
+|---|---|
+| pip | `TBD — to be provided at release` |
+| pipx | `TBD — to be provided at release` |
+| PowerShell (Windows) | `TBD — to be provided at release` |
+| cmd (Windows) | `TBD — to be provided at release` |
+| bash / curl (Linux, macOS) | `TBD — to be provided at release` |
+| Node / npx | `TBD — to be provided at release` |
+| Docker | `TBD — to be provided at release` |
+
+**pip**
+```
+# TBD — to be provided at release
+```
+
+**pipx**
+```
+# TBD — to be provided at release
+```
+
+**PowerShell (Windows)**
+```
+# TBD — to be provided at release
+```
+
+**cmd (Windows)**
+```
+# TBD — to be provided at release
+```
+
+**bash / curl (Linux, macOS)**
+```
+# TBD — to be provided at release
+```
+
+**Node / npx**
+```
+# TBD — to be provided at release
+```
+
+**Docker**
+```
+# TBD — to be provided at release
+```
+
+---
+
+## Roadmap
+
+- **Phase 7 — high-fidelity 3D FEM**: stress concentration and buckling, the
+  gate a candidate must clear to be treated as a real part. This is also where
+  the surrogate infrastructure finally pays off.
+- **Anisotropic materials**: CFRP and 3D-printed plastics need direction-
+  dependent property fields **and** an anisotropic solver before they can be
+  added — forcing them into the current single-E schema would produce confident
+  wrong answers.
+- **Topology optimization**, implicit/SDF geometry, lattice structures.
+- **LLM-backed reasoner** plugged into the existing `Reasoner` ABC.
+- **Multi-GPU device pool** — independent candidates shard linearly.
+- **CAD / STEP export** for manufacturing handoff.
+- **Part scope**: link → joint → gearbox → leg → humanoid.
+- **Text-embedding semantic retrieval + ANN indexing** in the Brain (today's
+  retrieval is numeric feature similarity, deliberately not called semantic).
+- **Fine-tuning** a domain-specialized model on accumulated experience.
+
+---
+
+## Repository
+
+Private repository: `SeongminJaden/ruelle-engineering-ai`.

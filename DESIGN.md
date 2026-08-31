@@ -1,6 +1,6 @@
-# Autonomous Engineering AI — 개념설계 (v0)
+# Ruelle Engineering AI — 개념설계 (v0)
 
-> 원전: `autonomous_engineering_ai_brain.md`. 이 문서는 그 비전을 `ros` 머신(RTX 3050 4GB, 확장 예정)의 실제 실행 계획으로 내려앉힌 것.
+> 이 문서는 자율 엔지니어링 AI 비전을 개발 머신(RTX 3050 4GB, 확장 예정)의 실제 실행 계획으로 내려앉힌 것이다. 에이전트/CLI 브랜드는 **Ruelle**.
 
 ## 0. 설계 원칙
 1. **비전은 그대로, 하드웨어는 현실**: 3050 4GB에서 "지금 돌아가는 최대치"로 시작하되, 큰 GPU로 옮기면 코드 수정 없이 규모만 커지도록 **프로파일 옵션**으로 스케일을 분리.
@@ -16,7 +16,7 @@
 | Geometry | implicit/SDF(파이썬+Warp) 우선, CAD 후순위 | 초기 topology엔 voxel/level-set이 적합 |
 | Orchestration | Python + Typer CLI | |
 | 모니터링 | rich/textual TUI + JSONL | CLI-only, tmux attach로 관찰 |
-| 추론(LLM) | pa-a2 ↔ ros-brain 세션 루프 | 이미 구축된 자율 루프가 MD의 상위 오케스트레이션 |
+| 추론(LLM) | 외부 세션 오케스트레이터 | 상위 오케스트레이션은 엔진 바깥의 LLM 세션이 담당 |
 
 ## 2. GPU 프로파일 시스템 (핵심)
 스케일을 코드에서 분리 → `configs/profiles/*.yaml`. 선택 우선순위: `--profile` → `ENG_PROFILE` → VRAM 자동감지 → default fallback. 로더: `core/profile.py`.
@@ -40,7 +40,7 @@ VRAM을 잡아먹는 3요인: ①3D 토폴로지 해상도(res³×필드×4B) �
 
 ## 4. 자율 루프 매핑
 MD의 REASON→PLAN→DESIGN→ACT→SIMULATE→EVALUATE→LEARN→UPDATE_BRAIN을 현 구조에 매핑:
-- 추론/계획/관찰/학습(LLM층) = pa-a2 ↔ ros-brain 대화 루프
+- 추론/계획/관찰/학습(LLM층) = 외부 LLM 세션 오케스트레이터
 - 설계생성/물리/최적화/평가(엔진층) = venv 파이썬+Warp 프로세스
 - Brain = 레포 내 구조화 저장소(초기 SQLite+JSONL, 후에 벡터+그래프)
 
@@ -74,7 +74,7 @@ Phase 2의 물리는 **Euler–Bernoulli 보 이론**이다. 미분가능하고 
 따라서 이 단계를 통과한 설계는 **후보**이지 검증된 부품이 아니다. 응력집중·전단·좌굴은 후속 **3D FEM 고정밀 단계**에서 해소하며, 설계는 그 관문을 통과해야 실물로 취급한다. (값싼 미분가능 모델로 공간을 탐색하고, 비싼 고정밀 모델로 승자를 확정하는 해석↔FEA 분업.)
 
 ## 6. 운영 규칙 (필독)
-- **venv 실행은 항상 `env -u PYTHONPATH` 로 감쌀 것.** 이 셸은 ROS 2가 source돼 PYTHONPATH에 /opt/ros/humble 등이 있어, 안 벗기면 ROS numpy 등이 venv 패키지를 가림.
+- **venv는 깨끗한 PYTHONPATH에서 실행할 것(`env -u PYTHONPATH`).** 셸에 source된 다른 환경이 PYTHONPATH를 내보내면 그쪽 패키지가 venv 패키지를 가려서, 버전이 다른 numpy 같은 게 조용히 먼저 잡힌다. 부트스트랩 설치 스크립트가 이 래핑을 자동으로 처리하는 것을 목표로 한다.
 - venv는 sudo 없이 `--without-pip` + get-pip 부트스트랩으로 구성됨(시스템 미변경).
 - git init만 됨, 커밋은 사용자 확인 후.
 
