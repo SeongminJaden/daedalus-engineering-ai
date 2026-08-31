@@ -419,7 +419,15 @@ def test_the_drivetrain_methods_are_gated_by_the_duty():
 
 
 def test_unimplemented_drivetrain_methods_are_not_registered():
+    """`bolted_joint` was on this list until Phase 19 implemented it.
+
+    It was removed by implementing the method, which is the only legitimate way
+    off this list. `gear_agma` stays: Phase 19 registered `gear_tooth`, which is
+    Lewis and elementary Hertz, and deliberately did NOT claim full AGMA.
+    """
     registry = build_default_registry()
     for absent in ("shaft_fea", "bearing_contact_fatigue", "gear_agma",
-                   "bolted_joint"):
+                   "bolt_group", "planetary_internal"):
         assert absent not in registry
+    # And the one that left the list is genuinely there now.
+    assert "bolted_joint" in registry

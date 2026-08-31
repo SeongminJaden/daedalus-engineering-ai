@@ -328,6 +328,51 @@ def build_default_registry() -> MethodRegistry:
               "reference_typical at room temperature and are themselves "
               "temperature dependent."))
 
+    registry.register(Method(
+        name="bolted_joint",
+        category=Category.ANALYSIS,
+        summary="Preloaded bolted joint: load sharing, separation and bolt "
+                "fatigue.",
+        inputs=("bolt_size", "property_class", "grip_length", "external_load"),
+        outputs=("preload", "load_factor", "separation_margin",
+                 "fatigue_safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the assembly has a preloaded bolted connection",
+                      lambda c: c.require("has_bolted_joint")),
+        ),
+        implementation="physics.joints.bolted.analyze_joint",
+        evidence="SIMULATED",
+        notes="A single bolt loaded along its axis. The nut factor relating "
+              "torque to preload scatters by about 30 percent, so a preload "
+              "derived from a torque figure carries that uncertainty; angle "
+              "control is better and is not modelled. Bolt groups, eccentric "
+              "loading and shear-loaded joints are not covered. ISO 898-1 "
+              "property classes and thread stress areas are published "
+              "standards, not a vendor catalogue."))
+
+    registry.register(Method(
+        name="gear_tooth",
+        category=Category.ANALYSIS,
+        summary="Gear tooth capacity: Lewis bending and Hertzian contact.",
+        inputs=("module", "tooth_counts", "face_width", "torque",
+                "allowable_stresses"),
+        outputs=("bending_safety_factor", "contact_safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a gear mesh transmits torque",
+                      lambda c: c.require("has_gear_mesh")),
+        ),
+        implementation="physics.gears.tooth.analyze_mesh",
+        evidence="SIMULATED",
+        notes="Lewis and elementary Hertz, NOT full AGMA. The dynamic, load "
+              "distribution, application and size factors are exposed as "
+              "corrections defaulting to 1.0, which is the optimistic choice, "
+              "so an uncorrected result runs high against a real gear. Surface "
+              "treatment is expressed only through the allowable stresses the "
+              "caller supplies. Planetary and harmonic internals are not "
+              "covered."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

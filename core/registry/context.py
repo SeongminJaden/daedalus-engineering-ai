@@ -44,6 +44,10 @@ class ProblemContext:
     # the part sees a temperature change. Neither check exists without them.
     has_duty_cycle: bool | None = None
     has_temperature_change: bool | None = None
+    # Whether the assembly has a preloaded bolted connection, and whether a
+    # gear mesh transmits torque. Neither check exists without them.
+    has_bolted_joint: bool | None = None
+    has_gear_mesh: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

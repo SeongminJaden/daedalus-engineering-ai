@@ -1820,5 +1820,161 @@ def thermal(
         "produce stress even with no restraint at all.")
 
 
+@app.command()
+def bolt(
+    size: str = typer.Option("M8", "--size", help="M3 to M12"),
+    grade: str = typer.Option("8.8", "--grade", help="8.8, 10.9 or 12.9"),
+    grip_mm: float = typer.Option(20.0, "--grip-mm"),
+    load_n: float = typer.Option(8000.0, "--load-n",
+                                 help="maximum external tensile load"),
+    load_min_n: float = typer.Option(0.0, "--load-min-n",
+                                     help="minimum over the cycle; equal to "
+                                          "the max for a static load"),
+    preload_fraction: float = typer.Option(0.75, "--preload-fraction"),
+):
+    """Check a preloaded bolted joint, and show what preload buys.
+
+    A bolted joint is a preload problem. A properly tightened bolt sees only a
+    small share of an external load; an under-tightened one lets the joint
+    separate and then carries all of it.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from physics.joints import PropertyClass, analyze_joint
+
+    console = Console()
+    try:
+        property_class = PropertyClass(grade)
+    except ValueError:
+        console.print(f"[red]unknown grade {grade!r}[/red]. Known: "
+                      f"{', '.join(c.value for c in PropertyClass)}")
+        raise typer.Exit(code=2)
+
+    sweep = Table(title=f"{size} class {grade}, {grip_mm:g} mm grip, "
+                        f"{load_n:g} N external")
+    sweep.add_column("preload", justify="right")
+    sweep.add_column("F_i (N)", justify="right")
+    sweep.add_column("separates at (N)", justify="right")
+    sweep.add_column("bolt load (N)", justify="right")
+    sweep.add_column("fatigue", justify="right")
+    sweep.add_column("governs")
+    sweep.add_column("verdict")
+
+    fractions = sorted({0.90, 0.75, 0.50, 0.30, 0.15, preload_fraction},
+                       reverse=True)
+    for fraction in fractions:
+        try:
+            result = analyze_joint(size, property_class, grip_mm / 1000.0,
+                                   load_n, load_min_n,
+                                   preload_fraction=fraction)
+        except KeyError as unknown:
+            console.print(f"[red]{unknown}[/red]")
+            raise typer.Exit(code=2)
+        fatigue = ("n/a" if result.fatigue_safety_factor is None
+                   else f"{result.fatigue_safety_factor:.2f}")
+        mark = " <-" if abs(fraction - preload_fraction) < 1e-9 else ""
+        sweep.add_row(
+            f"{fraction:.0%}{mark}", f"{result.preload_n:,.0f}",
+            f"{result.separation_load_n:,.0f}"
+            + (" [red]separated[/red]" if result.separated else ""),
+            f"{result.bolt_load_n:,.0f}", fatigue, result.governing_mode,
+            "[green]pass[/green]" if result.passes else "[red]fail[/red]")
+    console.print(sweep)
+
+    chosen = analyze_joint(size, property_class, grip_mm / 1000.0, load_n,
+                           load_min_n, preload_fraction=preload_fraction)
+    console.print(
+        f"load factor C = {chosen.load_factor:.3f}: while the joint stays "
+        f"clamped the bolt feels {chosen.load_factor:.0%} of an external load "
+        f"and the rest merely relieves compression in the members. Past "
+        f"separation the bolt carries all of it.")
+    console.print(
+        f"tightening torque {chosen.tightening_torque_nm:.1f} N m at a nut "
+        f"factor of 0.2. [yellow]That factor scatters by about 30 percent with "
+        f"lubrication and surface condition, so the achieved preload is "
+        f"uncertain by the same amount even with a perfect wrench.[/yellow] "
+        f"Angle control is better and is not modelled here.")
+
+
+@app.command()
+def gear(
+    module_mm: float = typer.Option(2.0, "--module-mm"),
+    pinion_teeth: int = typer.Option(20, "--pinion-teeth"),
+    gear_teeth: int = typer.Option(60, "--gear-teeth"),
+    face_mm: float = typer.Option(20.0, "--face-mm"),
+    torque_nm: float = typer.Option(25.0, "--torque-nm",
+                                    help="torque at the pinion"),
+    bending_allowable_mpa: float = typer.Option(200.0, "--bending-mpa"),
+    contact_allowable_mpa: float = typer.Option(700.0, "--contact-mpa"),
+    bending_correction: float = typer.Option(
+        1.0, "--bending-correction",
+        help="stands for the AGMA factors this does not compute; 1.0 is "
+             "optimistic"),
+    contact_correction: float = typer.Option(1.0, "--contact-correction"),
+):
+    """Check a gear mesh against tooth bending and surface pitting.
+
+    Two independent failure modes sized by different things. A fine-pitch gear
+    breaks its teeth; a coarse-pitch one pits.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from physics.gears import GearMesh, analyze_mesh, lewis_form_factor
+
+    console = Console()
+    mesh = GearMesh(module_m=module_mm / 1000.0, pinion_teeth=pinion_teeth,
+                    gear_teeth=gear_teeth, face_width_m=face_mm / 1000.0,
+                    torque_nm=torque_nm)
+    result = analyze_mesh(mesh, bending_allowable_mpa * 1e6,
+                          contact_allowable_mpa * 1e6,
+                          bending_correction=bending_correction,
+                          contact_correction=contact_correction)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("mesh", f"module {module_mm:g} mm, {pinion_teeth}/{gear_teeth} "
+                         f"teeth, ratio {mesh.ratio:.2f}")
+    head.add_row("pinion pitch diameter",
+                 f"{mesh.pinion_pitch_diameter_m * 1000:.1f} mm")
+    head.add_row("face width", f"{face_mm:g} mm")
+    head.add_row("tangential load", f"{result.tangential_load_n:.1f} N "
+                                    f"(2T/d)")
+    head.add_row("Lewis form factor", f"{lewis_form_factor(pinion_teeth):.3f}")
+    console.print(head)
+
+    table = Table(title="failure modes")
+    table.add_column("mode")
+    table.add_column("stress (MPa)", justify="right")
+    table.add_column("allowable (MPa)", justify="right")
+    table.add_column("safety factor", justify="right")
+    table.add_row("tooth bending (Lewis)",
+                  f"{result.bending_stress_pa / 1e6:.1f}",
+                  f"{bending_allowable_mpa:g}",
+                  f"{result.bending_safety_factor:.2f}")
+    table.add_row("surface pitting (Hertz)",
+                  f"{result.contact_stress_pa / 1e6:.1f}",
+                  f"{contact_allowable_mpa:g}",
+                  f"{result.contact_safety_factor:.2f}")
+    console.print(table)
+
+    verdict = "[green]PASS[/green]" if result.passes else "[red]FAIL[/red]"
+    console.print(f"{verdict}: {result.governing_mode} governs at "
+                  f"{result.governing_safety_factor:.2f}")
+    console.print(
+        "bending goes linearly with load and contact as its square root, so "
+        "which mode governs can flip as a design is scaled. A fine-pitch gear "
+        "is bending-critical and a coarse-pitch one pitting-critical.")
+    if bending_correction == 1.0 and contact_correction == 1.0:
+        console.print(
+            "[yellow]note[/yellow] this is Lewis and elementary Hertz, not "
+            "AGMA. The dynamic, load distribution, application and size "
+            "factors are all at least 1.0 and none is applied here, so this "
+            "result runs OPTIMISTIC against a real gear. Pass "
+            "--bending-correction and --contact-correction to include them.")
+
+
 if __name__ == "__main__":
     app()
