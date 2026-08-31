@@ -38,6 +38,7 @@ surrogate:
   enabled: true
   train_batch: 4096
   infer_batch: 8192
+  dataset_samples: 400000
 
 # Compute budget for one autonomous loop run. The loop stops when either
 # limit is hit and records which one - an unbounded search is not a design

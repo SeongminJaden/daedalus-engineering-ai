@@ -31,6 +31,7 @@ surrogate:
   enabled: true             # lean on surrogates hard when VRAM is scarce
   train_batch: 32
   infer_batch: 64
+  dataset_samples: 20000
 
 # Compute budget for one autonomous loop run. The loop stops when either
 # limit is hit and records which one - an unbounded search is not a design

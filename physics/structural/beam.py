@@ -194,6 +194,39 @@ def _launch(b, h, t, case: BeamLoadCase, device: str, requires_grad: bool):
     return tape, ins, outs
 
 
+def evaluate_beam_case(
+    b: np.ndarray,
+    h: np.ndarray,
+    t: np.ndarray,
+    case: BeamLoadCase,
+    device: str | None = None,
+) -> BeamMetrics:
+    """Evaluate raw dimensions against an explicit load case.
+
+    The lower-level entry point: it takes a BeamLoadCase directly instead of
+    deriving one from an Engineering IR problem, so callers can sweep length,
+    load and material properties continuously. Dataset generation needs that;
+    a stored problem always pins the material to a database id.
+
+    Same kernel as evaluate_beam - this is a different way in, not a different
+    physics.
+    """
+    b = np.asarray(b, dtype=np.float32)
+    h = np.asarray(h, dtype=np.float32)
+    t = np.asarray(t, dtype=np.float32)
+    if not (b.shape == h.shape == t.shape):
+        raise ValueError("b, h and t must have the same shape")
+    if b.size == 0:
+        raise ValueError("no designs to evaluate")
+
+    dev = _resolve_device(device)
+    _, _, outs = _launch(b, h, t, case, dev, requires_grad=False)
+    return BeamMetrics(**{
+        name: out.numpy().astype(np.float64)
+        for name, out in zip(METRIC_NAMES, outs)
+    })
+
+
 def evaluate_beam(
     genomes: Iterable[DesignGenome],
     problem,
@@ -205,13 +238,8 @@ def evaluate_beam(
     """
     genomes = list(genomes)
     case = load_case_from_problem(problem)
-    dev = _resolve_device(device)
     b, h, t = _design_arrays(genomes)
-    _, _, outs = _launch(b, h, t, case, dev, requires_grad=False)
-    return BeamMetrics(**{
-        name: out.numpy().astype(np.float64)
-        for name, out in zip(METRIC_NAMES, outs)
-    })
+    return evaluate_beam_case(b, h, t, case, device=device)
 
 
 def beam_gradients(
