@@ -480,6 +480,89 @@ def build_default_registry() -> MethodRegistry:
               "are implemented; p, r, s and u need tabulated increments and "
               "are refused by name."))
 
+    registry.register(Method(
+        name="stress_transformation",
+        category=Category.ANALYSIS,
+        summary="Principal stresses and both in-plane and absolute maximum "
+                "shear.",
+        inputs=("stress_components",),
+        outputs=("principal_stresses", "max_shear", "von_mises"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the stress state is multiaxial",
+                      lambda c: c.require("has_multiaxial_stress")),
+        ),
+        implementation="physics.mechanics.stress_state.principal_stress_2d",
+        evidence="SIMULATED",
+        notes="The in-plane maximum shear is NOT always the absolute maximum. "
+              "Plane stress carries a third principal of zero, and when the "
+              "two in-plane principals share a sign the absolute shear "
+              "involves that zero and is larger, by up to a factor of two in "
+              "equibiaxial tension. Both are returned. This is a stress state, "
+              "not a failure criterion."))
+
+    registry.register(Method(
+        name="noncircular_torsion",
+        category=Category.ANALYSIS,
+        summary="Torsion of solid rectangles and thin open or closed sections.",
+        inputs=("torque", "section_geometry", "shear_modulus"),
+        outputs=("max_shear_stress", "torsion_constant", "twist_rate"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a non-circular section carries torque",
+                      lambda c: c.require("has_noncircular_torsion")),
+        ),
+        implementation="physics.mechanics.torsion.solid_rectangle",
+        evidence="SIMULATED",
+        notes="Free warping is assumed; restraining it adds axial stresses "
+              "that are not modelled and can exceed the torsional ones. Open "
+              "and closed sections differ by ORDERS OF MAGNITUDE and are not "
+              "interchangeable: slitting a square tube measured 432 times "
+              "less stiff. Forgetting that a seam or slit makes a section "
+              "open is a large unsafe error."))
+
+    registry.register(Method(
+        name="pressure_vessel",
+        category=Category.ANALYSIS,
+        summary="Thin and thick walled cylinder stresses under internal "
+                "pressure.",
+        inputs=("pressure", "radii", "wall_thickness"),
+        outputs=("hoop_stress", "longitudinal_stress", "radial_stress"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the part carries internal pressure",
+                      lambda c: c.require("has_internal_pressure")),
+        ),
+        implementation="physics.mechanics.vessels.thick_wall",
+        evidence="SIMULATED",
+        notes="Internal pressure with closed ends only. EXTERNAL pressure is a "
+              "different problem: such a vessel buckles far below its material "
+              "strength and nothing here checks that. Away from nozzles, heads "
+              "and supports, which is where real vessel codes concentrate "
+              "because those dominate the local stress."))
+
+    registry.register(Method(
+        name="hertz_contact",
+        category=Category.ANALYSIS,
+        summary="Elastic contact between curved bodies, with the subsurface "
+                "shear.",
+        inputs=("force", "radii", "materials"),
+        outputs=("contact_patch", "peak_pressure", "subsurface_shear"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("curved bodies bear against each other",
+                      lambda c: c.require("has_concentrated_contact")),
+        ),
+        implementation="physics.mechanics.contact.sphere_contact",
+        evidence="SIMULATED",
+        notes="Frictionless, elastic, and valid while the contact is small "
+              "against the radii forming it. The peak shear is BELOW the "
+              "surface, at about 0.48 contact radii deep, which is why rolling "
+              "contact fatigue starts subsurface and why surface hardness "
+              "alone does not prevent pitting. Concentration factors returned "
+              "here are ELASTIC Kt, not the smaller fatigue Kf that a fatigue "
+              "check needs."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

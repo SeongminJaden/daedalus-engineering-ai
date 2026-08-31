@@ -66,6 +66,12 @@ class ProblemContext:
     has_shaft_hub_connection: bool | None = None
     has_welded_joint: bool | None = None
     requires_tolerances: bool | None = None
+    # A multiaxial stress state to resolve, a non-circular section in torsion,
+    # a pressurised vessel, and concentrated contact between curved bodies.
+    has_multiaxial_stress: bool | None = None
+    has_noncircular_torsion: bool | None = None
+    has_internal_pressure: bool | None = None
+    has_concentrated_contact: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale
