@@ -1,9 +1,16 @@
-"""optimization.multi_objective.pareto - Pareto tooling. Stub.
+"""optimization.multi_objective.pareto: the direct non-dominated filter.
 
-Phase 3 solves a single objective (minimize mass) with the rest expressed as
-constraints. Real multi-objective work - mass vs stiffness vs cost, with no
-single winner - lands in a later phase. The non-dominated sort below is the
-one piece that is genuinely reusable, so it is implemented rather than faked.
+Written during Phase 3 as the one genuinely reusable piece of a multi-objective
+future, and kept because it is the simplest correct statement of dominance: one
+pass, no bookkeeping, easy to read and therefore easy to trust. Phase 20 uses
+it as the independent check on the faster sort in `nsga2`, and that comparison
+caught an inverted domination count there.
+
+`nsga2.fast_non_dominated_sort` is what an optimiser should call, since it
+returns every front rather than only the first. This returns the first.
+
+VALIDITY: every column is MINIMISED. A maximised objective passed in raw
+selects exactly the wrong rows, so convert with `nsga2.to_minimisation` first.
 """
 
 from __future__ import annotations
