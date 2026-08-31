@@ -373,6 +373,30 @@ def build_default_registry() -> MethodRegistry:
               "caller supplies. Planetary and harmonic internals are not "
               "covered."))
 
+    registry.register(Method(
+        name="laminate_clt",
+        category=Category.ANALYSIS,
+        summary="Classical laminate theory: ABD, ply stresses and first-ply "
+                "failure.",
+        inputs=("lamina_properties", "stacking_sequence", "load_resultants"),
+        outputs=("abd_matrices", "ply_stresses", "first_ply_failure"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the part is a laminate with a stated layup (an "
+                      "isotropic or single-ply part has no stack to design)",
+                      lambda c: c.require("has_layup")),
+        ),
+        implementation="physics.composite.clt.abd_matrices",
+        evidence="SIMULATED",
+        notes="Thin plate with Kirchhoff kinematics, plane stress in every "
+              "ply, perfect bonding and linear elasticity. The plane-stress "
+              "assumption fails hardest AT A FREE EDGE, which is where real "
+              "laminates delaminate, and nothing here will warn about it. "
+              "Reports FIRST-ply failure, which is conservative as an ultimate "
+              "strength except when the first failure is a fibre failure in "
+              "the load direction. No progressive damage, no hygrothermal "
+              "terms. The Tsai-Wu interaction term F12 is assumed."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

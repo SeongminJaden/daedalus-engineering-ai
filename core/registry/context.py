@@ -56,6 +56,10 @@ class ProblemContext:
     # continuous operators rather than letting them produce a fractional
     # material and round it somewhere out of sight.
     has_discrete_variables: bool | None = None
+    # Whether the part is a laminate with a stated stacking sequence. An
+    # orthotropic material alone is not enough: CLT designs the STACK, and a
+    # single ply or an isotropic part has no stack to design.
+    has_layup: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

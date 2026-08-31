@@ -80,9 +80,26 @@ class MaterialSpec(BaseModel):
 
     # --- direction-dependent strengths. A single "yield" number is meaningless
     #     for a composite: 1500 MPa along the fibres and 50 MPa across them. ---
+    # These three are TENSILE. The name predates the compressive fields below
+    # and is kept so existing callers do not break, but the distinction matters
+    # enormously for a composite and is why the compressive values are separate
+    # rather than assumed equal.
     strength_long_pa: float | None = Field(default=None, gt=0.0)
     strength_trans_pa: float | None = Field(default=None, gt=0.0)
     strength_shear_pa: float | None = Field(default=None, gt=0.0)
+
+    # Compressive strengths, which are NOT the tensile ones.
+    #
+    # A unidirectional composite is strongly asymmetric and in opposite
+    # directions along its two axes. Along the fibres it is WEAKER in
+    # compression, because the failure is fibre microbuckling rather than fibre
+    # fracture. Across the fibres it is several times STRONGER in compression,
+    # because transverse tension simply pulls the matrix apart while
+    # compression does not. Assuming symmetry would be wrong by a factor of
+    # four transversely, and in the unconservative direction for the load case
+    # that matters.
+    strength_long_compressive_pa: float | None = Field(default=None, gt=0.0)
+    strength_trans_compressive_pa: float | None = Field(default=None, gt=0.0)
 
     # --- thermal expansion, 1/K ---
     #

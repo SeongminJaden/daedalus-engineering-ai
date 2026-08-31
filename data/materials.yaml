@@ -289,6 +289,8 @@ materials:
     strength_long_pa: 1.5e+09
     strength_trans_pa: 5.0e+07
     strength_shear_pa: 7.0e+07
+    strength_long_compressive_pa: 1.2e+09
+    strength_trans_compressive_pa: 2.0e+08
     orientation_deg: [0.0]
     layup: [UD-0]
     notes: >-

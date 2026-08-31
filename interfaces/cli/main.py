@@ -2080,5 +2080,113 @@ def pareto(
         "part, so the cheapest design here need not be the cheapest part.")
 
 
+def _compact_layup(angles: list[float]) -> str:
+    """The shorthand engineers actually write: [0]8, [0/90]2s and so on.
+
+    A symmetric stack is written as its half with an s, and a repeated block as
+    the block with a count, because a laminate is specified that way and
+    spelling every ply out makes two layups hard to tell apart at a glance.
+    """
+    def render(sequence: list[float]) -> str:
+        return "/".join(f"{a:g}" for a in sequence)
+
+    half = len(angles) // 2
+    if len(angles) % 2 == 0 and angles == angles[::-1]:
+        body, suffix = angles[:half], "s"
+    else:
+        body, suffix = list(angles), ""
+
+    for size in range(1, len(body) // 2 + 1):
+        if len(body) % size:
+            continue
+        block = body[:size]
+        if all(body[i:i + size] == block for i in range(0, len(body), size)):
+            repeats = len(body) // size
+            count = "" if repeats == 1 else str(repeats)
+            return f"[{render(block)}]{count}{suffix}"
+    return f"[{render(body)}]{suffix}"
+
+
+@app.command()
+def laminate(
+    material_id: str = typer.Option("cfrp_ud", "--material"),
+    ply_thickness_mm: float = typer.Option(0.125, "--ply-thickness-mm"),
+    load_n_per_m: float = typer.Option(2.0e5, "--load-n-per-m",
+                                       help="in-plane force resultant Nx"),
+    layups: str = typer.Option(
+        "0,0,0,0,0,0,0,0 | 0,90,0,90,90,0,90,0 | "
+        "45,-45,45,-45,-45,45,-45,45 | 0,45,-45,90,90,-45,45,0",
+        "--layups",
+        help="stacking sequences separated by |, angles by comma"),
+):
+    """Compare laminate stacking sequences: stiffness, strength, failing ply.
+
+    The same plies stacked differently are a different material. This shows how
+    differently.
+    """
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from physics.composite import (LaminaStrength, Laminate, abd_matrices,
+                                   first_ply_failure)
+
+    console = Console()
+    material = get_material(material_id)
+    try:
+        strength = LaminaStrength.from_material(material)
+    except ValueError as missing:
+        console.print(f"[red]{missing}[/red]")
+        raise typer.Exit(code=2)
+
+    thickness = ply_thickness_mm / 1000.0
+    load = np.array([load_n_per_m, 0.0, 0.0])
+
+    table = Table(title=f"{material.name}, {ply_thickness_mm:g} mm plies, "
+                        f"Nx = {load_n_per_m:g} N/m")
+    table.add_column("layup", no_wrap=True)
+    table.add_column("Ex (GPa)", justify="right")
+    table.add_column("Ey (GPa)", justify="right")
+    table.add_column("sym", justify="center")
+    table.add_column("strength ratio", justify="right")
+    table.add_column("first ply")
+    table.add_column("mode")
+
+    for sequence in layups.split("|"):
+        angles = [float(a) for a in sequence.strip().split(",") if a.strip()]
+        if not angles:
+            continue
+        stack = Laminate.from_material(material, angles, thickness)
+        abd = abd_matrices(stack)
+        failure = first_ply_failure(stack, strength, load)
+        ex = abd.a[0, 0] / stack.thickness_m / 1e9
+        ey = abd.a[1, 1] / stack.thickness_m / 1e9
+        table.add_row(
+            _compact_layup(angles), f"{ex:.1f}", f"{ey:.1f}",
+            "yes" if stack.is_symmetric() else "[yellow]no[/yellow]",
+            (f"[green]{failure.strength_ratio:.3f}[/green]"
+             if failure.passes else f"[red]{failure.strength_ratio:.3f}[/red]"),
+            f"{failure.ply_index} at {failure.angle_deg:g} deg",
+            failure.governing_mode.value)
+    console.print(table)
+
+    console.print(
+        "the strength ratio is a LOAD MULTIPLIER to first-ply failure. It is "
+        "not the reciprocal of the Tsai-Wu index, which has linear terms and "
+        "so does not scale that way.")
+    console.print(
+        "[yellow]note[/yellow] this is FIRST-ply failure. A laminate usually "
+        "carries more load after its first ply goes, so as an ultimate "
+        "strength this is conservative. The exception is a fibre failure in "
+        "the load direction, where first-ply really is the end, which is what "
+        "the mode column is for.")
+    console.print(
+        "[yellow]note[/yellow] plane stress in every ply, so interlaminar "
+        "stresses are invisible. Those are what delaminate real laminates at "
+        "their free edges, and nothing here will warn about it. No progressive "
+        "damage and no cure or moisture stresses.")
+
+
 if __name__ == "__main__":
     app()
