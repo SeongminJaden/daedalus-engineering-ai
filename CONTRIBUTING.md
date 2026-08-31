@@ -1,7 +1,7 @@
 # Contributing to Daedalus Engineering AI
 
 Contributions are welcome. This document is a stub and will grow as the project
-opens up — issues and discussion are the best place to start right now.
+opens up: issues and discussion are the best place to start right now.
 
 ## Before you start
 
@@ -19,7 +19,7 @@ env -u PYTHONPATH .venv/bin/python scripts/gpu_sanity.py
 env -u PYTHONPATH .venv/bin/python -m pytest tests/ -q
 ```
 
-Run the venv with a clean `PYTHONPATH` — a sourced shell environment can export
+Run the venv with a clean `PYTHONPATH`: a sourced shell environment can export
 one and shadow the venv's packages.
 
 ## What this project asks of a change

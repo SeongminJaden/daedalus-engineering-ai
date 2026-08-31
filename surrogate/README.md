@@ -1,6 +1,6 @@
-# surrogate — learned fast approximation of the physics evaluator
+# surrogate: learned fast approximation of the physics evaluator
 
-Generates training data from the solver, fits a small MLP, and — critically —
+Generates training data from the solver, fits a small MLP, and, critically,
 **never lets the model decide anything on its own**.
 
 | package | role |
@@ -23,7 +23,7 @@ of an approximation.
 |---|---|
 | surrogate (one forward pass) | ~8.5M candidates/s |
 | Phase 2 solver (one batched launch) | ~22M candidates/s |
-| **ratio** | **~0.38× — the surrogate is ~2.6× SLOWER** |
+| **ratio** | **~0.38×: the surrogate is ~2.6× SLOWER** |
 
 That is expected. The beam kernel is closed-form arithmetic; an MLP forward
 pass is more work than the physics it replaces. The value of this
@@ -47,7 +47,7 @@ only chooses which 16 of 20,000 are worth the solver's time; the reported mass,
 stress and deflection are always the solver's numbers, and `verified=True`
 means step 2 actually ran.
 
-Screening *can* be wrong — it may mis-rank and discard a good candidate. That
+Screening *can* be wrong: it may mis-rank and discard a good candidate. That
 is a recall risk and the price of the shortlist. What it cannot do is put an
 unverified design in front of a user as a result.
 
@@ -61,7 +61,7 @@ disagree with the stress the model produced.
 The held-out set contains **only problem contexts the model never trained on**
 (`Dataset.split` groups by context). This matters more than it sounds:
 
-> Rows are generated in groups sharing a context — one kernel launch per
+> Rows are generated in groups sharing a context: one kernel launch per
 > context, many designs each. A random *row* split therefore puts designs from
 > the *same* problem in both train and test, and the resulting score measures
 > interpolation between designs of a problem the model already saw. It flatters
@@ -85,12 +85,12 @@ Two sampling choices that materially affect this:
   context, not a few hundred contexts with thousands of designs each.
 - **Length and tip load are sampled log-uniformly.** Each spans ~2 orders of
   magnitude; drawn uniformly, nearly every context lands in the top decade and
-  the low-load corner — where the MVP problem actually sits — goes unvisited.
+  the low-load corner, where the MVP problem actually sits, goes unvisited.
   Measured effect at the MVP context: stress error 8.9% → 3.1%, deflection
   11.1% → 2.9%.
 
 **Monotonicity is not guaranteed.** A learned model has no built-in respect for
 physics, so trend violations are measured rather than assumed away: with the
 configuration above, a thicker wall fails to reduce predicted stress in ~0.1%
-of sampled pairs. Small, but not zero — another reason the solver, not the
+of sampled pairs. Small, but not zero: another reason the solver, not the
 surrogate, decides.

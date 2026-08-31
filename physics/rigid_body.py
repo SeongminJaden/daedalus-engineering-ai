@@ -1,1 +1,1 @@
-"""physics.rigid_body — stub."""
+"""physics.rigid_body: stub."""

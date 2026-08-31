@@ -8,7 +8,7 @@
 
 **An autonomous engineering design agent.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
@@ -17,8 +17,8 @@
 
 </div>
 
-Give it an engineering goal and it loops — reason, design, simulate on the GPU,
-optimize, learn — to design a robot part, accumulating what it learns in an
+Give it an engineering goal and it loops (reason, design, simulate on the GPU,
+optimize, learn) to design a robot part, accumulating what it learns in an
 **Engineering Brain** where every statement carries an explicit evidence level.
 
 The agent and its CLI are branded **Daedalus**.
@@ -57,46 +57,19 @@ calculation against a separately-derived reference.
 
 ## Architecture
 
-```
-        ┌──────────────────────────────────────────────────────┐
-        │  Orchestrator (LLM session)   ── outside the engine   │
-        └───────────────────────┬──────────────────────────────┘
-                                │
-   ┌────────────────────────────▼─────────────────────────────┐
-   │ agent/      autonomous loop + pluggable Reasoner          │  Phase 4
-   │   OBSERVE → REASON → PLAN → DESIGN → SIMULATE             │
-   │           → EVALUATE → LEARN → UPDATE_BRAIN ──┐           │
-   └───────────┬───────────────────────────────────┼───────────┘
-               │                                   │
-   ┌───────────▼───────────┐          ┌────────────▼───────────┐
-   │ core/                 │          │ brain/                 │  Phase 5
-   │  engineering_ir  the  │          │  episodic  semantic    │
-   │    problem (fixed)    │          │  strategy  graph       │
-   │  design_genome  the   │          │  retrieval             │
-   │    variables (free)   │          │  evidence levels       │
-   │  materials  profile   │          └────────────────────────┘
-   └───────────┬───────────┘                       ▲
-               │                                   │
-   ┌───────────▼───────────┐          ┌────────────┴───────────┐
-   │ physics/              │          │ surrogate/             │  Phase 6
-   │  Warp GPU kernels     │◄────────►│  datasets  models      │
-   │  differentiable beam  │  trains  │  screen-and-verify     │
-   └───────────┬───────────┘          └────────────────────────┘
-               │                          Phase 2
-   ┌───────────▼───────────┐
-   │ optimization/         │  Phase 3
-   │  gradient (SLSQP)     │
-   │  evolutionary (DE)    │
-   │  constraints          │
-   └───────────────────────┘
-```
+<p align="center"><img src="assets/architecture.svg" alt="Daedalus architecture" width="840"></p>
 
-**The key separation:** the *Engineering IR* holds the problem (length, load,
-material, constraints, objectives — all fixed). The *Design Genome* holds only
-what a search may change (the cross-section). Physics never sees a genome
-without a problem attached.
+A goal enters as an **Engineering IR** (the problem: geometry, material, load,
+constraints, objectives, all fixed). The **Design Genome** holds only what a
+search may change, currently the cross-section. Candidates run through the
+engine (geometry, GPU physics, optimization) and down a **multi-fidelity
+funnel**: a surrogate screens thousands, beam theory evaluates the shortlist,
+and 3D FEM is the final gate. Results are judged against the constraints, and
+every iteration is written to the **Engineering Brain** with an evidence level
+attached, which is what the reasoner reads on the next pass.
 
----
+The key separation is that physics never sees a genome without a problem
+attached, so a design variable can never quietly become a requirement.
 
 ## Hardware & GPU profiles
 
@@ -108,7 +81,7 @@ from the code: every size-dependent setting lives in `configs/profiles/*.yaml`.
 | `laptop_4gb` | 4 GB | current target; small candidate pools, AMP + gradient checkpointing |
 | `desktop_16gb` | 16 GB | mid-range workstation |
 | `rtx5090_32gb` | 32 GB | high bandwidth; fastest per-solve for this workload |
-| `dgx_spark_128gb` | 128 GB | huge capacity, low bandwidth — big models, slow solves |
+| `dgx_spark_128gb` | 128 GB | huge capacity, low bandwidth: big models, slow solves |
 | `cloud_a100` | 80 GB | large-scale parallel |
 
 Selection order: `--profile` → `ENG_PROFILE` env var → VRAM auto-detection →
@@ -120,24 +93,24 @@ python -m interfaces.cli.main info --profile cloud_a100
 ENG_PROFILE=desktop_16gb python -m interfaces.cli.main info
 ```
 
-**No system CUDA toolkit is required** — NVIDIA Warp JITs its own kernels, and
+**No system CUDA toolkit is required**: NVIDIA Warp JITs its own kernels, and
 torch ships its CUDA runtime in the wheel.
 
 ---
 
 ## System requirements
 
-Grounded in what has actually been run and in the shipped profiles — not
+Grounded in what has actually been run and in the shipped profiles: not
 aspirational.
 
 ### Software
 
 | | requirement |
 |---|---|
-| OS | **Linux** — the development and verification platform. Windows/macOS: **TBD / experimental**, not yet validated. |
+| OS | **Linux**: the development and verification platform. Windows/macOS: **TBD / experimental**, not yet validated. |
 | Python | **3.10+** (verified on 3.10.12) |
 | GPU driver | An NVIDIA driver new enough for the bundled torch/warp CUDA runtime. **A system CUDA toolkit is *not* required.** |
-| Disk | **≈ 6 GB** — the venv is ~5 GB (torch + Warp CUDA wheels), plus room for `datasets/` and `runs/` |
+| Disk | **≈ 6 GB**: the venv is ~5 GB (torch + Warp CUDA wheels), plus room for `datasets/` and `runs/` |
 
 ### Hardware
 
@@ -146,7 +119,7 @@ aspirational.
 | **Minimum** (MVP, development) | NVIDIA, 4 GB VRAM (e.g. RTX 3050) | 8 cores / 16 GB | `laptop_4gb` |
 | **Recommended** | 16 GB+ VRAM (RTX 4070 Ti / 4080, used 3090 24 GB) | 8+ cores / 16–32 GB | `desktop_16gb`, `rtx5090_32gb` |
 | **Large scale** | 24–48 GB+ (4090 / 5090 / A6000) or cloud A100 80 GB | 16+ cores / 64 GB+ | `cloud_a100` |
-| **CPU only** | none — Warp has a CPU device | — | works, but **slow and limited**; a GPU is strongly recommended |
+| **CPU only** | none, Warp has a CPU device |, | works, but **slow and limited**; a GPU is strongly recommended |
 
 ---
 
@@ -160,7 +133,7 @@ env -u PYTHONPATH .venv/bin/python scripts/gpu_sanity.py
 ```
 
 > **Run the venv with a clean `PYTHONPATH`.** A sourced shell environment can
-> export `PYTHONPATH` and shadow the venv's packages with older ones — a
+> export `PYTHONPATH` and shadow the venv's packages with older ones: a
 > different `numpy` silently winning, for example. Prefixing with
 > `env -u PYTHONPATH` avoids it. The planned bootstrap installer (below) is
 > intended to handle this automatically so end users never think about it.
@@ -175,7 +148,7 @@ result, verifies torch CUDA, and prints the resolved profile.
 All commands are `python -m interfaces.cli.main <command>` today; the packaged
 CLI (below) will expose them as `dae <command>`.
 
-### `evaluate` — one design, on the GPU
+### `evaluate`: one design, on the GPU
 
 ```bash
 python -m interfaces.cli.main evaluate --width 50 --height 80 --thickness 5
@@ -191,7 +164,7 @@ python -m interfaces.cli.main evaluate --width 50 --height 80 --thickness 5
 │ 1st natural frequency │     324.761 Hz │   324.8 Hz │       - │    -    │
 ```
 
-### `optimize` — minimize mass, cross-verified by two methods
+### `optimize`: minimize mass, cross-verified by two methods
 
 ```bash
 python -m interfaces.cli.main optimize --method both
@@ -209,7 +182,7 @@ python -m interfaces.cli.main optimize --method both
 cross-verification: |SLSQP - DE| / SLSQP = 1.341e-05 (0.0013%)  AGREE
 ```
 
-### `run` — the autonomous design loop
+### `run`: the autonomous design loop
 
 ```bash
 python -m interfaces.cli.main run --iterations 6 --seed 1          # live TUI
@@ -230,7 +203,7 @@ python -m interfaces.cli.main run --no-tui --target-mass 0.30      # headless
 Options: `--iterations`, `--seed`, `--target-mass`, `--max-evaluations`,
 `--max-seconds`, `--profile`, `--tui/--no-tui`.
 
-### `brain` — inspect accumulated experience
+### `brain`: inspect accumulated experience
 
 ```bash
 python -m interfaces.cli.main brain --generalize
@@ -245,32 +218,32 @@ python -m interfaces.cli.main brain --generalize
 
 ---
 
-## Fidelity & safety — read before trusting any number
+## Fidelity & safety: read before trusting any number
 
 This is the part that distinguishes the project. Every layer states what it
 does **not** know.
 
 **Physics (Phase 2) is Euler–Bernoulli beam theory.** It ignores root stress
 concentration, ignores transverse shear deformation, and does not check
-buckling. **Real peak stress at the root will be higher than reported** — treat
+buckling. **Real peak stress at the root will be higher than reported**: treat
 the reported stress as a lower bound. A design that passes here is a
 **candidate, not a verified part**.
 
 **The surrogate (Phase 6) approximates that beam evaluator, not 3D FEM.** Its
 error stacks on top of beam theory's own. It never decides: `screen_and_verify`
 ranks thousands of candidates with the model but returns a design the **solver**
-evaluated. There is also **no speedup today** — the beam kernel is closed-form
+evaluated. There is also **no speedup today**: the beam kernel is closed-form
 arithmetic, so the surrogate measures ~0.38× the batched solver's throughput.
 The value is deferred to Phase 7.
 
 **The Brain (Phase 5) stores evidence-graded experience, not facts.**
-`EXPERIMENTALLY_VALIDATED` is reachable **only** with physical-test evidence —
+`EXPERIMENTALLY_VALIDATED` is reachable **only** with physical-test evidence: 
 no volume of simulation, no passing test suite, no analytical derivation can
 promote a claim to it. Independence is counted per *run*, not per episode, so
 one long search yields at most `SIMULATED`.
 
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
-Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC —
+Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
 that is the documented seam where an LLM policy plugs in.
 
 **The optimum depends on an assumed manufacturing bound.** Two of three design
@@ -280,9 +253,9 @@ the achievable mass changes with it.
 
 ---
 
-## Installation & distribution (standalone CLI) — open design
+## Installation & distribution (standalone CLI): open design
 
-The intent is to package this as a **self-contained, installable CLI tool** —
+The intent is to package this as a **self-contained, installable CLI tool**: 
 the kind of experience where a user installs once and runs a single clean
 command. Proposed direction:
 
@@ -303,7 +276,7 @@ command. Proposed direction:
   dae brain --generalize
   ```
 
-- A PyInstaller single binary is **low priority** — torch and Warp CUDA wheels
+- A PyInstaller single binary is **low priority**: torch and Warp CUDA wheels
   make it impractical for now.
 
 > **This is not settled. The packaging and installation UX is still being
@@ -315,63 +288,63 @@ command. Proposed direction:
 
 | method | status |
 |---|---|
-| pip | `TBD — to be provided at release` |
-| pipx | `TBD — to be provided at release` |
-| PowerShell (Windows) | `TBD — to be provided at release` |
-| cmd (Windows) | `TBD — to be provided at release` |
-| bash / curl (Linux, macOS) | `TBD — to be provided at release` |
-| Node / npx | `TBD — to be provided at release` |
-| Docker | `TBD — to be provided at release` |
+| pip | `TBD, to be provided at release` |
+| pipx | `TBD, to be provided at release` |
+| PowerShell (Windows) | `TBD, to be provided at release` |
+| cmd (Windows) | `TBD, to be provided at release` |
+| bash / curl (Linux, macOS) | `TBD, to be provided at release` |
+| Node / npx | `TBD, to be provided at release` |
+| Docker | `TBD, to be provided at release` |
 
 **pip**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **pipx**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **PowerShell (Windows)**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **cmd (Windows)**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **bash / curl (Linux, macOS)**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **Node / npx**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 **Docker**
 ```
-# TBD — to be provided at release
+# TBD, to be provided at release
 ```
 
 ---
 
 ## Roadmap
 
-- **Phase 7 — high-fidelity 3D FEM**: stress concentration and buckling, the
+- **Phase 7: high-fidelity 3D FEM**: stress concentration and buckling, the
   gate a candidate must clear to be treated as a real part. This is also where
   the surrogate infrastructure finally pays off.
 - **Anisotropic materials**: CFRP and 3D-printed plastics need direction-
   dependent property fields **and** an anisotropic solver before they can be
-  added — forcing them into the current single-E schema would produce confident
+  added: forcing them into the current single-E schema would produce confident
   wrong answers.
 - **Topology optimization**, implicit/SDF geometry, lattice structures.
 - **LLM-backed reasoner** plugged into the existing `Reasoner` ABC.
-- **Multi-GPU device pool** — independent candidates shard linearly.
+- **Multi-GPU device pool**: independent candidates shard linearly.
 - **CAD / STEP export** for manufacturing handoff.
 - **Part scope**: link → joint → gearbox → leg → humanoid.
 - **Text-embedding semantic retrieval + ANN indexing** in the Brain (today's
@@ -386,7 +359,7 @@ command. Proposed direction:
 |---|---|
 | [@SeongminJaden](https://github.com/SeongminJaden) | author, maintainer |
 
-Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**. The
+Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. The
 project cares less about volume than about a specific habit: every layer states
 what it does *not* know, critical calculations are verified against an
 independent method, and nothing is overclaimed. A change that keeps that
@@ -396,7 +369,7 @@ property is the kind this project wants.
 
 ## Sponsors
 
-*No sponsors yet — this section is waiting for its first.*
+*No sponsors yet: this section is waiting for its first.*
 
 If this work is useful to you and you would like to support it, sponsorship
 options will be listed here once they are set up. `.github/FUNDING.yml` is
@@ -409,11 +382,11 @@ that does not work is worse than none.
 
 [![Discord](https://img.shields.io/badge/Discord-server%20not%20yet%20created-5865F2.svg)](#community)
 
-**Discord: `TBD — link to be added once the server is created.`**
+**Discord: `TBD, link to be added once the server is created.`**
 
 There is no invite link yet, and one will not be invented here. Until the server
 exists, GitHub **Issues** and **Discussions** are the place for questions,
-proposals and design debate — particularly on the two open questions flagged
+proposals and design debate: particularly on the two open questions flagged
 above: the **packaging / installation UX**, and **anything in the fidelity
 model you think is wrong**. Being told a number is misleading is the most useful
 contribution this project can receive.
@@ -422,7 +395,23 @@ contribution this project can receive.
 
 ## License
 
-[MIT](LICENSE) © 2026 SeongminJaden
+[Apache License 2.0](LICENSE) © 2026 SeongminJaden. See also [NOTICE](NOTICE).
+
+Apache-2.0 was chosen over a permissive-only licence deliberately, for patent
+defence. It grants an explicit patent licence from every contributor, and it
+terminates that grant for anyone who initiates patent litigation over the work.
+A licence without a patent clause leaves both contributors and users exposed to
+exactly that.
+
+### Defensive publication
+
+Publishing the methodology openly (`DESIGN.md`, this README, and the source) is
+also intended to establish prior art. Once a technique is described publicly and
+datably, it is substantially harder for a third party to patent the same
+approach later and assert it against the community that already uses it. The
+combination is the point: prior art makes the ideas hard to claim, and
+Apache-2.0's patent grant plus retaliation clause protects the people who build
+on them.
 
 ---
 

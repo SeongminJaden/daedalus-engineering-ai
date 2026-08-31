@@ -1,4 +1,4 @@
-# brain — evidence-graded engineering experience
+# brain: evidence-graded engineering experience
 
 Accumulates what the loop has tried, generalizes repeated observations into
 statements, and grades every statement by how far it has actually earned trust.
@@ -30,7 +30,7 @@ experience*. Three claims are worth stating plainly:
    `retrieve_similar`, not `semantic_search`.
 
 3. **`EXPERIMENTALLY_VALIDATED` is unreachable from simulation.** Only
-   `EvidenceKind.PHYSICAL_TEST` opens that gate — not a thousand agreeing
+   `EvidenceKind.PHYSICAL_TEST` opens that gate: not a thousand agreeing
    simulations, not a passing test suite, not a closed-form derivation. This is
    the single rule that keeps the Brain from talking itself into false
    confidence, and it is pinned by an explicit test.
@@ -51,7 +51,7 @@ UNVERIFIED → SIMULATED → REPEATED → HIGH_CONFIDENCE → EXPERIMENTALLY_VAL
 **Independence is counted per run, not per episode.** Twenty iterations inside
 one optimizer run are twenty samples of a single search, not twenty
 observations. Counting them as independent is exactly how a memory talks itself
-into confidence it has not earned, so one run — however long — yields at most
+into confidence it has not earned, so one run, however long, yields at most
 `SIMULATED`.
 
 An **unresolved counterexample caps the level at `REPEATED`**: a statement with
@@ -60,7 +60,7 @@ Resolving it restores promotion.
 
 ## Confidence
 
-Explicit, bounded, monotone — never invented:
+Explicit, bounded, monotone: never invented:
 
 ```
 support = n / (n + k)            in [0,1), increasing in evidence count
@@ -74,7 +74,7 @@ level ceiling caps it (SIMULATED 0.60, REPEATED 0.80, HIGH_CONFIDENCE 0.95).
 ## Model / brain separation
 
 The Brain is a plain SQLite file. It opens and answers queries with no
-reasoner, no GPU and no ML libraries loaded — verified by a test that queries it
+reasoner, no GPU and no ML libraries loaded: verified by a test that queries it
 from a subprocess importing only `brain`.
 
 ## Extension points
@@ -84,7 +84,7 @@ from a subprocess importing only `brain`.
 - **ANN indexing** (faiss and similar) swaps in behind the same search API when
   exact brute force stops being adequate.
 - **Skills** are shape-only. They stay empty until enough episodes exist to
-  earn them — inventing procedures would put unsupported content in a store
+  earn them: inventing procedures would put unsupported content in a store
   whose whole point is that everything carries evidence.
 
 ## Storage

@@ -1,1 +1,1 @@
-"""geometry.implicit — stub."""
+"""geometry.implicit: stub."""

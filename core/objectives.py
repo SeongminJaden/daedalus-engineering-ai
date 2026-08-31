@@ -1,1 +1,1 @@
-"""core.objectives — stub."""
+"""core.objectives: stub."""

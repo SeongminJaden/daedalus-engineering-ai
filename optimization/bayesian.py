@@ -1,1 +1,1 @@
-"""optimization.bayesian — stub."""
+"""optimization.bayesian: stub."""

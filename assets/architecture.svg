@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 760" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" role="img" aria-label="Daedalus autonomous engineering loop architecture">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="878" height="758" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="440" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">Daedalus: Autonomous Engineering Loop</text>
+
+  <rect x="240" y="64" width="400" height="50" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="440" y="85" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">User Goal</text>
+  <text x="440" y="103" text-anchor="middle" font-size="11.5" fill="#6b7280">constraints + objective</text>
+
+  <rect x="240" y="136" width="400" height="50" rx="9" fill="#e0e7ff" stroke="#a5b4fc"/>
+  <text x="440" y="157" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Reasoner</text>
+  <text x="440" y="175" text-anchor="middle" font-size="11.5" fill="#6b7280">rule-based now · LLM-pluggable</text>
+
+  <rect x="240" y="208" width="400" height="50" rx="9" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="440" y="229" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Engineering IR</text>
+  <text x="440" y="247" text-anchor="middle" font-size="11.5" fill="#6b7280">problem: geometry · material · load · constraints</text>
+
+  <rect x="240" y="280" width="400" height="50" rx="9" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="440" y="301" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Design Genome</text>
+  <text x="440" y="319" text-anchor="middle" font-size="11.5" fill="#6b7280">design variables: section · topology</text>
+
+  <rect x="48" y="352" width="784" height="92" rx="10" fill="none" stroke="#cbd5e1" stroke-dasharray="5 4"/>
+  <text x="60" y="370" font-size="11" fill="#94a3b8">Engine · per-candidate, GPU-batched</text>
+  <rect x="64" y="376" width="240" height="56" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="184" y="408" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2937">Geometry</text>
+  <rect x="320" y="376" width="240" height="56" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="440" y="401" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2937">GPU Physics</text>
+  <text x="440" y="418" text-anchor="middle" font-size="11.5" fill="#6b7280">Warp</text>
+  <rect x="576" y="376" width="240" height="56" rx="9" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="696" y="401" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2937">Optimization</text>
+  <text x="696" y="418" text-anchor="middle" font-size="11.5" fill="#6b7280">SLSQP + DE</text>
+
+  <rect x="120" y="476" width="640" height="54" rx="9" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="440" y="498" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Multi-Fidelity Funnel</text>
+  <text x="440" y="516" text-anchor="middle" font-size="11.5" fill="#6b7280">surrogate screen → beam (P2) → 3D FEM (P7) → verified</text>
+
+  <rect x="240" y="560" width="400" height="50" rx="9" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="440" y="581" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Evaluate</text>
+  <text x="440" y="599" text-anchor="middle" font-size="11.5" fill="#6b7280">mass · stress · deflection · SF · frequency  vs constraints</text>
+
+  <rect x="150" y="634" width="580" height="56" rx="9" fill="#faf5ff" stroke="#d8b4fe"/>
+  <text x="440" y="659" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2937">Engineering Brain</text>
+  <text x="440" y="677" text-anchor="middle" font-size="11.5" fill="#6b7280">episodic · semantic · strategy · knowledge graph · evidence levels</text>
+
+  <g stroke="#6b7280" stroke-width="1.6" fill="none" marker-end="url(#arw)">
+    <line x1="440" y1="114" x2="440" y2="134"/>
+    <line x1="440" y1="186" x2="440" y2="206"/>
+    <line x1="440" y1="258" x2="440" y2="278"/>
+    <line x1="440" y1="330" x2="440" y2="350"/>
+    <line x1="440" y1="444" x2="440" y2="474"/>
+    <line x1="440" y1="530" x2="440" y2="558"/>
+    <line x1="440" y1="610" x2="440" y2="632"/>
+    <path d="M150 662 C 40 645, 26 560, 26 400 C 26 250, 60 161, 238 161"/>
+  </g>
+  <text x="20" y="405" font-size="11" fill="#8b5cf6" transform="rotate(-90 20 405)" text-anchor="middle">learn → update brain → reason</text>
+
+  <text x="440" y="726" text-anchor="middle" font-size="11" fill="#9ca3af">GPU profiles 4GB → 128GB → cloud   ·   SI units   ·   simulated ≠ experimentally validated</text>
+</svg>

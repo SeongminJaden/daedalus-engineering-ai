@@ -1,6 +1,6 @@
 # Tier: DGX Spark class. 128 GB unified memory, LOW bandwidth (~273 GB/s).
 #
-# NOTE — BANDWIDTH CONSTRAINED. Capacity is huge but memory bandwidth is
+# NOTE: BANDWIDTH CONSTRAINED. Capacity is huge but memory bandwidth is
 # roughly 1/6 of the RTX 5090, and an FEM solve is bandwidth-bound. Expect
 # per-solve throughput to be LOW here even though the limits below are the
 # largest of any profile. This tier exists for problems that must fit in

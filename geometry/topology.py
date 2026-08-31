@@ -1,1 +1,1 @@
-"""geometry.topology — stub."""
+"""geometry.topology: stub."""

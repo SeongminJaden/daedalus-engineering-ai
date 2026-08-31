@@ -1,1 +1,1 @@
-"""core.constraints — stub."""
+"""core.constraints: stub."""

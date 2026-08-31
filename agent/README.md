@@ -1,4 +1,4 @@
-# agent — the autonomous design loop
+# agent: the autonomous design loop
 
 Implements the state machine:
 
@@ -16,7 +16,7 @@ One pass is one iteration and produces exactly one episode.
 | `evaluator/` | judges a result into a conclusion + confidence |
 | `experiment_manager/` | episode JSONL log and compute budget |
 
-## What the "reasoner" actually is — no overclaiming
+## What the "reasoner" actually is: no overclaiming
 
 The reasoner shipped in Phase 4 is a **deterministic, rule-based heuristic**.
 It is **not a language model**, and it does not reason in any sense beyond
@@ -25,7 +25,7 @@ reasoning" would be an overclaim, so the code and the docs both say heuristic.
 
 What it *is* is the seam. `Reasoner` is an ABC with a single method, and the
 loop only ever sees `decide(state, history) -> Action`. An LLM-backed policy
-drops in there without the engine changing — that is the documented extension
+drops in there without the engine changing: that is the documented extension
 point. In the wider system the language model is the **outer orchestrator**
 (a session driving this engine), not this class.
 
@@ -36,7 +36,7 @@ pinned to their bounds, the real question is whether a *different basin* does
 better. The loop is therefore a **multi-start orchestrator**: exploit refines
 the incumbent from a jittered start, explore restarts local search from a fresh
 random point, and a stall forces exploration. That is the value it adds over
-Phase 3 alone — robustness against local optima and against the bounds.
+Phase 3 alone: robustness against local optima and against the bounds.
 
 ## Termination conditions
 
@@ -54,12 +54,12 @@ All parameterized, none hard-coded:
 Unsatisfiability needs several failed *independent* starts: one failure is a
 bad start, several from different basins is evidence about the problem.
 
-## Episodes — the Phase 5 Brain's seed
+## Episodes: the Phase 5 Brain's seed
 
 Every iteration is appended to `runs/<run>/episodes.jsonl`, pydantic-validated,
 one JSON object per line (so a killed run still leaves a readable log). The
 schema records `hypothesis` and `parent_design_id` alongside the numbers, so a
-run reads back as a search tree of intentions rather than a list of results —
+run reads back as a search tree of intentions rather than a list of results: 
 provenance that would otherwise have to be back-filled later.
 
 Structured memory, retrieval and strategy generalization are Phase 5. This is

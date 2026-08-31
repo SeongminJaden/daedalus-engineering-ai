@@ -1,1 +1,1 @@
-# projects — concrete design problems. robotic_link is the MVP target.
+# projects: concrete design problems. robotic_link is the MVP target.

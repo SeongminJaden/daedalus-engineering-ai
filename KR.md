@@ -8,7 +8,7 @@
 
 **자율 엔지니어링 설계 에이전트**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
@@ -45,7 +45,7 @@ Phase 0~6 구현·검증 완료.
 제약.
 
 **결과: 1.686 kg → 0.250 kg, 질량 85.2% 감소.** 서로 독립적인 두 최적화기가
-상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다 —
+상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
 **테스트 281개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조 검증.
@@ -54,45 +54,17 @@ Phase 0~6 구현·검증 완료.
 
 ## 아키텍처
 
-```
-        ┌──────────────────────────────────────────────────────┐
-        │  오케스트레이터 (LLM 세션)   ── 엔진 바깥에 위치       │
-        └───────────────────────┬──────────────────────────────┘
-                                │
-   ┌────────────────────────────▼─────────────────────────────┐
-   │ agent/      자율 루프 + 교체 가능한 Reasoner              │  Phase 4
-   │   OBSERVE → REASON → PLAN → DESIGN → SIMULATE             │
-   │           → EVALUATE → LEARN → UPDATE_BRAIN ──┐           │
-   └───────────┬───────────────────────────────────┼───────────┘
-               │                                   │
-   ┌───────────▼───────────┐          ┌────────────▼───────────┐
-   │ core/                 │          │ brain/                 │  Phase 5
-   │  engineering_ir       │          │  episodic  semantic    │
-   │    = 문제 (고정)      │          │  strategy  graph       │
-   │  design_genome        │          │  retrieval             │
-   │    = 설계변수 (가변)  │          │  증거수준              │
-   │  materials  profile   │          └────────────────────────┘
-   └───────────┬───────────┘                       ▲
-               │                                   │
-   ┌───────────▼───────────┐          ┌────────────┴───────────┐
-   │ physics/              │          │ surrogate/             │  Phase 6
-   │  Warp GPU 커널        │◄────────►│  datasets  models      │
-   │  미분가능 보 해석     │  학습    │  screen-and-verify     │
-   └───────────┬───────────┘          └────────────────────────┘
-               │                          Phase 2
-   ┌───────────▼───────────┐
-   │ optimization/         │  Phase 3
-   │  gradient (SLSQP)     │
-   │  evolutionary (DE)    │
-   │  constraints          │
-   └───────────────────────┘
-```
+<p align="center"><img src="assets/architecture.svg" alt="Daedalus architecture" width="840"></p>
 
-**핵심 분리**: *Engineering IR* 은 문제(길이·하중·재료·제약·목표 — 전부 고정)를
-담고, *Design Genome* 은 탐색이 바꿔도 되는 것(단면 치수)만 담는다. 물리는
-문제가 붙지 않은 genome을 절대 보지 않는다.
+목표는 **Engineering IR**(문제: 형상·재료·하중·제약·목표, 전부 고정)로 들어온다.
+**Design Genome**은 탐색이 바꿔도 되는 것만 담으며 현재는 단면 치수다. 후보는
+엔진(지오메트리, GPU 물리, 최적화)을 거쳐 **다중 충실도 깔때기**를 내려간다:
+surrogate가 수천 개를 걸러내고, 보 이론이 후보군을 평가하며, 3D FEM이 최종
+관문이다. 결과는 제약과 대조해 판정되고, 매 이터레이션은 증거수준이 붙은 채
+**Engineering Brain**에 기록되어 다음 회차에 reasoner가 읽는다.
 
----
+핵심 분리는 물리가 문제 없이 genome만 보는 일이 절대 없다는 것이다. 그래서 설계
+변수가 조용히 요구사항으로 둔갑할 수 없다.
 
 ## 하드웨어 & GPU 프로파일
 
@@ -115,7 +87,7 @@ python -m interfaces.cli.main info --profile cloud_a100
 ENG_PROFILE=desktop_16gb python -m interfaces.cli.main info
 ```
 
-**시스템 CUDA 툴킷은 불필요하다** — Warp가 커널을 자체 JIT하고, torch는 CUDA
+**시스템 CUDA 툴킷은 불필요하다**: Warp가 커널을 자체 JIT하고, torch는 CUDA
 런타임을 휠에 포함해 배포한다.
 
 ---
@@ -128,10 +100,10 @@ ENG_PROFILE=desktop_16gb python -m interfaces.cli.main info
 
 | | 요구사항 |
 |---|---|
-| OS | **Linux** — 개발·검증 플랫폼. Windows/macOS는 **TBD / 실험적**, 아직 검증 안 됨 |
+| OS | **Linux**: 개발·검증 플랫폼. Windows/macOS는 **TBD / 실험적**, 아직 검증 안 됨 |
 | Python | **3.10+** (3.10.12에서 검증) |
 | GPU 드라이버 | 번들된 torch/warp의 CUDA 런타임을 지원하는 NVIDIA 드라이버. **시스템 CUDA 툴킷은 필요 없음** |
-| 디스크 | **약 6 GB** — venv가 약 5 GB(torch + Warp CUDA 휠), 여기에 `datasets/`·`runs/` 여유분 |
+| 디스크 | **약 6 GB**: venv가 약 5 GB(torch + Warp CUDA 휠), 여기에 `datasets/`·`runs/` 여유분 |
 
 ### 하드웨어
 
@@ -140,7 +112,7 @@ ENG_PROFILE=desktop_16gb python -m interfaces.cli.main info
 | **최소** (MVP·개발) | NVIDIA VRAM 4 GB (예: RTX 3050) | 8코어 / 16 GB | `laptop_4gb` |
 | **권장** | VRAM 16 GB 이상 (RTX 4070 Ti / 4080, 중고 3090 24 GB) | 8코어+ / 16~32 GB | `desktop_16gb`, `rtx5090_32gb` |
 | **대규모** | VRAM 24~48 GB+ (4090 / 5090 / A6000) 또는 클라우드 A100 80 GB | 16코어+ / 64 GB+ | `cloud_a100` |
-| **CPU 전용** | 없음 — Warp에 CPU 디바이스가 있음 | — | 동작은 하나 **느리고 제한적**. GPU를 강력히 권장 |
+| **CPU 전용** | 없음, Warp에 CPU 디바이스가 있음 |, | 동작은 하나 **느리고 제한적**. GPU를 강력히 권장 |
 
 ---
 
@@ -169,7 +141,7 @@ torch CUDA를 확인하고, 선택된 프로파일을 출력한다.
 현재는 전부 `python -m interfaces.cli.main <command>` 형태다. 아래의 패키징된
 CLI에서는 `dae <command>` 로 노출된다.
 
-### `evaluate` — 설계 하나를 GPU에서 평가
+### `evaluate`: 설계 하나를 GPU에서 평가
 
 ```bash
 python -m interfaces.cli.main evaluate --width 50 --height 80 --thickness 5
@@ -185,7 +157,7 @@ python -m interfaces.cli.main evaluate --width 50 --height 80 --thickness 5
 │ 1st natural frequency │     324.761 Hz │   324.8 Hz │       - │    -    │
 ```
 
-### `optimize` — 질량 최소화, 두 방법으로 교차검증
+### `optimize`: 질량 최소화, 두 방법으로 교차검증
 
 ```bash
 python -m interfaces.cli.main optimize --method both
@@ -203,7 +175,7 @@ python -m interfaces.cli.main optimize --method both
 cross-verification: |SLSQP - DE| / SLSQP = 1.341e-05 (0.0013%)  AGREE
 ```
 
-### `run` — 자율 설계 루프
+### `run`: 자율 설계 루프
 
 ```bash
 python -m interfaces.cli.main run --iterations 6 --seed 1          # 라이브 TUI
@@ -224,7 +196,7 @@ python -m interfaces.cli.main run --no-tui --target-mass 0.30      # 헤드리�
 옵션: `--iterations`, `--seed`, `--target-mass`, `--max-evaluations`,
 `--max-seconds`, `--profile`, `--tui/--no-tui`.
 
-### `brain` — 축적된 경험 조회
+### `brain`: 축적된 경험 조회
 
 ```bash
 python -m interfaces.cli.main brain --generalize
@@ -239,25 +211,25 @@ python -m interfaces.cli.main brain --generalize
 
 ---
 
-## 충실도와 안전성 — 숫자를 믿기 전에 읽을 것
+## 충실도와 안전성: 숫자를 믿기 전에 읽을 것
 
 이 프로젝트를 다른 것과 구분 짓는 부분이다. 각 계층은 자신이 **모르는 것**을
 명시한다.
 
 **물리(Phase 2)는 Euler–Bernoulli 보 이론이다.** 근부 응력집중을 무시하고,
 전단 변형을 무시하며, 좌굴을 검사하지 않는다. **실제 근부 최대응력은 보고값보다
-높다** — 보고된 응력은 하한으로 취급할 것. 여기를 통과한 설계는 **후보이지
+높다**: 보고된 응력은 하한으로 취급할 것. 여기를 통과한 설계는 **후보이지
 검증된 부품이 아니다.**
 
 **surrogate(Phase 6)가 근사하는 것은 그 보 이론 평가기이지 3D FEM이 아니다.**
-그래서 오차가 보 이론 오차 위에 더해진다. 그리고 surrogate는 결정하지 않는다 —
+그래서 오차가 보 이론 오차 위에 더해진다. 그리고 surrogate는 결정하지 않는다: 
 `screen_and_verify`는 수천 후보를 모델로 순위 매기지만, 반환하는 설계는 항상
 **솔버가 실제로 평가한** 것이다. 또한 **현재 속도 이득은 없다**: 보 커널이
 닫힌 형태 산술이라 surrogate 처리량은 배치 솔버의 약 0.38배다. 가치는 Phase 7에서
 발현된다.
 
 **Brain(Phase 5)은 사실이 아니라 증거수준이 표시된 경험을 저장한다.**
-`EXPERIMENTALLY_VALIDATED`는 **물리시험 증거로만** 도달 가능하다 — 시뮬레이션을
+`EXPERIMENTALLY_VALIDATED`는 **물리시험 증거로만** 도달 가능하다: 시뮬레이션을
 아무리 많이 돌려도, 테스트 스위트를 전부 통과해도, 해석적으로 유도해도 그
 관문은 열리지 않는다. 독립성은 에피소드가 아니라 **run 단위**로 세므로, 한 번의
 긴 탐색은 최대 `SIMULATED`에 머문다.
@@ -272,7 +244,7 @@ python -m interfaces.cli.main brain --generalize
 
 ---
 
-## 설치·배포 (설치형 CLI) — 열린 설계
+## 설치·배포 (설치형 CLI): 열린 설계
 
 이 프로젝트를 **자체적으로 완결된 설치형 CLI 도구**로 패키징하는 것이 목표다.
 사용자가 한 번 설치하면 깔끔한 단일 명령으로 쓰는 형태. 제안하는 방향:
@@ -292,7 +264,7 @@ python -m interfaces.cli.main brain --generalize
   dae brain --generalize
   ```
 
-- PyInstaller 단일 바이너리는 **후순위** — torch·Warp CUDA 휠 때문에 현실적이지
+- PyInstaller 단일 바이너리는 **후순위**: torch·Warp CUDA 휠 때문에 현실적이지
   않다.
 
 > **이건 확정안이 아니다. 패키징·설치 UX는 아직 설계 중이며, 접근법에 대한
@@ -304,61 +276,61 @@ python -m interfaces.cli.main brain --generalize
 
 | 방법 | 상태 |
 |---|---|
-| pip | `TBD — 릴리즈 시 제공` |
-| pipx | `TBD — 릴리즈 시 제공` |
-| PowerShell (Windows) | `TBD — 릴리즈 시 제공` |
-| cmd (Windows) | `TBD — 릴리즈 시 제공` |
-| bash / curl (Linux, macOS) | `TBD — 릴리즈 시 제공` |
-| Node / npx | `TBD — 릴리즈 시 제공` |
-| Docker | `TBD — 릴리즈 시 제공` |
+| pip | `TBD, 릴리즈 시 제공` |
+| pipx | `TBD, 릴리즈 시 제공` |
+| PowerShell (Windows) | `TBD, 릴리즈 시 제공` |
+| cmd (Windows) | `TBD, 릴리즈 시 제공` |
+| bash / curl (Linux, macOS) | `TBD, 릴리즈 시 제공` |
+| Node / npx | `TBD, 릴리즈 시 제공` |
+| Docker | `TBD, 릴리즈 시 제공` |
 
 **pip**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **pipx**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **PowerShell (Windows)**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **cmd (Windows)**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **bash / curl (Linux, macOS)**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **Node / npx**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 **Docker**
 ```
-# TBD — 릴리즈 시 제공
+# TBD, 릴리즈 시 제공
 ```
 
 ---
 
 ## 로드맵
 
-- **Phase 7 — 고정밀 3D FEM**: 응력집중과 좌굴. 후보가 실물 부품으로 취급되기
+- **Phase 7: 고정밀 3D FEM**: 응력집중과 좌굴. 후보가 실물 부품으로 취급되기
   위해 통과해야 하는 관문이며, surrogate 인프라가 실제로 값어치를 하는 지점이다.
 - **이방성 재료**: CFRP와 3D 프린팅 플라스틱은 방향별 물성 필드 **와** 이방성
   솔버가 먼저 있어야 한다. 지금의 단일 E 스키마에 밀어 넣으면 자신 있게 틀린
   답을 낸다.
 - **토폴로지 최적화**, implicit/SDF 지오메트리, 라티스 구조.
 - 기존 `Reasoner` ABC에 꽂는 **LLM 기반 reasoner**.
-- **멀티 GPU device pool** — 독립 후보 병렬은 선형 확장된다.
+- **멀티 GPU device pool**: 독립 후보 병렬은 선형 확장된다.
 - 제조 인계를 위한 **CAD / STEP export**.
 - **부품 범위 확장**: 링크 → 관절 → 감속기 → 다리 → 휴머노이드.
 - Brain의 **텍스트 임베딩 의미검색 + ANN 인덱싱** (현재 검색은 수치 특징
@@ -373,7 +345,7 @@ python -m interfaces.cli.main brain --generalize
 |---|---|
 | [@SeongminJaden](https://github.com/SeongminJaden) | 제작자, 메인테이너 |
 
-기여를 환영한다 — **[CONTRIBUTING.md](CONTRIBUTING.md)** 참고. 이 프로젝트가
+기여를 환영한다. **[CONTRIBUTING.md](CONTRIBUTING.md)** 참고. 이 프로젝트가
 중요하게 여기는 건 기여의 양이 아니라 하나의 습관이다: 각 계층이 자신이
 **모르는 것**을 명시하고, 중요한 계산은 독립적인 방법으로 검증하며, 과대주장을
 하지 않는 것. 그 성질을 지키는 변경이 이 프로젝트가 원하는 기여다.
@@ -382,7 +354,7 @@ python -m interfaces.cli.main brain --generalize
 
 ## 후원
 
-*아직 후원자가 없다 — 이 자리는 첫 후원자를 기다린다.*
+*아직 후원자가 없다: 이 자리는 첫 후원자를 기다린다.*
 
 이 작업이 도움이 되어 후원하고 싶다면, 후원 경로가 준비되는 대로 여기에 표시된다.
 `.github/FUNDING.yml`은 주석 처리된 템플릿으로만 들어 있다. 동작하지 않는 후원
@@ -394,7 +366,7 @@ python -m interfaces.cli.main brain --generalize
 
 [![Discord](https://img.shields.io/badge/Discord-server%20not%20yet%20created-5865F2.svg)](#커뮤니티)
 
-**Discord: `TBD — 서버 개설 후 링크 삽입`**
+**Discord: `TBD, 서버 개설 후 링크 삽입`**
 
 아직 초대 링크가 없고, 여기서 지어내지도 않는다. 서버가 생기기 전까지는 GitHub
 **Issues**와 **Discussions**가 질문·제안·설계 토론의 장소다. 특히 위에서 열어둔
@@ -406,7 +378,21 @@ python -m interfaces.cli.main brain --generalize
 
 ## 라이선스
 
-[MIT](LICENSE) © 2026 SeongminJaden
+[Apache License 2.0](LICENSE) © 2026 SeongminJaden. [NOTICE](NOTICE) 참고.
+
+허용적 라이선스 대신 Apache-2.0을 고른 것은 **특허 방어**를 위한 의도적 선택이다.
+모든 기여자로부터 명시적인 특허 실시권을 부여받고, 이 저작물에 대해 특허 소송을
+제기하는 쪽에는 그 실시권이 종료된다. 특허 조항이 없는 라이선스는 기여자와
+사용자를 바로 그 위험에 노출시킨다.
+
+### 방어적 공개 (defensive publication)
+
+방법론을 공개하는 것(`DESIGN.md`, 이 문서, 그리고 소스) 자체가 **prior art**를
+성립시키려는 목적도 갖는다. 어떤 기법이 공개적으로, 날짜를 특정할 수 있게
+기술되고 나면, 제3자가 같은 접근을 나중에 특허화해 이미 그것을 쓰고 있는
+커뮤니티에 주장하기가 훨씬 어려워진다. 둘의 조합이 핵심이다: prior art가 아이디어를
+선점당하지 않게 하고, Apache-2.0의 특허 grant와 보복 종료 조항이 그 위에서
+개발하는 사람들을 보호한다.
 
 ---
 

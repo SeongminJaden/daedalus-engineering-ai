@@ -1,15 +1,15 @@
-# physics — GPU physics via NVIDIA Warp
+# physics: GPU physics via NVIDIA Warp
 
 Kernels (`warp_kernels/`), structural evaluation (`structural/`), batch
 orchestration against the active GPU profile (`solver/`). `rigid_body`,
 `thermal` and `collision` are still stubs.
 
-## Model fidelity — Phase 2
+## Model fidelity: Phase 2
 
 The current structural model is **Euler–Bernoulli beam theory**: a root-fixed
 cantilever with a transverse point load at the free tip and a uniform hollow
 rectangular section. It is differentiable and runs a whole population in one
-GPU launch, which is what an optimizer needs — but it is a *beam* model, and it
+GPU launch, which is what an optimizer needs: but it is a *beam* model, and it
 is honest about what that costs:
 
 - **No stress concentration.** The root fillet, bolt holes and any fixture
@@ -38,5 +38,5 @@ the space, expensive high-fidelity models to confirm the winner.
 
 Both the forward metrics and the autodiff gradients are checked against
 `tests/reference_beam.py`, an independent float64 numpy implementation that
-imports neither Warp nor any project module — so a bug shared between the
+imports neither Warp nor any project module: so a bug shared between the
 kernel and `core.design_genome` cannot pass both.

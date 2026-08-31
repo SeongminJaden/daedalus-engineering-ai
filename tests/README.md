@@ -1,1 +1,1 @@
-# tests — pytest suite.
+# tests: pytest suite.
