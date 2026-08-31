@@ -1434,5 +1434,140 @@ def nodes(
         "project's own FEM and by nothing else")
 
 
+def _mean_stress_note(fatigue) -> str:
+    """Say what happened to the mean stress, accurately for each sign.
+
+    A fully reversed cycle has a mean of exactly zero, which takes the same
+    branch as a compressive mean but for a different reason: there is nothing
+    to credit rather than something withheld.
+    """
+    if fatigue.mean_stress_charged:
+        return ""
+    if fatigue.mean_pa < 0.0:
+        return " (compressive mean, not credited)"
+    return " (fully reversed)"
+
+
+@app.command(name="failure-modes")
+def failure_modes(
+    material_id: str = typer.Option("al_7075_t6", "--material"),
+    width_mm: float = typer.Option(40.0, "--width-mm"),
+    height_mm: float = typer.Option(40.0, "--height-mm"),
+    thickness_mm: float = typer.Option(2.0, "--thickness-mm"),
+    length_m: float = typer.Option(0.5, "--length-m"),
+    load_max_n: float = typer.Option(0.0, "--load-max-n",
+                                     help="peak transverse load"),
+    load_min_n: float = typer.Option(0.0, "--load-min-n",
+                                     help="lowest transverse load in the cycle; "
+                                          "set equal to the max for a static duty"),
+    compression_n: float = typer.Option(0.0, "--compression-n",
+                                        help="axial compression, positive"),
+    ends: str = typer.Option("fixed_free", "--ends",
+                             help="fixed_free, pinned_pinned, fixed_pinned, "
+                                  "fixed_fixed"),
+    soderberg: bool = typer.Option(False, "--soderberg",
+                                   help="charge the mean stress against yield "
+                                        "instead of ultimate"),
+):
+    """Check a section against static, fatigue and buckling failure.
+
+    A design that passes the yield check can still be governed by fatigue or by
+    buckling, and this reports whichever is closest to failing.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.design_genome.section import HollowRectangleSection
+    from core.materials import get_material
+    from physics.buckling import EndCondition
+    from physics.failure_modes import DutyCycle, check_design
+    from physics.fatigue import MeanStressCriterion
+
+    console = Console()
+    try:
+        condition = EndCondition(ends)
+    except ValueError:
+        console.print(f"[red]unknown end condition {ends!r}[/red]. Known: "
+                      f"{', '.join(c.value for c in EndCondition)}")
+        raise typer.Exit(code=2)
+
+    material = get_material(material_id)
+    section = HollowRectangleSection(outer_width_m=width_mm / 1000.0,
+                                     outer_height_m=height_mm / 1000.0,
+                                     wall_thickness_m=thickness_mm / 1000.0)
+    if not section.is_valid():
+        console.print(f"[red]invalid section[/red]: {section.validity_reason()}")
+        raise typer.Exit(code=2)
+
+    duty = DutyCycle(bending_load_max_n=load_max_n,
+                     bending_load_min_n=load_min_n,
+                     compressive_load_n=compression_n,
+                     end_condition=condition)
+    report = check_design(
+        section, material, length_m, duty,
+        MeanStressCriterion.SODERBERG if soderberg
+        else MeanStressCriterion.GOODMAN)
+
+    head = Table.grid(padding=(0, 2))
+    head.add_column(style="bold cyan", justify="right")
+    head.add_column()
+    head.add_row("material", f"{material.name} ({material.status.value})")
+    head.add_row("section", f"{width_mm} x {height_mm} x {thickness_mm} mm, "
+                            f"length {length_m} m")
+    head.add_row("duty", f"bending {load_min_n} to {load_max_n} N, "
+                         f"compression {compression_n} N, ends {ends}")
+    console.print(head)
+
+    table = Table(title="failure modes")
+    table.add_column("mode")
+    table.add_column("safety factor", justify="right")
+    table.add_column("basis")
+    table.add_row("static bending", f"{report.static_safety_factor:.3f}",
+                  f"peak {report.max_bending_stress_pa / 1e6:.1f} MPa against "
+                  f"yield {material.yield_strength_pa / 1e6:.0f} MPa")
+    if report.axial_safety_factor is not None:
+        table.add_row("axial yield", f"{report.axial_safety_factor:.3f}",
+                      f"{report.axial_stress_pa / 1e6:.1f} MPa against yield")
+    if report.fatigue is not None:
+        fatigue = report.fatigue
+        table.add_row(f"fatigue ({fatigue.criterion.value})",
+                      f"{fatigue.safety_factor:.3f}",
+                      f"alternating {fatigue.alternating_pa / 1e6:.1f} MPa, "
+                      f"mean {fatigue.mean_pa / 1e6:.1f} MPa"
+                      + _mean_stress_note(fatigue))
+    else:
+        table.add_row("fatigue", "n/a", "the duty is not cyclic")
+    if report.buckling is not None:
+        buckling = report.buckling
+        basis = (f"P_cr {buckling.critical_load_n:.0f} N, slenderness "
+                 f"{buckling.slenderness:.1f} against transition "
+                 f"{buckling.critical_slenderness:.1f}")
+        table.add_row("buckling (euler)",
+                      f"{buckling.safety_factor:.3f}"
+                      + ("" if buckling.euler_valid else " [yellow]invalid[/yellow]"),
+                      basis)
+    else:
+        table.add_row("buckling", "n/a", "no axial compression")
+    console.print(table)
+
+    verdict = ("[green]PASS[/green]" if report.passes else "[red]FAIL[/red]")
+    console.print(f"{verdict}: {report.summary()}")
+
+    if report.fatigue is not None:
+        console.print(f"[yellow]note[/yellow] {report.fatigue.notes}")
+        console.print(
+            "stress-life is high-cycle only, and carries no notch, surface, "
+            "size or temperature factor. Each of those lowers a real endurance "
+            "limit, so this number is optimistic.")
+    if report.buckling is not None and not report.buckling.euler_valid:
+        console.print(f"[yellow]note[/yellow] {report.buckling.notes}")
+    elif report.buckling is not None:
+        console.print(
+            "[yellow]note[/yellow] the Euler load assumes a perfectly straight, "
+            "centrally loaded column. Crookedness, eccentricity and residual "
+            "stress all lower the real collapse load and no knock-down factor "
+            "is applied.")
+
+
 if __name__ == "__main__":
     app()

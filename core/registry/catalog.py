@@ -198,6 +198,49 @@ def build_default_registry() -> MethodRegistry:
               "also not faster than the batched solver it approximates "
               "(measured 0.38x), so it earns its place by shape, not speed."))
 
+    registry.register(Method(
+        name="fatigue_sn",
+        category=Category.ANALYSIS,
+        summary="High-cycle stress-life check with a mean-stress correction.",
+        inputs=("stress_cycle", "material"),
+        outputs=("fatigue_safety_factor",),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the duty involves repeated loading (a static single "
+                      "load has no fatigue to check)",
+                      lambda c: c.require("has_cyclic_load")),
+        ),
+        implementation="physics.fatigue.sn.fatigue_safety_factor",
+        evidence="SIMULATED",
+        notes="Stress-life, so high-cycle only; low-cycle fatigue needs a "
+              "strain-life model that is not implemented. No notch, surface, "
+              "size or temperature factors, each of which lowers a real "
+              "endurance limit, so the result is optimistic. Fatigue data is "
+              "reference_typical and scatters widely."))
+
+    registry.register(Method(
+        name="buckling_euler",
+        category=Category.ANALYSIS,
+        summary="Elastic column buckling, with the Euler validity check.",
+        inputs=("section_properties", "length", "compressive_load",
+                "end_condition"),
+        outputs=("critical_load", "buckling_safety_factor", "slenderness"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a member carries compression (a member in tension "
+                      "cannot buckle)",
+                      lambda c: c.require("has_compressive_load")),
+        ),
+        implementation="physics.buckling.euler.analyze_column",
+        evidence="SIMULATED",
+        notes="An ideal column: perfectly straight, centrally loaded, no "
+              "residual stress. Real members collapse below this and no "
+              "knock-down factor is applied. Below the critical slenderness "
+              "the derivation does not hold and the method reports that "
+              "rather than returning a number that looks like a margin. 3D "
+              "FEM linear buckling would cover shapes this cannot and is NOT "
+              "registered, because it is not implemented."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

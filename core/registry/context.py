@@ -30,6 +30,11 @@ class ProblemContext:
     # What is being asked for
     objective: str | None = None           # mass, compliance, stress
     has_stress_constraint: bool | None = None
+    # Whether the duty involves repeated loading, and whether any member
+    # carries compression. Both decide whether a failure mode is even possible,
+    # so both gate a method rather than merely informing it.
+    has_cyclic_load: bool | None = None
+    has_compressive_load: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale
