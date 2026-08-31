@@ -72,6 +72,8 @@ def case(problem):
         youngs_modulus_pa=lc.youngs_modulus_pa,
         density_kg_m3=lc.density_kg_m3,
         yield_strength_pa=lc.yield_strength_pa,
+        poisson_ratio=lc.poisson_ratio,
+        shear_factor=lc.shear_factor,
     )
 
 

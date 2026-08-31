@@ -41,6 +41,17 @@ METRIC_NAMES = (
 DESIGN_VARIABLES = ("outer_width_m", "outer_height_m", "wall_thickness_m")
 
 
+# Effective shear area of a hollow box in bending about its horizontal axis is
+# taken as the two vertical webs, A_s = SHEAR_WEB_FACTOR * 2 * t * h.
+#
+# **[ASSUMED]** SHEAR_WEB_FACTOR = 1.0 is the textbook thin-walled-box
+# approximation (the webs carry the shear flow, the flanges carry bending). It
+# is not derived here. It is CALIBRATED against 3D FEM in
+# tests/test_timoshenko.py across a range of L/h, and the measured agreement is
+# reported there rather than assumed.
+SHEAR_WEB_FACTOR = 1.0
+
+
 @dataclass(frozen=True)
 class BeamLoadCase:
     """Everything the kernel needs that is not a design variable. SI."""
@@ -50,6 +61,9 @@ class BeamLoadCase:
     youngs_modulus_pa: float
     density_kg_m3: float
     yield_strength_pa: float
+    poisson_ratio: float = 0.33
+    # 0.0 selects Euler-Bernoulli (bending only); the default includes shear.
+    shear_factor: float = SHEAR_WEB_FACTOR
 
 
 @dataclass
@@ -79,8 +93,11 @@ class BeamMetrics:
         })
 
 
-def load_case_from_problem(problem) -> BeamLoadCase:
+def load_case_from_problem(problem, shear_deformation: bool = True) -> BeamLoadCase:
     """Extract the kernel's load case from an Engineering IR problem.
+
+    `shear_deformation=False` reproduces the Euler-Bernoulli model exactly,
+    which is what the Phase 2 hand-checks and the independent reference use.
 
     Raises if the problem is not the cantilever/tip-load/hollow-rectangle case
     this model actually solves. Silently evaluating an unsupported problem
@@ -129,6 +146,8 @@ def load_case_from_problem(problem) -> BeamLoadCase:
         youngs_modulus_pa=material.youngs_modulus_pa,
         density_kg_m3=material.density_kg_m3,
         yield_strength_pa=material.yield_strength_pa,
+        poisson_ratio=material.poisson_ratio,
+        shear_factor=SHEAR_WEB_FACTOR if shear_deformation else 0.0,
     )
 
 
@@ -171,7 +190,8 @@ def _launch(b, h, t, case: BeamLoadCase, device: str, requires_grad: bool):
     ]
     scalars = [
         case.length_m, case.tip_load_n, case.youngs_modulus_pa,
-        case.density_kg_m3, case.yield_strength_pa,
+        case.density_kg_m3, case.yield_strength_pa, case.poisson_ratio,
+        case.shear_factor,
     ]
 
     def run():
@@ -231,13 +251,14 @@ def evaluate_beam(
     genomes: Iterable[DesignGenome],
     problem,
     device: str | None = None,
+    shear_deformation: bool = True,
 ) -> BeamMetrics:
     """Evaluate a batch of candidates in one GPU launch.
 
     No chunking here - physics.solver owns batching against the GPU profile.
     """
     genomes = list(genomes)
-    case = load_case_from_problem(problem)
+    case = load_case_from_problem(problem, shear_deformation)
     b, h, t = _design_arrays(genomes)
     return evaluate_beam_case(b, h, t, case, device=device)
 
@@ -247,6 +268,7 @@ def beam_gradients(
     problem,
     metric: str,
     device: str | None = None,
+    shear_deformation: bool = True,
 ) -> dict[str, np.ndarray]:
     """d(metric)/d(b, h, t) per candidate, via Warp autodiff.
 
@@ -260,7 +282,7 @@ def beam_gradients(
         raise ValueError(f"unknown metric {metric!r}; expected one of {METRIC_NAMES}")
 
     genomes = list(genomes)
-    case = load_case_from_problem(problem)
+    case = load_case_from_problem(problem, shear_deformation)
     dev = _resolve_device(device)
     b, h, t = _design_arrays(genomes)
     tape, ins, outs = _launch(b, h, t, case, dev, requires_grad=True)
@@ -284,6 +306,7 @@ def beam_gradients_many(
     problem,
     metrics: Sequence[str],
     device: str | None = None,
+    shear_deformation: bool = True,
 ) -> dict[str, dict[str, np.ndarray]]:
     """Gradients of several metrics from a single forward launch.
 
@@ -298,7 +321,7 @@ def beam_gradients_many(
         raise ValueError(f"unknown metric(s) {unknown}; expected {METRIC_NAMES}")
 
     genomes = list(genomes)
-    case = load_case_from_problem(problem)
+    case = load_case_from_problem(problem, shear_deformation)
     dev = _resolve_device(device)
     b, h, t = _design_arrays(genomes)
     tape, ins, outs = _launch(b, h, t, case, dev, requires_grad=True)

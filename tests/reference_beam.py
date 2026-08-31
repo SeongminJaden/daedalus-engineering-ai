@@ -31,8 +31,16 @@ BETA1 = 1.875104
 
 
 def reference_metrics(b, h, t, length_m, tip_load_n, youngs_modulus_pa,
-                      density_kg_m3, yield_strength_pa) -> dict[str, np.ndarray]:
-    """Closed-form metrics in float64. Arrays or scalars accepted."""
+                      density_kg_m3, yield_strength_pa,
+                      poisson_ratio=0.33, shear_factor=0.0) -> dict[str, np.ndarray]:
+    """Closed-form metrics in float64. Arrays or scalars accepted.
+
+    `shear_factor=0` is Euler-Bernoulli (the default here, so the original
+    Phase 2 checks are untouched). A non-zero value adds the Timoshenko shear
+    term with effective shear area A_s = shear_factor * 2 * t * h:
+
+        delta = P L^3 / (3 E I) + P L / (G A_s),   G = E / (2 (1 + nu))
+    """
     b = np.asarray(b, dtype=np.float64)
     h = np.asarray(h, dtype=np.float64)
     t = np.asarray(t, dtype=np.float64)
@@ -54,6 +62,9 @@ def reference_metrics(b, h, t, length_m, tip_load_n, youngs_modulus_pa,
     moment = P * L
     sigma = moment * c / inertia
     delta = P * L**3 / (3.0 * E * inertia)
+    if shear_factor:
+        shear_modulus = E / (2.0 * (1.0 + float(poisson_ratio)))
+        delta = delta + P * L / (shear_modulus * (float(shear_factor) * 2.0 * t * h))
     safety = sy / sigma
     freq = (BETA1**2 / (2.0 * math.pi)) * np.sqrt(E * inertia / (rho * area * L**4))
     tau = P / area

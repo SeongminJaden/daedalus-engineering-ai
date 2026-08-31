@@ -21,6 +21,7 @@ from .generalize import (
     generalize_bound_activity,
 )
 from .knowledge import Knowledge, SemanticMemory
+from .lessons import record_fidelity_lesson
 
 __all__ = [
     "DEFAULT_POLICY", "DOMINANCE_THRESHOLD", "LEVEL_CONFIDENCE_CEILING",
@@ -28,5 +29,5 @@ __all__ = [
     "EvidenceLevel", "Knowledge", "PromotionPolicy", "SemanticMemory",
     "compute_confidence", "derive_level", "generalize_all",
     "generalize_binding_constraint", "generalize_bound_activity",
-    "independent_runs", "unresolved",
+    "independent_runs", "record_fidelity_lesson", "unresolved",
 ]

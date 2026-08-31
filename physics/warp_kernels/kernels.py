@@ -35,6 +35,11 @@ def cantilever_hollow_rect_metrics(
     youngs_modulus: float,    # E     [Pa]
     density: float,           # rho   [kg/m^3]
     yield_strength: float,    # sigma_y [Pa]
+    poisson_ratio: float,     # nu    [-]
+    # Effective shear area is shear_factor * (2 * t * h), the two vertical webs
+    # of the box. Pass 0.0 to drop the shear term entirely and recover the
+    # Euler-Bernoulli result, which is how the two models are compared.
+    shear_factor: float,
     # --- outputs ---
     mass: wp.array(dtype=wp.float32),               # [kg]
     max_bending_stress: wp.array(dtype=wp.float32),  # [Pa]
@@ -61,7 +66,18 @@ def cantilever_hollow_rect_metrics(
     m = area * length * density                       # mass
     moment = tip_load * length                        # root bending moment
     sigma = moment * c / inertia                      # max bending stress
-    delta = tip_load * length * length * length / (3.0 * youngs_modulus * inertia)
+    # Timoshenko tip deflection: bending plus shear.
+    #   delta = P L^3 / (3 E I)  +  P L / (G A_s)
+    # Euler-Bernoulli keeps only the first term, which under-predicts deflection
+    # for a stubby beam. At L/h ~ 6 that error is percent-level and it is enough
+    # to make an optimizer sitting exactly on a deflection limit infeasible.
+    bending = tip_load * length * length * length / (3.0 * youngs_modulus * inertia)
+    shear = float(0.0)
+    if shear_factor > 0.0:
+        shear_modulus = youngs_modulus / (2.0 * (1.0 + poisson_ratio))
+        shear_area = shear_factor * 2.0 * t * h
+        shear = tip_load * length / (shear_modulus * shear_area)
+    delta = bending + shear
     sf = yield_strength / sigma
 
     # f1 = (beta1^2 / 2pi) * sqrt(E*I / (rho*A*L^4))

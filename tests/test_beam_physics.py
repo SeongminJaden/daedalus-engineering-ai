@@ -57,6 +57,9 @@ def problem():
 
 @pytest.fixture(scope="module")
 def case(problem):
+    """Reference parameters mirroring the DEFAULT model, which now includes the
+    Timoshenko shear term. The reference is told the same, so this stays a
+    genuine independent check of whatever model the kernel is running."""
     lc = load_case_from_problem(problem)
     return dict(
         length_m=lc.length_m,
@@ -64,6 +67,23 @@ def case(problem):
         youngs_modulus_pa=lc.youngs_modulus_pa,
         density_kg_m3=lc.density_kg_m3,
         yield_strength_pa=lc.yield_strength_pa,
+        poisson_ratio=lc.poisson_ratio,
+        shear_factor=lc.shear_factor,
+    )
+
+
+@pytest.fixture(scope="module")
+def euler_case(problem):
+    """Same, with shear switched off: the pure Euler-Bernoulli path."""
+    lc = load_case_from_problem(problem, shear_deformation=False)
+    return dict(
+        length_m=lc.length_m,
+        tip_load_n=lc.tip_load_n,
+        youngs_modulus_pa=lc.youngs_modulus_pa,
+        density_kg_m3=lc.density_kg_m3,
+        yield_strength_pa=lc.yield_strength_pa,
+        poisson_ratio=lc.poisson_ratio,
+        shear_factor=0.0,
     )
 
 
@@ -98,8 +118,9 @@ def test_each_design_matches_reference(problem, case, b, h, t):
         ), name
 
 
-def test_mvp_metrics_hand_checked(problem):
-    """Hand-computed for b=0.05 h=0.08 t=0.005, P=196.2 N, L=0.5 m, Al 7075-T6.
+def test_mvp_metrics_hand_checked_euler_bernoulli(problem):
+    """Hand-computed for b=0.05 h=0.08 t=0.005, P=196.2 N, L=0.5 m, Al 7075-T6,
+    with shear off so the bending term is isolated.
 
         A = 0.0012 m^2, I = 9.9e-7 m^4, c = 0.04 m
         m     = 0.0012*0.5*2810            = 1.686 kg
@@ -107,12 +128,38 @@ def test_mvp_metrics_hand_checked(problem):
         delta = 196.2*0.125/(3*71.7e9*9.9e-7) = 1.1517e-4 m
         SF    = 503e6/3.9636e6             = 126.9
     """
-    m = evaluate_beam([genome(0.05, 0.08, 0.005)], problem).candidate(0)
+    m = evaluate_beam([genome(0.05, 0.08, 0.005)], problem,
+                      shear_deformation=False).candidate(0)
     assert m["mass_kg"] == pytest.approx(1.686, rel=1e-5)
     assert m["max_bending_stress_pa"] == pytest.approx(3.9636e6, rel=1e-4)
     assert m["tip_deflection_m"] == pytest.approx(1.1517e-4, rel=1e-4)
     assert m["safety_factor"] == pytest.approx(126.9, rel=1e-3)
     assert m["mean_transverse_shear_stress_pa"] == pytest.approx(163500.0, rel=1e-5)
+
+
+def test_mvp_metrics_hand_checked_timoshenko(problem):
+    """Same design with the shear term on. Hand-computed addition:
+
+        G   = 71.7e9 / (2 * 1.33)           = 2.6955e10 Pa
+        A_s = 2 * t * h = 2*0.005*0.08      = 8.0e-4 m^2
+        d_s = 196.2*0.5/(2.6955e10*8.0e-4)  = 4.5503e-6 m
+        delta = 1.1517e-4 + 4.5503e-6       = 1.1972e-4 m
+    """
+    m = evaluate_beam([genome(0.05, 0.08, 0.005)], problem).candidate(0)
+    assert m["tip_deflection_m"] == pytest.approx(1.1972e-4, rel=1e-3)
+    # mass and stress are unaffected by the shear term
+    assert m["mass_kg"] == pytest.approx(1.686, rel=1e-5)
+    assert m["max_bending_stress_pa"] == pytest.approx(3.9636e6, rel=1e-4)
+
+
+def test_shear_term_only_affects_deflection(problem):
+    euler = evaluate_beam([genome(0.05, 0.08, 0.005)], problem,
+                          shear_deformation=False).candidate(0)
+    timo = evaluate_beam([genome(0.05, 0.08, 0.005)], problem).candidate(0)
+    assert timo["tip_deflection_m"] > euler["tip_deflection_m"]
+    for key in ("mass_kg", "max_bending_stress_pa", "safety_factor",
+                "first_natural_frequency_hz"):
+        assert timo[key] == pytest.approx(euler[key], rel=1e-9), key
 
 
 # --------------------------------------------------------------------------- #
@@ -186,17 +233,41 @@ def test_stress_and_deflection_are_linear_in_load(problem):
 
 
 def test_deflection_scales_with_length_cubed(problem):
-    """delta ~ P*L^3/(3EI): doubling L must raise delta ~8x (P, section fixed)."""
+    """delta ~ P*L^3/(3EI): doubling L must raise delta ~8x (P, section fixed).
+
+    Shear is switched off here on purpose: the shear term is linear in L, so
+    with it the total is deliberately NOT a pure cube. That is the point of the
+    correction, and it is checked separately.
+    """
     longer = problem.model_copy(deep=True)
     longer.geometry.length_m = problem.geometry.length_m * 2.0
 
-    base = evaluate_beam([genome(0.05, 0.08, 0.005)], problem).candidate(0)
-    long_ = evaluate_beam([genome(0.05, 0.08, 0.005)], longer).candidate(0)
+    base = evaluate_beam([genome(0.05, 0.08, 0.005)], problem,
+                         shear_deformation=False).candidate(0)
+    long_ = evaluate_beam([genome(0.05, 0.08, 0.005)], longer,
+                          shear_deformation=False).candidate(0)
     assert long_["tip_deflection_m"] == pytest.approx(
         8.0 * base["tip_deflection_m"], rel=1e-4)
-    # f1 ~ 1/L^2 -> quarter
+    # f1 ~ 1/L^2 -> quarter. Frequency uses the bending stiffness only, so it is
+    # unaffected by the shear switch.
     assert long_["first_natural_frequency_hz"] == pytest.approx(
         base["first_natural_frequency_hz"] / 4.0, rel=1e-4)
+
+
+def test_shear_contribution_shrinks_as_the_beam_gets_slender(problem):
+    """Shear matters for a stubby beam and fades for a slender one: it is
+    linear in L while bending goes as L^3."""
+    shares = []
+    for length in (0.2, 0.5, 1.5):
+        p = problem.model_copy(deep=True)
+        p.geometry.length_m = length
+        euler = evaluate_beam([genome(0.05, 0.08, 0.005)], p,
+                              shear_deformation=False).candidate(0)
+        timo = evaluate_beam([genome(0.05, 0.08, 0.005)], p).candidate(0)
+        shares.append((timo["tip_deflection_m"] - euler["tip_deflection_m"])
+                      / timo["tip_deflection_m"])
+    assert shares[0] > shares[1] > shares[2]
+    assert shares[0] > 0.1, f"short beam shear share only {shares[0]:.2%}"
 
 
 def test_safety_factor_is_yield_over_stress(problem):
