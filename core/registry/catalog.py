@@ -397,6 +397,89 @@ def build_default_registry() -> MethodRegistry:
               "the load direction. No progressive damage, no hygrothermal "
               "terms. The Tsai-Wu interaction term F12 is assumed."))
 
+    _shaft_hub = Condition(
+        "the design transfers torque from a shaft to a hub",
+        lambda c: c.require("has_shaft_hub_connection"))
+
+    registry.register(Method(
+        name="key_joint",
+        category=Category.ANALYSIS,
+        summary="Parallel key in shear and bearing, with standard sections.",
+        inputs=("shaft_diameter", "key_length", "torque", "allowables"),
+        outputs=("shear_stress", "bearing_stress", "safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_shaft_hub,),
+        implementation="physics.elements.keys.analyze_key",
+        evidence="SIMULATED",
+        notes="Uniform load along the key is assumed and is optimistic: the "
+              "load concentrates at the ends, so length beyond about 1.5 shaft "
+              "diameters is capped rather than credited. Only half the key "
+              "height bears. The keyway's effect on the SHAFT is not included "
+              "here and belongs to the shaft check. Sections are the published "
+              "DIN 6885 / ISO 773 series."))
+
+    registry.register(Method(
+        name="press_fit",
+        category=Category.ANALYSIS,
+        summary="Interference fit: contact pressure, torque capacity and hub "
+                "hoop stress.",
+        inputs=("interference", "diameters", "engagement", "materials"),
+        outputs=("contact_pressure", "torque_capacity", "hoop_stress"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(_shaft_hub,),
+        implementation="physics.elements.press_fit.analyze_press_fit",
+        evidence="SIMULATED",
+        notes="Thick-wall elastic Lame. Surface roughness is NOT deducted and "
+              "always reduces the effective interference, so this is "
+              "optimistic. The friction coefficient is the weakest number in "
+              "the chain and torque capacity is directly proportional to it. "
+              "Static holding only: no fretting, no thermal loss of "
+              "interference in service."))
+
+    registry.register(Method(
+        name="fillet_weld",
+        category=Category.ANALYSIS,
+        summary="Nominal throat stress of a fillet weld.",
+        inputs=("force", "weld_leg", "weld_length", "allowable"),
+        outputs=("throat_stress", "safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the design has a welded joint",
+                      lambda c: c.require("has_welded_joint")),
+        ),
+        implementation="physics.elements.welds.analyze_fillet_weld",
+        evidence="SIMULATED",
+        notes="Nominal throat stress with no concentration at the root or "
+              "toe, which is where weld cracks start. STATIC ONLY: a welded "
+              "joint's endurance strength is a fraction of the parent metal's "
+              "and largely independent of the steel's strength, so a "
+              "parent-metal fatigue check badly overstates a weld. Full "
+              "penetration to the throat is assumed and residual stress is "
+              "ignored."))
+
+    registry.register(Method(
+        name="iso_fit",
+        category=Category.SELECTION,
+        summary="ISO 286 limits and fits from the tolerance-unit formula.",
+        inputs=("nominal_size", "hole_grade", "shaft_letter_and_grade"),
+        outputs=("limits", "clearance_range", "fit_type"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the design needs dimensional tolerances",
+                      lambda c: c.require("requires_tolerances")),
+        ),
+        implementation="physics.elements.fits.fit",
+        evidence="SIMULATED",
+        notes="Computed from the ISO 286 tolerance-unit expression rather than "
+              "a transcribed table, and it does NOT reproduce the published "
+              "values exactly because the standard rounds to preferred "
+              "numbers: measured agreement is 1.2% mean and 8.4% worst over "
+              "IT6 to IT9 above 3 mm. Close enough to compare fits, not close "
+              "enough to put on a drawing. Sizes at or below 3 mm are refused. "
+              "Only deviations with a published closed form (H, g, h, k, n) "
+              "are implemented; p, r, s and u need tabulated increments and "
+              "are refused by name."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

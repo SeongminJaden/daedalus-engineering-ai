@@ -2309,5 +2309,96 @@ def design(
                 "designed.")
 
 
+@app.command()
+def elements(
+    shaft_mm: float = typer.Option(30.0, "--shaft-mm"),
+    torque_nm: float = typer.Option(150.0, "--torque-nm"),
+    key_length_mm: float = typer.Option(40.0, "--key-length-mm"),
+    hub_outer_mm: float = typer.Option(60.0, "--hub-outer-mm"),
+    interference_um: float = typer.Option(30.0, "--interference-um"),
+    engagement_mm: float = typer.Option(40.0, "--engagement-mm"),
+    weld_leg_mm: float = typer.Option(6.0, "--weld-leg-mm"),
+    weld_length_mm: float = typer.Option(80.0, "--weld-length-mm"),
+    weld_force_n: float = typer.Option(50000.0, "--weld-force-n"),
+):
+    """Shaft-to-hub connections, welds and ISO 286 fits at one diameter."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from physics.elements import (analyze_fillet_weld, analyze_key,
+                                  analyze_press_fit, fit,
+                                  standard_key_section)
+
+    console = Console()
+    shaft_m = shaft_mm / 1000.0
+    steel_e, steel_nu, steel_yield = 207e9, 0.29, 655e6
+
+    try:
+        width, height = standard_key_section(shaft_m)
+    except ValueError as refused:
+        console.print(f"[red]{refused}[/red]")
+        raise typer.Exit(code=2)
+    key = analyze_key(shaft_m, key_length_mm / 1000.0, torque_nm, 90e6, 180e6)
+    press = analyze_press_fit(interference_um * 1e-6, shaft_m,
+                              hub_outer_mm / 1000.0, engagement_mm / 1000.0,
+                              steel_e, steel_nu, steel_e, steel_nu,
+                              hub_yield_pa=steel_yield)
+    weld = analyze_fillet_weld(weld_force_n, weld_leg_mm / 1000.0,
+                               weld_length_mm / 1000.0, 120e6)
+
+    table = Table(title=f"{shaft_mm:g} mm shaft carrying {torque_nm:g} N m")
+    table.add_column("element")
+    table.add_column("quantity")
+    table.add_column("value", justify="right")
+    table.add_column("note")
+    table.add_row("key", f"{width * 1e3:g} x {height * 1e3:g} mm section",
+                  f"SF {key.safety_factor:.2f}",
+                  f"{key.governing_mode} governs"
+                  + (f", length capped at {key.effective_length_m * 1e3:.0f} mm"
+                     if key.length_was_capped else ""))
+    table.add_row("press fit", "contact pressure",
+                  f"{press.contact_pressure_pa / 1e6:.1f} MPa",
+                  f"holds {press.torque_capacity_nm:.0f} N m at friction "
+                  f"{press.friction_coefficient:g}")
+    table.add_row("", "hub hoop stress",
+                  f"{press.hub_hoop_stress_pa / 1e6:.1f} MPa",
+                  ("[red]hub yields[/red]" if press.hub_yields
+                   else f"hub SF {press.hub_yield_safety_factor:.2f}"))
+    table.add_row("weld", f"{weld_leg_mm:g} mm fillet",
+                  f"SF {weld.safety_factor:.2f}",
+                  f"throat {weld.throat_m * 1e3:.2f} mm, "
+                  f"{weld.stress_pa / 1e6:.0f} MPa")
+    console.print(table)
+
+    fits = Table(title="ISO 286 hole-basis fits at this diameter")
+    fits.add_column("designation")
+    fits.add_column("type")
+    fits.add_column("clearance (um)", justify="right")
+    for letter in ("g", "h", "k", "n"):
+        try:
+            chosen = fit(shaft_mm, 7, letter, 6)
+        except ValueError:
+            continue
+        fits.add_row(chosen.designation, chosen.fit_type.value,
+                     f"{chosen.min_clearance_mm * 1000:+.1f} to "
+                     f"{chosen.max_clearance_mm * 1000:+.1f}")
+    console.print(fits)
+    console.print(
+        "[yellow]note[/yellow] the tolerances are computed from the ISO 286 "
+        "expression, which does NOT reproduce the published table exactly "
+        "because the standard rounds to preferred numbers. Measured agreement "
+        "is 1.2% mean and 8.4% worst above 3 mm. Good enough to compare fits, "
+        "not to put on a drawing.")
+    console.print(
+        "[yellow]note[/yellow] the press fit deducts nothing for surface "
+        "roughness, which always reduces the effective interference, and its "
+        "friction coefficient is the weakest number in the chain with torque "
+        "capacity directly proportional to it.")
+    console.print(
+        "[yellow]note[/yellow] the weld figure is STATIC. A welded joint's "
+        "endurance strength is a fraction of the parent metal's, so a "
+        "parent-metal fatigue check badly overstates it.")
+
+
 if __name__ == "__main__":
     app()

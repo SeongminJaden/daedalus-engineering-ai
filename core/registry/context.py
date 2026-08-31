@@ -60,6 +60,12 @@ class ProblemContext:
     # orthotropic material alone is not enough: CLT designs the STACK, and a
     # single ply or an isotropic part has no stack to design.
     has_layup: bool | None = None
+    # Shaft-to-hub torque transfer (a key, spline or interference fit), a
+    # welded joint, and whether the design needs dimensional tolerances. Each
+    # gates a Phase 23 method.
+    has_shaft_hub_connection: bool | None = None
+    has_welded_joint: bool | None = None
+    requires_tolerances: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale
