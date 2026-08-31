@@ -284,6 +284,50 @@ def build_default_registry() -> MethodRegistry:
               "standard ISO boundary dimensions with representative ratings "
               "tagged illustrative, not a manufacturer catalogue."))
 
+    registry.register(Method(
+        name="motor_thermal",
+        category=Category.ANALYSIS,
+        summary="Steady-state winding temperature of a motor under a duty cycle.",
+        inputs=("motor", "duty_cycle", "ambient_temperature"),
+        outputs=("winding_temperature", "temperature_margin"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the problem states a duty cycle to heat the motor with",
+                      lambda c: c.require("has_duty_cycle")),
+        ),
+        implementation="physics.thermal.motor.check_motor_thermal",
+        evidence="SIMULATED",
+        notes="Replaces the continuous-torque proxy Phase 12 left as 'subject "
+              "to thermal validation'. Steady state only: a brief overload "
+              "that this passes may be fine, and a long one it passes on "
+              "average may not be. The thermal resistance is a single lumped "
+              "number and the mounting dominates it, so it can be out by a "
+              "factor of two either way. Iron loss is linear in speed, which "
+              "understates it at high speed. Coefficients are illustrative."))
+
+    registry.register(Method(
+        name="thermal_stress",
+        category=Category.ANALYSIS,
+        summary="Stress from restrained thermal expansion, combined with the "
+                "mechanical stress.",
+        inputs=("material", "temperature_change", "constraint",
+                "mechanical_stress"),
+        outputs=("thermal_stress", "combined_safety_factor"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the part sees a temperature change",
+                      lambda c: c.require("has_temperature_change")),
+        ),
+        implementation="physics.thermal.stress.check_thermal_stress",
+        evidence="SIMULATED",
+        notes="A uniform temperature change on a uniformly restrained member. "
+              "The constraint factor is the caller's judgement and the answer "
+              "is proportional to it. Real parts have temperature gradients "
+              "that this cannot represent, and a gradient produces stress even "
+              "in a completely unrestrained body. Expansion coefficients are "
+              "reference_typical at room temperature and are themselves "
+              "temperature dependent."))
+
     # --- optimization --------------------------------------------------------
     registry.register(Method(
         name="slsqp",

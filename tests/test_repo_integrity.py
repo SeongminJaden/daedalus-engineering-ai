@@ -117,6 +117,22 @@ def test_committed_tree_can_import_every_package():
     )
     assert packages, "found no packages to import"
 
+    # Every MODULE inside those packages too, not just the package names.
+    # Importing a name only proves the name resolves, not that the right thing
+    # is behind it. Converting physics/thermal.py into a physics/thermal/
+    # package passed this test while the package was still uncommitted, because
+    # `import physics.thermal` found the old stub module in HEAD and succeeded.
+    # Importing physics.thermal.motor could not have.
+    modules = sorted(
+        ".".join(f.relative_to(REPO_ROOT).with_suffix("").parts)
+        for f in REPO_ROOT.rglob("*.py")
+        if f.name != "__init__.py"
+        and (f.parent / "__init__.py").exists()
+        and not any(part in ARTIFACT_ROOTS for part in
+                    f.relative_to(REPO_ROOT).parts)
+    )
+    assert modules, "found no modules to import"
+
     with tempfile.TemporaryDirectory() as tmp:
         export = subprocess.run(
             ["git", "worktree", "add", "--detach", tmp, "HEAD"],
@@ -129,6 +145,11 @@ def test_committed_tree_can_import_every_package():
                 f"sys.path.insert(0, {tmp!r})\n"
                 "import importlib\n"
                 f"for name in {packages!r}:\n"
+                "    module = importlib.import_module(name)\n"
+                "    assert hasattr(module, '__path__'), (\n"
+                "        name + ' is a package here but resolved to a plain "
+                "module in the commit')\n"
+                f"for name in {modules!r}:\n"
                 "    importlib.import_module(name)\n"
                 "print('OK')\n"
             )

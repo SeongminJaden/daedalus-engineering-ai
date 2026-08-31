@@ -1709,5 +1709,116 @@ def loadpath(
         "boundary dimensions, not vendor part numbers.")
 
 
+@app.command()
+def thermal(
+    motor_id: str = typer.Option("bldc_100w", "--motor"),
+    torque_nm: float = typer.Option(0.60, "--torque-nm",
+                                    help="torque during the active part"),
+    speed_rad_s: float = typer.Option(300.0, "--speed-rad-s"),
+    duty_fraction: float = typer.Option(0.5, "--duty-fraction",
+                                        help="share of the cycle spent active"),
+    ambient_c: float = typer.Option(40.0, "--ambient-c"),
+    material_id: str = typer.Option("al_7075_t6", "--material"),
+    delta_t_k: float = typer.Option(60.0, "--delta-t-k",
+                                    help="temperature change, signed"),
+    constraint: float = typer.Option(1.0, "--constraint",
+                                     help="0 free, 1 fully restrained"),
+    mechanical_mpa: float = typer.Option(0.0, "--mechanical-mpa",
+                                         help="mechanical stress, signed"),
+):
+    """Motor winding temperature under a duty, and restrained thermal stress."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from drivetrain.motors.catalog import get_motor
+    from physics.thermal import (DutySegment, check_motor_thermal,
+                                 check_thermal_stress, rms_torque_nm,
+                                 stress_per_kelvin_pa)
+
+    console = Console()
+    if not 0.0 < duty_fraction <= 1.0:
+        console.print("[red]--duty-fraction must be in (0, 1][/red]")
+        raise typer.Exit(code=2)
+
+    motor = get_motor(motor_id)
+    duty = [DutySegment(torque_nm, speed_rad_s, duty_fraction)]
+    if duty_fraction < 1.0:
+        duty.append(DutySegment(0.0, 0.0, 1.0 - duty_fraction))
+    result = check_motor_thermal(motor, duty, ambient_c=ambient_c)
+    mean_torque = torque_nm * duty_fraction
+
+    table = Table(title=f"{motor.name}, {duty_fraction:.0%} of the cycle at "
+                        f"{torque_nm} N m")
+    table.add_column("quantity")
+    table.add_column("value", justify="right")
+    table.add_column("note")
+    table.add_row("mean torque", f"{mean_torque:.4f} N m",
+                  f"against the {motor.continuous_torque_nm} N m rating: "
+                  + ("within" if mean_torque <= motor.continuous_torque_nm
+                     else "over"))
+    table.add_row("RMS torque", f"{result.rms_torque_nm:.4f} N m",
+                  "what actually heats it, since copper loss goes as torque "
+                  "squared")
+    table.add_row("copper loss", f"{result.losses.copper_w:.2f} W", "k T_rms^2")
+    table.add_row("iron loss", f"{result.losses.iron_w:.2f} W",
+                  "k omega, linear stand-in for core loss")
+    table.add_row("temperature rise", f"{result.temperature_rise_k:.1f} K",
+                  f"P_loss x R_th ({motor.thermal_resistance_k_w} K/W)")
+    table.add_row("winding", f"{result.winding_c:.1f} C",
+                  f"ambient {ambient_c:.0f} C plus the rise")
+    table.add_row("limit", f"{result.limit_c:.0f} C",
+                  f"insulation class {motor.insulation_class.value}")
+    table.add_row("margin", f"{result.margin_k:.1f} K",
+                  "[green]pass[/green]" if result.passes
+                  else "[red]fail[/red]")
+    console.print(table)
+    if mean_torque <= motor.continuous_torque_nm and not result.passes:
+        console.print(
+            "[yellow]![/yellow] the continuous-torque proxy accepts this duty "
+            "and the thermal model rejects it. A proxy sees only the average, "
+            "not the shape of the cycle.")
+    console.print(
+        "[yellow]note[/yellow] steady state only. A brief overload this rejects "
+        "may be harmless, and a long one it accepts on average may not be. "
+        "The thermal resistance is one lumped number and the mounting "
+        "dominates it, so it can be out by a factor of two either way.")
+
+    material = get_material(material_id)
+    if material.thermal_expansion_1_k is None:
+        console.print(f"[red]{material_id} has no expansion coefficient[/red]")
+        raise typer.Exit(code=2)
+    stress = check_thermal_stress(material, delta_t_k=delta_t_k,
+                                  mechanical_stress_pa=mechanical_mpa * 1e6,
+                                  constraint=constraint)
+
+    second = Table(title=f"{material.name}, dT = {delta_t_k:+g} K, constraint "
+                         f"{constraint:g}")
+    second.add_column("quantity")
+    second.add_column("value", justify="right")
+    second.add_column("note")
+    second.add_row("expansion coefficient", f"{stress.alpha_1_k:.3e} 1/K",
+                   f"{material.status.value}, room temperature")
+    second.add_row("stress per kelvin",
+                   f"{stress_per_kelvin_pa(material.youngs_modulus_pa, stress.alpha_1_k) / 1e6:.4f} MPa/K",
+                   "E alpha, at full restraint")
+    second.add_row("thermal stress",
+                   f"{stress.thermal_stress_pa / 1e6:+.2f} MPa",
+                   "compression when heated, tension when cooled")
+    second.add_row("mechanical stress", f"{mechanical_mpa:+.2f} MPa", "as given")
+    second.add_row("combined", f"{stress.combined_stress_pa / 1e6:+.2f} MPa",
+                   f"superposed with signs; {stress.governing_contribution} "
+                   f"dominates")
+    second.add_row("safety factor", f"{stress.safety_factor:.2f}",
+                   "[green]pass[/green]" if stress.passes
+                   else "[red]fail[/red]")
+    console.print(second)
+    console.print(
+        "[yellow]note[/yellow] a uniform temperature change on a uniformly "
+        "restrained member. The constraint factor is your judgement and the "
+        "answer is proportional to it. Real parts have gradients, which "
+        "produce stress even with no restraint at all.")
+
+
 if __name__ == "__main__":
     app()

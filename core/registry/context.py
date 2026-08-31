@@ -40,6 +40,10 @@ class ProblemContext:
     # all, so both gate a method.
     transmits_torque: bool | None = None
     has_rotating_support: bool | None = None
+    # Whether the problem states a duty cycle to heat a motor with, and whether
+    # the part sees a temperature change. Neither check exists without them.
+    has_duty_cycle: bool | None = None
+    has_temperature_change: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
     # Scale

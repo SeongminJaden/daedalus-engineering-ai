@@ -84,6 +84,22 @@ class MaterialSpec(BaseModel):
     strength_trans_pa: float | None = Field(default=None, gt=0.0)
     strength_shear_pa: float | None = Field(default=None, gt=0.0)
 
+    # --- thermal expansion, 1/K ---
+    #
+    # NOT constrained positive. Carbon fibre CONTRACTS along its length when
+    # heated, so a unidirectional laminate has a small negative alpha_1, and a
+    # gt=0 constraint here would reject the physically correct value. That is
+    # the whole reason this field is written out rather than assumed.
+    #
+    # For an orthotropic material a single number is as meaningless as a single
+    # yield strength: CFRP is about -0.5e-6 along the fibres and 25e-6 across
+    # them, a factor of fifty apart and of opposite sign. The directional
+    # fields below carry that and the validator requires them.
+    thermal_expansion_1_k: float | None = None
+    cte1_1_k: float | None = None
+    cte2_1_k: float | None = None
+    cte3_1_k: float | None = None
+
     # --- composite layup. Single orientation for now, list-shaped so a real
     #     stack does not need a schema change later. ---
     orientation_deg: list[float] | None = None
@@ -119,6 +135,14 @@ class MaterialSpec(BaseModel):
             raise ValueError(
                 f"{self.id}: orthotropic material needs direction-dependent "
                 "strengths; a single yield value would be misleading")
+        if self.thermal_expansion_1_k is not None and (
+                self.cte1_1_k is None or self.cte2_1_k is None):
+            raise ValueError(
+                f"{self.id}: orthotropic material declares a thermal "
+                f"expansion coefficient but not the directional ones. A single "
+                f"alpha is meaningless here for the same reason a single yield "
+                f"strength is, and worse: the two directions can differ in "
+                f"SIGN")
         return self
 
     # --- expansion to the single constitutive path -------------------------- #

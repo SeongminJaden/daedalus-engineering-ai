@@ -17,6 +17,17 @@
 # fatigue_strength_pa is a representative endurance value (R.R. Moore rotating
 # beam, ~5e8 cycles for these alloys). Aluminium has no true endurance limit,
 # so this is a reference point, not a guarantee of infinite life.
+#
+# thermal_expansion_1_k is the linear coefficient in 1/K, reference_typical at
+# room temperature. Two caveats travel with it. It is TEMPERATURE DEPENDENT and
+# the single value here is a room-temperature figure, so a large excursion
+# needs a curve rather than this number. And the polymer values scatter far
+# more than the metal ones, easily +/- 20% between grades and fillers, so treat
+# abs/pla/petg/pc/pa12 as order-of-magnitude.
+#
+# CFRP carries DIRECTIONAL coefficients because a single value would be worse
+# than useless there: carbon fibre contracts along its length when heated, so
+# alpha_1 is NEGATIVE while alpha_2 across the fibres is large and positive.
 
 materials:
   - id: al_7075_t6
@@ -28,6 +39,7 @@ materials:
     poisson_ratio: 0.33
     shear_modulus_pa: 26.9e9
     fatigue_strength_pa: 159.0e6
+    thermal_expansion_1_k: 2.36e-05
     source: MatWeb/MMPDS typical (verify vs supplier datasheet)
     status: reference_typical
 
@@ -40,6 +52,7 @@ materials:
     poisson_ratio: 0.33
     shear_modulus_pa: 26.0e9
     fatigue_strength_pa: 96.5e6
+    thermal_expansion_1_k: 2.36e-05
     source: MatWeb typical (verify vs supplier datasheet)
     status: reference_typical
   - id: al_2024_t3
@@ -51,6 +64,7 @@ materials:
     poisson_ratio: 0.33
     shear_modulus_pa: 27481203007.518795
     fatigue_strength_pa: 1.38e+08
+    thermal_expansion_1_k: 2.36e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb/MMPDS typical (verify vs supplier datasheet)
@@ -64,6 +78,7 @@ materials:
     poisson_ratio: 0.342
     shear_modulus_pa: 42399403874.813705
     fatigue_strength_pa: 5.1e+08
+    thermal_expansion_1_k: 8.6e-06
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical, annealed (verify vs supplier datasheet)
@@ -77,6 +92,7 @@ materials:
     poisson_ratio: 0.29
     shear_modulus_pa: 79457364341.08527
     fatigue_strength_pa: 2.45e+08
+    thermal_expansion_1_k: 1.17e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: JIS G4051 / MatWeb typical, normalized (verify vs supplier datasheet)
@@ -90,6 +106,7 @@ materials:
     poisson_ratio: 0.29
     shear_modulus_pa: 79457364341.08527
     fatigue_strength_pa: 3.95e+08
+    thermal_expansion_1_k: 1.17e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: JIS G4105 / MatWeb typical, Q&T (verify vs supplier datasheet)
@@ -103,6 +120,7 @@ materials:
     poisson_ratio: 0.3
     shear_modulus_pa: 74230769230.76923
     fatigue_strength_pa: 2.4e+08
+    thermal_expansion_1_k: 1.6e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical, annealed (verify vs supplier datasheet)
@@ -116,6 +134,7 @@ materials:
     poisson_ratio: 0.35
     shear_modulus_pa: 16666666666.666666
     fatigue_strength_pa: 1.1e+08
+    thermal_expansion_1_k: 2.6e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     source: MatWeb typical (verify vs supplier datasheet)
@@ -129,6 +148,7 @@ materials:
     poisson_ratio: 0.35
     shear_modulus_pa: 851851851.8518518
     fatigue_strength_pa: 1.5e+07
+    thermal_expansion_1_k: 9e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -144,6 +164,7 @@ materials:
     poisson_ratio: 0.36
     shear_modulus_pa: 1286764705.882353
     fatigue_strength_pa: 1.8e+07
+    thermal_expansion_1_k: 7e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -159,6 +180,7 @@ materials:
     poisson_ratio: 0.39
     shear_modulus_pa: 503597122.30215824
     fatigue_strength_pa: 1.7e+07
+    thermal_expansion_1_k: 9e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -174,6 +196,7 @@ materials:
     poisson_ratio: 0.38
     shear_modulus_pa: 760869565.2173914
     fatigue_strength_pa: 1.8e+07
+    thermal_expansion_1_k: 7e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -189,6 +212,7 @@ materials:
     poisson_ratio: 0.37
     shear_modulus_pa: 839416058.3941605
     fatigue_strength_pa: 2.2e+07
+    thermal_expansion_1_k: 7e-05
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -204,6 +228,7 @@ materials:
     poisson_ratio: 0.22
     shear_modulus_pa: 151639344262.29507
     fatigue_strength_pa: 2.0e+08
+    thermal_expansion_1_k: 8e-06
     material_class: isotropic
     derived_fields: [shear_modulus_pa]
     notes: >-
@@ -223,6 +248,10 @@ materials:
     poisson_ratio: 0.3
     shear_modulus_pa: 5.0e+09
     fatigue_strength_pa: 6.0e+08
+    thermal_expansion_1_k: -5e-07
+    cte1_1_k: -0.5e-06
+    cte2_1_k: 25.0e-06
+    cte3_1_k: 25.0e-06
     material_class: orthotropic
     e1_pa: 1.35e+11
     e2_pa: 1.0e+10
