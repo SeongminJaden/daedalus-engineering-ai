@@ -791,5 +791,75 @@ def assemble(
     )
 
 
+@app.command()
+def dynamics(
+    nominal_payload_kg: float = typer.Option(2.0, "--payload"),
+    max_payload_kg: float = typer.Option(5.0, "--max-payload"),
+    max_accel: float = typer.Option(20.0, "--max-accel",
+                                    help="peak joint acceleration, rad/s^2"),
+):
+    """Duty cycle for the two-link arm: torque and power per load case."""
+    import numpy as np
+    from rich.console import Console
+    from rich.table import Table
+
+    from core.materials import get_material
+    from physics.dynamics import evaluate_duty_cycle
+    from projects.robotic_arm.arm import build_arm
+
+    console = Console()
+    arm = build_arm()
+    density = get_material(arm.material_id).density_kg_m3
+    duty = evaluate_duty_cycle(arm, density,
+                               nominal_payload_kg=nominal_payload_kg,
+                               max_payload_kg=max_payload_kg,
+                               max_accel_rad_s2=max_accel)
+    names = [j.name for j in arm.actuated_joints()]
+
+    table = Table(title="load cases: torque, power, and how much is dynamic")
+    table.add_column("case", style="bold")
+    table.add_column("duty", justify="right")
+    for name in names:
+        table.add_column(f"{name} tau (N m)", justify="right")
+        table.add_column(f"{name} P (W)", justify="right")
+    table.add_column("dynamic share", justify="right")
+
+    for result in duty.results:
+        row = [result.case.name, f"{result.case.duty_fraction:.0%}"]
+        for i in range(len(names)):
+            row.append(f"{result.torque_nm[i]:+.4f}")
+            row.append(f"{result.power_w[i]:+.3f}")
+        row.append(", ".join(f"{v:+.1%}" for v in result.dynamic_share))
+        table.add_row(*row)
+    console.print(table)
+
+    summary = Table(title="actuator requirements per joint")
+    summary.add_column("joint", style="bold")
+    summary.add_column("peak torque (N m)", justify="right")
+    summary.add_column("continuous RMS (N m)", justify="right")
+    summary.add_column("peak / continuous", justify="right")
+    summary.add_column("peak power (W)", justify="right")
+    peak = duty.peak_torque_nm()
+    continuous = duty.continuous_torque_nm()
+    ratio = duty.peak_to_continuous_ratio()
+    power = duty.peak_power_w()
+    for i, name in enumerate(names):
+        summary.add_row(name, f"{peak[i]:.4f}", f"{continuous[i]:.4f}",
+                        f"{ratio[i]:.2f}x", f"{power[i]:.3f}")
+    console.print(summary)
+
+    console.print(
+        "[dim]Peak and continuous are different ratings and both are needed: "
+        "sizing to the peak alone over-specifies the drive, sizing to the "
+        "continuous value alone overheats it on every acceleration. A negative "
+        "dynamic share means acceleration is relieving gravity in that pose, "
+        "not adding to it.[/dim]")
+    console.print(
+        "[dim]Rigid bodies on ideal joints. Friction, backlash and joint "
+        "compliance are all zero: the terms exist, the data does not. These are "
+        "the torques a motor must supply; SELECTING that motor and its gearbox "
+        "is a later phase. Still SIMULATED.[/dim]")
+
+
 if __name__ == "__main__":
     app()
