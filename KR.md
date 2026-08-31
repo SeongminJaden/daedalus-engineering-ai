@@ -341,9 +341,24 @@ python -m interfaces.cli.main brain --generalize
 
 ## 함께한 사람들
 
-| | |
-|---|---|
-| [@SeongminJaden](https://github.com/SeongminJaden) | 제작자, 메인테이너 |
+<div align="center">
+
+<table><tr>
+<td align="center">
+  <a href="https://github.com/SeongminJaden">
+    <img src="https://github.com/SeongminJaden.png?size=100" width="80" alt="SeongminJaden"/><br/>
+    <sub><b>SeongminJaden</b></sub>
+  </a>
+</td>
+</tr></table>
+
+</div>
+
+<!-- To add a contributor, add another <td align="center"> block above.
+     For an auto-updating grid with circular avatars, replace the table with:
+[![Contributors](https://contrib.rocks/image?repo=SeongminJaden/daedalus-engineering-ai)](https://github.com/SeongminJaden/daedalus-engineering-ai/graphs/contributors)
+     Note: GitHub strips style attributes from README HTML, so hand-written
+     avatars render square. contrib.rocks is what produces round ones. -->
 
 기여를 환영한다. **[CONTRIBUTING.md](CONTRIBUTING.md)** 참고. 이 프로젝트가
 중요하게 여기는 건 기여의 양이 아니라 하나의 습관이다: 각 계층이 자신이
