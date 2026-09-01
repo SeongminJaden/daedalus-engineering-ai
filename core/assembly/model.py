@@ -7,6 +7,8 @@ model rejects them rather than silently producing a wrong answer.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from enum import Enum
 
 import numpy as np
@@ -112,6 +114,34 @@ class Joint(BaseModel):
         return True
 
 
+@dataclass(frozen=True)
+class LimitViolation:
+    """One actuated joint asked to go somewhere it cannot.
+
+    Carries the limit it broke and by how much, because "infeasible" without a
+    number tells a caller nothing about whether the pose was slightly outside
+    or nowhere near.
+    """
+
+    joint: str
+    value: float
+    lower_limit: float | None
+    upper_limit: float | None
+
+    @property
+    def excess(self) -> float:
+        if self.lower_limit is not None and self.value < self.lower_limit:
+            return self.lower_limit - self.value
+        if self.upper_limit is not None and self.value > self.upper_limit:
+            return self.value - self.upper_limit
+        return 0.0
+
+    def __str__(self) -> str:
+        bound = (f"[{self.lower_limit}, {self.upper_limit}]")
+        return (f"joint {self.joint!r} at {self.value:.6f} is outside {bound} "
+                f"by {self.excess:.6f}")
+
+
 class Assembly(BaseModel):
     """An open chain of links and joints, rooted at the base."""
 
@@ -192,6 +222,37 @@ class Assembly(BaseModel):
             out.append(joint)
             frontier.extend(by_parent.get(joint.child, []))
         return out
+
+    def limit_violations(self, q, tol: float = 1e-9
+                         ) -> "tuple[LimitViolation, ...]":
+        """Which actuated joints are outside their stated range at q.
+
+        Joint limits were recorded and never checked anywhere but IK, which
+        clamps silently. A pose that violates them is not a slightly worse
+        design, it is a pose the mechanism cannot reach, and any torque or
+        stress computed there describes something that cannot happen.
+
+        Returns every violation rather than the first, so a caller sees the
+        whole picture instead of fixing one and rediscovering the next.
+        """
+        import numpy as _np
+
+        values = _np.asarray(q, dtype=float).reshape(-1)
+        actuated = self.actuated_joints()
+        if values.shape[0] != len(actuated):
+            raise ValueError(
+                f"expected {len(actuated)} joint values for {self.name}, "
+                f"got {values.shape[0]}")
+        return tuple(
+            LimitViolation(joint=joint.name, value=float(value),
+                           lower_limit=joint.lower_limit,
+                           upper_limit=joint.upper_limit)
+            for joint, value in zip(actuated, values)
+            if not joint.within_limits(float(value), tol))
+
+    def within_limits(self, q, tol: float = 1e-9) -> bool:
+        """Whether every actuated joint is inside its stated range at q."""
+        return not self.limit_violations(q, tol)
 
     def actuated_joints(self) -> list[Joint]:
         return [j for j in self.ordered_joints() if j.is_actuated()]

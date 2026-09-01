@@ -186,9 +186,37 @@ def worst_gravity_pose(assembly: Assembly, density_kg_m3: float,
     For a serial arm the worst static case is the one with the longest moment
     arm, which is the chain stretched horizontally. This searches the base
     joint angle on a grid rather than asserting it, so the answer is measured.
+
+    THE SEARCH IS RESTRICTED TO REACHABLE POSES. It used to sweep the whole
+    circle regardless of what the joint allows, which sizes a motor for a pose
+    the mechanism cannot get into: with the shoulder limited to plus or minus
+    0.5 rad it still returned -3.1416. An unreachable worst case is not
+    conservative, it is wrong in an unknown direction, because the true worst
+    REACHABLE pose is a different pose with a different torque.
+
+    Raises when the resting pose itself is unreachable, since the other joints
+    are held at zero and a zero outside their limits makes every sample
+    invalid rather than merely the extremes.
     """
+    base = assembly.actuated_joints()[0]
+    low = -np.pi if base.lower_limit is None else max(-np.pi, base.lower_limit)
+    high = np.pi if base.upper_limit is None else min(np.pi, base.upper_limit)
+    if low > high:
+        raise ValueError(
+            f"joint {base.name!r} has no reachable angle in [-pi, pi]")
+
+    resting = np.zeros(assembly.dof)
+    resting[0] = low
+    violations = [v for v in assembly.limit_violations(resting)
+                  if v.joint != base.name]
+    if violations:
+        raise ValueError(
+            "the held joints are outside their limits at zero, so no sample "
+            "in this search is reachable: "
+            + "; ".join(str(v) for v in violations))
+
     best_q, best = None, -np.inf
-    for angle in np.linspace(-np.pi, np.pi, samples):
+    for angle in np.linspace(low, high, samples):
         q = np.zeros(assembly.dof)
         q[0] = angle
         torque = np.abs(joint_torques(assembly, q, density_kg_m3,

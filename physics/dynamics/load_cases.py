@@ -148,7 +148,24 @@ def standard_load_cases(
 
 
 def evaluate_case(assembly: Assembly, case: LoadCase,
-                  density_kg_m3: float) -> CaseResult:
+                  density_kg_m3: float,
+                  require_reachable: bool = True) -> CaseResult:
+    """Torques and power for one load case.
+
+    A case whose pose violates a joint limit is REFUSED rather than evaluated.
+    Joint limits used to be recorded and never checked, so a duty cycle could
+    size a motor from a pose the mechanism cannot reach; the torque computed
+    there is not conservative, it describes a different mechanism. Pass
+    `require_reachable=False` only to study a pose deliberately outside the
+    limits, which is a legitimate thing to want and should have to be asked
+    for.
+    """
+    if require_reachable:
+        violations = assembly.limit_violations(case.q)
+        if violations:
+            raise ValueError(
+                f"load case {case.name!r} is not reachable: "
+                + "; ".join(str(v) for v in violations))
     torque = inverse_dynamics(assembly, case.q, case.qd, case.qdd,
                               density_kg_m3, tip_force_n=case.payload_force_n())
     static = inverse_dynamics(assembly, case.q, np.zeros_like(case.qd),

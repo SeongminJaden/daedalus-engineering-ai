@@ -170,7 +170,10 @@ def build_default_registry() -> MethodRegistry:
         conditions=(_assembly,),
         implementation="core.assembly.statics",
         evidence="SIMULATED",
-        notes="Quasi-static. No inertial terms."))
+        notes="Quasi-static. No inertial terms. Poses are checked against the "
+              "joint limits: a torque computed at a pose the mechanism cannot "
+              "reach describes a different mechanism, so it is refused rather "
+              "than returned."))
 
     registry.register(Method(
         name="dynamics",
@@ -182,7 +185,10 @@ def build_default_registry() -> MethodRegistry:
         conditions=(_assembly,),
         implementation="physics.dynamics.equations.inverse_dynamics",
         evidence="SIMULATED",
-        notes="Rigid links. Link flexibility is not modelled."))
+        notes="Rigid links. Link flexibility is not modelled. A load case "
+              "outside the joint limits is refused rather than evaluated, "
+              "because sizing an actuator from an unreachable pose is not "
+              "conservative, it is wrong in an unknown direction."))
 
     registry.register(Method(
         name="surrogate_screen",
