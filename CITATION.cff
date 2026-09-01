@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: Daedalus Engineering AI
+message: >-
+  If you refer to this software, please cite it using the metadata below.
+  Note that every result it produces is simulated and none has been
+  physically validated.
+type: software
+authors:
+  - name: SeongminJaden
+    alias: SeongminJaden
+repository-code: https://github.com/SeongminJaden/daedalus-engineering-ai
+license: Apache-2.0
+version: 0.1.0
+date-released: '2026-09-01'
+keywords:
+  - engineering design automation
+  - finite element method
+  - topology optimization
+  - multibody dynamics
+  - gpu computing
+abstract: >-
+  An autonomous engineering design engine covering reasoning, design
+  generation, GPU accelerated physics, optimization, and an evidence graded
+  memory that records how far each result has earned trust. Structural,
+  thermal, fluid and multibody analysis are cross validated against
+  independently written solvers, specifically CalculiX, OpenFOAM, Pinocchio
+  and Gmsh. All results are simulated. Nothing has been built, loaded or
+  measured, so the evidence ladder cannot reach its experimentally validated
+  level, and the tool is not qualified for certification or production parts.
