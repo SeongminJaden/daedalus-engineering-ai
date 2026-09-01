@@ -8,6 +8,7 @@ type: software
 authors:
   - name: LeeSeongmin
     alias: SeongminJaden
+    email: 101249717+SeongminJaden@users.noreply.github.com
 repository-code: https://github.com/SeongminJaden/daedalus-engineering-ai
 license: Apache-2.0
 version: 0.1.0
