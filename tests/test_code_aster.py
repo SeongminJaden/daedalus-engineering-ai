@@ -259,3 +259,66 @@ def test_the_plastic_front_is_right_at_several_pressures(tmp_path,
     assert pressure_pa < run.fully_plastic_pressure_pa
     error = abs(run.plastic_radius_m - run.exact_plastic_radius_m)
     assert error / run.exact_plastic_radius_m < 0.03
+
+
+# ------------------------------------------------- contact, NOT yet verified
+
+def test_the_hertz_closed_forms_are_correct_arithmetic():
+    """The formulas, checked without a solver.
+
+    These are right and are worth keeping even though the solve is not
+    working, because when it is fixed the target must already be known good.
+    """
+    contact = code_aster.HertzContact(
+        sphere_radius_m=0.01, force_n=100.0, youngs_modulus_pa=210e9,
+        poisson_ratio=0.3, contact_radius_m=0.0, peak_pressure_pa=0.0,
+        zone_radius_m=0.0)
+    effective = 210e9 / (1.0 - 0.3 ** 2)
+    assert contact.effective_modulus_pa == pytest.approx(effective, rel=1e-12)
+
+    radius = (3 * 100.0 * 0.01 / (4 * effective)) ** (1 / 3)
+    assert contact.exact_contact_radius_m == pytest.approx(radius, rel=1e-12)
+    assert contact.exact_peak_pressure_pa == pytest.approx(
+        3 * 100.0 / (2 * math.pi * radius ** 2), rel=1e-12)
+    assert contact.exact_approach_m == pytest.approx(radius ** 2 / 0.01,
+                                                     rel=1e-12)
+
+
+def test_the_half_space_assumption_is_reported():
+    """Hertz assumes each body is a half space near the contact, which holds
+    while the contact radius is small against the sphere radius."""
+    contact = code_aster.HertzContact(
+        sphere_radius_m=0.01, force_n=100.0, youngs_modulus_pa=210e9,
+        poisson_ratio=0.3, contact_radius_m=0.0, peak_pressure_pa=0.0,
+        zone_radius_m=0.0)
+    assert contact.half_space_ratio < 0.05
+
+
+@requires_aster
+@pytest.mark.xfail(strict=True,
+                   reason="the unilateral condition is inert: the contact "
+                          "zone sits 9.6 micrometres BELOW the plane under a "
+                          "2.2 micrometre imposed approach, so the bodies "
+                          "interpenetrate freely. The contact is passed to "
+                          "STAT_NON_LINE and the solve is nonlinear, both "
+                          "checked in the generated command file, so neither "
+                          "of those is the cause")
+def test_hertz_contact_matches_the_closed_form(tmp_path):
+    """Marked as a known failure rather than deleted or loosened.
+
+    strict=True means this fails if it ever starts passing, so a fix cannot
+    land silently.
+    """
+    result = code_aster.hertz_contact(tmp_path, force_n=100.0)
+    assert result.contact_radius_error < 0.10
+    assert result.peak_pressure_error < 0.15
+
+
+def test_no_contact_capability_is_registered():
+    """Plasticity is registered because it is verified. Contact is not."""
+    from nodes.roster import build_roster
+
+    names = {c.name for c in build_roster().all()}
+    assert code_aster.ASTER_PLASTICITY_CAPABILITY in names
+    assert not any("contact" in n for n in names
+                   if n.startswith("analysis.fea"))
