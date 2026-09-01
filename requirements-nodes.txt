@@ -30,3 +30,26 @@ mcp>=2.1
 #
 # `sudo apt install calculix-ccx` does the same thing system-wide if that is
 # preferred. Verify with `ccx -v`.
+
+# ---------------------------------------------------------------------------
+# OpenFOAM, for the CFD cross-check (nodes/openfoam.py).
+#
+# Not a Python package. Installed the same sudo-free way as CalculiX:
+#
+#   apt-get download libopenfoam openfoam        # 64.4 MB total
+#   dpkg-deb -x <each>.deb ~/.local/opt/openfoam # 415 MB unpacked
+#
+# The node sets WM_PROJECT_DIR, FOAM_ETC and LD_LIBRARY_PATH itself, so no
+# shell wrapper or sourcing of etc/bashrc is needed. MPI comes from the system.
+# Distribution is the ESI (openfoam.com) build, v1912 patch 200626.
+# `sudo apt install openfoam` does the same thing system-wide.
+
+# ---------------------------------------------------------------------------
+# Pinocchio, for the multibody cross-check (nodes/pinocchio_node.py).
+#
+#   pip install pin
+#
+# 94 MB including its vendored boost, coal, assimp, octomap, qhull and
+# urdfdom. It requires numpy, which this project already pins; check that a
+# numpy upgrade is not pulled in, because Warp and torch are built against it.
+pin

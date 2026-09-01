@@ -77,6 +77,11 @@ class ProblemContext:
     has_thermal_transient: bool | None = None
     # Fluid carried through a conduit, a body moving through a fluid, and
     # fluid power actuation.
+    # Whether the problem is an articulated chain of rigid links. The
+    # multibody methods exist only for a mechanism; a single bracket has no
+    # mass matrix, and routing one there would return a 0 by 0 answer rather
+    # than declining.
+    has_articulated_chain: bool | None = None
     has_internal_flow: bool | None = None
     # Whether the internal flow is laminar. The closed-form correlations cover
     # both regimes, but a CFD run configured with a laminar closure covers only

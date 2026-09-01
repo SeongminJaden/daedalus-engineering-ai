@@ -22,6 +22,11 @@ from .roster import build_roster
 from .registry import (IN_PROCESS_NODE, Capability, CapabilityCandidates,
                        CapabilityExclusion, CapabilityRegistry,
                        DuplicateCapability, UnknownCapability)
+from .pinocchio_node import (PINOCCHIO_CAPABILITY, PINOCCHIO_NODE_NAME,
+                             MultibodyComparison, compare as pinocchio_compare,
+                             load_model as pinocchio_load_model,
+                             pinocchio_descriptor,
+                             version as pinocchio_version)
 from .openfoam import (OPENFOAM_CAPABILITY, OPENFOAM_NODE_NAME, ChannelCase,
                        FlowResult, PipeCase, openfoam_descriptor,
                        solve as openfoam_solve,
@@ -46,6 +51,9 @@ __all__ = [
     "OPENFOAM_CAPABILITY", "OPENFOAM_NODE_NAME", "ChannelCase", "PipeCase",
     "FlowResult", "openfoam_descriptor", "openfoam_solve", "openfoam_version",
     "FlowCrossValidation", "flow_cross_validated_status",
+    "PINOCCHIO_CAPABILITY", "PINOCCHIO_NODE_NAME", "MultibodyComparison",
+    "pinocchio_compare", "pinocchio_load_model", "pinocchio_descriptor",
+    "pinocchio_version",
     "calculix_solve", "calculix_version", "cross_validated_status",
     "is_available", "write_deck", "FUSION_ANALYSES",
     "FUSION_CAPABILITY", "FUSION_NODE_NAME", "FUSION_UNAVAILABLE_REASON",

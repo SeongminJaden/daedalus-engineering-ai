@@ -12,6 +12,8 @@ from core.registry import DEFAULT_REGISTRY, MethodRegistry
 
 from .calculix import calculix_capability_method, calculix_descriptor
 from .openfoam import openfoam_capability_method, openfoam_descriptor
+from .pinocchio_node import (pinocchio_capability_method,
+                             pinocchio_descriptor)
 from .engine_node import engine_descriptor
 from .fusion_node import fusion_capability_method, fusion_descriptor
 from .reasoning_node import reasoning_capability_method, reasoning_descriptor
@@ -38,6 +40,8 @@ def build_roster(methods: MethodRegistry | None = None,
     # policy.
     registry.register(calculix_capability_method(), calculix_descriptor())
     registry.register(openfoam_capability_method(), openfoam_descriptor())
+    registry.register(pinocchio_capability_method(),
+                      pinocchio_descriptor())
     registry.register(reasoning_capability_method(),
                       reasoning_descriptor(available=reasoning_available))
     return registry
