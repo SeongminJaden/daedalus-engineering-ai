@@ -101,6 +101,16 @@ class ProblemContext:
     has_fluid_actuator: bool | None = None
     needs_stress_field: bool | None = None
     needs_gradients: bool | None = None
+    # Electromagnetics. A conductor carrying a known current is the input a
+    # magnetostatic solve needs. The other two gate it, and both bound it in
+    # the direction that flatters a design, so neither may be assumed: the
+    # skin depth must exceed the conductor, since otherwise current crowds
+    # into the surface and a static solve understates the resistance, and the
+    # permeability must be linear, since past the knee of a B-H curve a linear
+    # solve overstates the flux.
+    has_conductor_current: bool | None = None
+    skin_depth_exceeds_conductor: bool | None = None
+    magnetically_linear: bool | None = None
     # Scale
     n_design_variables: int | None = None
     n_elements: int | None = None

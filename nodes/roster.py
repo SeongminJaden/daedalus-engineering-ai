@@ -15,6 +15,7 @@ from .calculix import (calculix_capability_method,
                        calculix_general_capability_method)
 from .feature_recognizer import (feature_recognizer_capability_method,
                                  feature_recognizer_descriptor)
+from .elmer import elmer_capability_method, elmer_descriptor
 from .gmsh_node import gmsh_capability_method, gmsh_descriptor
 from .mujoco_node import mujoco_capability_method, mujoco_descriptor
 from .openfoam import openfoam_capability_method, openfoam_descriptor
@@ -51,6 +52,7 @@ def build_roster(methods: MethodRegistry | None = None,
                       calculix_descriptor())
     registry.register(feature_recognizer_capability_method(),
                       feature_recognizer_descriptor())
+    registry.register(elmer_capability_method(), elmer_descriptor())
     registry.register(gmsh_capability_method(), gmsh_descriptor())
     registry.register(mujoco_capability_method(), mujoco_descriptor())
     registry.register(openfoam_capability_method(), openfoam_descriptor())
