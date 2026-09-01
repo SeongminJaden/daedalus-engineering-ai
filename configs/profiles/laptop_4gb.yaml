@@ -10,7 +10,21 @@ gpu:
   device: cuda
 
 compute:
-  max_batch: 4
+  # Designs per beam kernel launch. Raised from 4 after measuring that the
+  # beam path is entirely LAUNCH bound: one launch costs about 19 ms whether
+  # it carries 4 designs or 4096, and peak VRAM stays at 123 MiB either way,
+  # because a beam evaluation is closed form per design and allocates no mesh.
+  # At the old value a 512 design population became 128 launches and took
+  # 2171 ms; in one launch it takes 16.5 ms, a measured 131x.
+  #
+  # Results are BITWISE identical across batch sizes, checked on 300 random
+  # designs for mass, stress and deflection, so this is purely a speed change.
+  #
+  # 256 rather than the 4096 that still showed no memory growth, because 4096
+  # is only justified for the path that was measured. This knob also caps any
+  # future batched path, and a count is a crude proxy for memory. The 3D FEM
+  # path does NOT use it; that is bounded separately by fem_max_dofs.
+  max_batch: 256
   amp: true                 # mixed precision on: halves activation memory
   dtype: float32
   grad_checkpointing: true

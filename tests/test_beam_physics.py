@@ -186,7 +186,7 @@ def test_batch_matches_one_at_a_time(problem):
 
 
 def test_batch_size_comes_from_profile():
-    assert resolve_batch_size("laptop_4gb") == 4
+    assert resolve_batch_size("laptop_4gb") == 256
     assert resolve_batch_size("cloud_a100") == 128
     assert resolve_batch_size("laptop_4gb", batch_size=32) == 32
 
