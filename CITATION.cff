@@ -6,7 +6,8 @@ message: >-
   physically validated.
 type: software
 authors:
-  - name: LeeSeongmin
+  - family-names: Lee
+    given-names: Seongmin
     alias: SeongminJaden
     email: 101249717+SeongminJaden@users.noreply.github.com
 repository-code: https://github.com/SeongminJaden/daedalus-engineering-ai
