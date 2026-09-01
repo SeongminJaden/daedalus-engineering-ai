@@ -375,7 +375,13 @@ def thick_cylinder(directory, inner_radius_m: float = 0.05,
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    mesh = _quarter_annulus_mesh(directory / "cyl.msh", inner_radius_m,
+    # MED, not GMSH. Code_Aster's GMSH reader was measured to mismap the
+    # named edge groups on this mesh: the file holds 14 bore edges spanning
+    # x from 0 to the bore radius, and the reader returned 23 cells spanning
+    # x to the OUTER radius, having pulled in triangles as well. The file is
+    # correct, so the fault is in the reading rather than the writing, and
+    # MED is Code_Aster's own format.
+    mesh = _quarter_annulus_mesh(directory / "cyl.med", inner_radius_m,
                                  outer_radius_m, element_size_m)
 
     study = f"""
@@ -387,7 +393,7 @@ CA.init("--test")
 A, B, P = {inner_radius_m!r}, {outer_radius_m!r}, {pressure_pa!r}
 E, NU = {youngs_modulus_pa!r}, {poisson_ratio!r}
 
-mesh = LIRE_MAILLAGE(UNITE=20, FORMAT="GMSH")
+mesh = LIRE_MAILLAGE(UNITE=20, FORMAT="MED")
 
 # The groups Code_Aster reads from a GMSH file are checked against the
 # geometry they are supposed to name. They have been observed NOT to match:
@@ -397,24 +403,23 @@ mesh = LIRE_MAILLAGE(UNITE=20, FORMAT="GMSH")
 # closed form. Refusing is better than returning it.
 coords = np.array(mesh.getCoordinates().getValues()).reshape(-1, 3)
 conn = mesh.getConnectivity()
-expected = {"BORE": ((0.0, A), (0.0, A)),
+expected = {{"BORE": ((0.0, A), (0.0, A)),
             "SYMX": ((0.0, 0.0), (A, B)),
-            "SYMY": ((A, B), (0.0, 0.0))}
+            "SYMY": ((A, B), (0.0, 0.0))}}
 tol = 1e-4 * B
 for name, ((xlo, xhi), (ylo, yhi)) in expected.items():
-    nodes = sorted({n for c in mesh.getCells(name) for n in conn[c]})
+    nodes = sorted({{n for c in mesh.getCells(name) for n in conn[c]}})
     pts = coords[nodes]
-    bad = (abs(pts[:, 0].min() - xlo) > tol or abs(pts[:, 0].max() - xhi) > tol
-           or abs(pts[:, 1].min() - ylo) > tol
-           or abs(pts[:, 1].max() - yhi) > tol)
-    if bad:
+    seen = (pts[:, 0].min(), pts[:, 0].max(), pts[:, 1].min(), pts[:, 1].max())
+    want = (xlo, xhi, ylo, yhi)
+    if any(abs(s - w) > tol for s, w in zip(seen, want)):
         raise RuntimeError(
-            f"group {name} spans x[{pts[:, 0].min():.4f},{pts[:, 0].max():.4f}] "
-            f"y[{pts[:, 1].min():.4f},{pts[:, 1].max():.4f}] but should span "
-            f"x[{xlo:.4f},{xhi:.4f}] y[{ylo:.4f},{yhi:.4f}]. The named groups "
-            f"do not correspond to the curves they were assigned to, so the "
-            f"load and the symmetry conditions would be applied to the wrong "
-            f"edges.")
+            "group " + name + " spans "
+            + repr([round(float(v), 5) for v in seen])
+            + " but should span " + repr([round(float(v), 5) for v in want])
+            + ". The named groups do not correspond to the curves they were "
+            "assigned to, so the load and the symmetry conditions would be "
+            "applied to the wrong edges.")
 
 # A pressure load needs the loaded boundary's normals to point consistently
 # out of the material. gmsh does not guarantee that, and Code_Aster refuses

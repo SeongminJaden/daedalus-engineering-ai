@@ -9,6 +9,8 @@ to anchor it.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from nodes import code_aster
@@ -75,29 +77,62 @@ def test_the_lame_closed_form_is_correct_arithmetic():
 
 
 @requires_aster
-@pytest.mark.xfail(strict=True,
-                   reason="the named groups Code_Aster reads back from the "
-                          "GMSH file do not match the curves they were "
-                          "assigned to, so the load lands on the wrong edges; "
-                          "the study now refuses rather than returning a "
-                          "plausible wrong field")
-def test_the_thick_cylinder_matches_lame(tmp_path):
-    """Marked as a known failure rather than deleted or loosened.
+def test_the_thick_cylinder_converges_at_the_right_ORDER(tmp_path):
+    """The Lame solution IS the exact answer to this elasticity problem, so
+    the discretisation converges to it and the rate can be measured.
 
-    strict=True means this test fails if it ever starts PASSING, so the fix
-    cannot land silently and the claim gets revisited deliberately.
+    A rate is stronger evidence than a tolerance: a wrong solve meets a
+    tolerance on a fine enough mesh, but cannot produce the right order. For
+    linear triangles the displacement must converge at second order and the
+    stress, being its derivative, one order lower.
     """
-    result = code_aster.thick_cylinder(tmp_path, element_size_m=0.006)
-    assert result.displacement_error < 0.05
-    assert result.hoop_stress_error < 0.10
+    results = [code_aster.thick_cylinder(tmp_path / f"s{n}", element_size_m=n)
+               for n in (0.012, 0.006, 0.003)]
+
+    displacement = [r.displacement_error for r in results]
+    hoop = [r.hoop_stress_error for r in results]
+    assert displacement[0] > displacement[1] > displacement[2]
+    assert hoop[0] > hoop[1] > hoop[2]
+
+    displacement_order = math.log2(displacement[0] / displacement[2]) / 2
+    hoop_order = math.log2(hoop[0] / hoop[2]) / 2
+    assert 1.6 < displacement_order < 2.4, displacement_order
+    assert 0.8 < hoop_order < 1.6, hoop_order
+    assert displacement_order > hoop_order
+
+
+@requires_aster
+def test_the_thick_cylinder_matches_lame(tmp_path):
+    """The values themselves, on the finest mesh the test can afford."""
+    result = code_aster.thick_cylinder(tmp_path, element_size_m=0.003)
+    assert result.displacement_error < 0.01
+    assert result.hoop_stress_error < 0.03
+
+
+@requires_aster
+def test_mismatched_groups_are_refused(tmp_path):
+    """A load on the wrong edge still produces a field, and that field looks
+    plausible until it meets a closed form.
+
+    Code_Aster's GMSH reader was measured returning the bore group spanning
+    the outer radius and holding triangles as well, while the file itself was
+    correct. Reading MED avoids it, and this guard means a future regression
+    in either direction is an error rather than a wrong number.
+    """
+    mesh = code_aster._quarter_annulus_mesh(
+        tmp_path / "bad.med", 0.05, 0.1, 0.006)
+    assert mesh.exists()
 
 
 def test_no_code_aster_capability_is_registered_yet():
-    """Nothing is claimed while only one linear case is verified.
+    """Two linear cases now pass, and still nothing is registered.
 
-    The bar proves the install and the plumbing. It does not prove the
-    nonlinear behaviour Code_Aster is actually here for, and the one case
-    that would extend the claim does not yet work.
+    Both reasons hold. Linear elasticity overlaps CalculiX, which is already
+    verified here, and by this project's own rule an overlap is a cross-check
+    rather than a capability the engine gains. And the nonlinear behaviour
+    Code_Aster is actually here for is still unverified.
+
+    Passing cases are not the same as a capability worth claiming.
     """
     from nodes.roster import build_roster
 
