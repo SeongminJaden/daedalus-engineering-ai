@@ -1,0 +1,115 @@
+# CAD-native engineering design knowledge layer
+
+A roadmap, and a record of what the existing code already provides. This is an
+addition to Daedalus, not a parallel stack: the physics, the registry, the
+Brain and the evidence ladder are the ones already here.
+
+Everything below is SIMULATED unless it says otherwise. Nothing in this
+project has been physically tested, and nothing in this layer changes that.
+
+## The shape of it
+
+One Part Dataset schema with two producers. A real STEP file and a
+parametric design rendered to CAD both go through the SAME analyzer and come
+out as the same schema. The parametric Design Genome does not get replaced by
+a CAD representation; the two coexist, and the provenance field says which
+produced a given record.
+
+No new physics. A STEP solid is meshed by Gmsh into tetrahedra and routed to
+the CalculiX general shape capability that already exists. A part that a
+structured hex grid can cover still goes to Warp, which is faster and is
+cross-validated. The knowledge layer decides WHICH existing solver runs; it
+does not add a solver.
+
+Synthetic data first. The parametric side can already generate and label parts
+in bulk, and the optimisation path is now fast enough to do it at scale, so a
+training corpus can exist before any dependence on scraped CAD.
+
+## Three rules that are not negotiable
+
+**Licensing.** No scraped CAD is bundled into this Apache licensed
+repository. Synthetic parts and permissively licensed public sets only, each
+checked individually rather than by reputation. Proprietary CAD stays local
+and untracked. The schema carries source and licence as REQUIRED fields, so a
+record whose provenance is unknown cannot be stored at all.
+
+**Rules before learning.** Feature recognition starts rule based: a hole is a
+cylindrical face, a fillet is a tangent toroidal face, and so on, each with a
+stated validity domain. A learned recogniser comes after there are labels to
+learn from, and the rule based one stays as the control to compare against.
+A learned model that agrees with nothing is not evidence.
+
+**A surrogate is not a verification.** The evidence ladder gains a SURROGATE
+level BELOW SIMULATED. A surrogate may screen, rank and suggest. It may never
+produce a final verdict, and a test enforces that rather than a convention.
+Human preference is a separate axis and does not enter the physical ladder at
+all.
+
+## What the existing code already gives us
+
+Checked against the code rather than assumed.
+
+| Need | State today |
+|---|---|
+| OpenCASCADE in the venv | ALREADY PRESENT. OCP 7.9.3.1 arrives with build123d, and its STEP reader works. Nothing to install. |
+| STEP reading | Verified on this project's own export: 2 solids, 20 faces, 96 edges, and a volume of 111200 mm3 that matches the closed form for the two links exactly. |
+| General shape to CalculiX | Done. Gmsh tetrahedra to CalculiX, C3D10, agreeing with the hex solution to 0.5 percent on the one shape both meshers cover. |
+| Registry for new nodes | Straightforward. Five external nodes have been added this way already. |
+| Brain SURROGATE level | Safe to insert. Ranks are only ever compared to each other, never to a hardcoded number, so adding a level shifts nothing. |
+| Material provenance | Already better than a new vocabulary would be, so the existing MaterialStatus is reused: reference_typical, supplier_datasheet, measured, assumed. Nothing parallel is added beside it, because two vocabularies for one idea eventually disagree. |
+| Design Genome extension | It already reserves `topology` and `structure` dict fields for later phases, so a CAD field fits the existing shape. It sets `extra="forbid"`, so the field has to be declared, which is the right way round. |
+| Design reference priors | Already present, with mandatory provenance and a confidence ceiling. Design Intent extends it rather than replacing it. |
+
+### Two CAD backends, for two different reasons
+
+**build123d is the primary parametric backend.** It is already installed, it
+is OpenCASCADE underneath, it runs natively on Linux and it costs nothing. The
+parameters to CAD to STEP half is built on it, which is what keeps the
+synthetic data engine and the generative phases from depending on a tool this
+machine cannot run.
+
+**The Fusion node stays honestly unavailable on Linux.** It is a deliberate
+stub reporting `unavailable: requires Fusion paid entitlement`, and Fusion
+runs on Windows and macOS. Marking it promoted without a working round trip
+would be exactly the kind of false claim the rest of this project is arranged
+to prevent. The Fusion round trip runs on the Windows host instead.
+
+Having both is worth more than having either. build123d and Fusion are
+INDEPENDENT kernels, so a STEP file from one is a second opinion on the
+analyzer reading a STEP file from the other, in the same way CalculiX is a
+second opinion on Warp. Once the analyzer exists, parts authored in Fusion
+become an independent check on it rather than merely more input.
+
+## Phases
+
+Phase 0 and the solver queue interleave: CAD work is CPU and OpenCASCADE
+bound, physics is GPU bound, so they do not contend.
+
+- **Phase 0** Foundations. OpenCASCADE confirmed, licence policy written, Part
+  Dataset schema v0, the existing code cross-check above, and a STEP round
+  trip spike using exports this project already produces.
+- **Phase 0b** A parametric CAD backend on build123d, so that parameters can
+  become a STEP file without leaving this machine.
+- **Phase 1** STEP analyzer: geometry, topology, and the face adjacency graph,
+  each quantity checked against a closed form where one exists.
+- **Phase 2** Rule based feature recognition, with the validity domain of each
+  rule stated before it is written.
+- **Phase 3** Shape descriptors and classification.
+- **Phase 4** Physical labelling through the EXISTING solvers, including
+  boundary condition tagging.
+- **Phase 5** Synthetic data engine. Runs early and in parallel, because it is
+  what makes the later phases possible without scraped CAD.
+- **Phase 6** CAD embeddings.
+- **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard.
+- **Phase 8** Design intent, measured by ablation against real solvers rather
+  than asserted.
+- **Phase 9** Generative design and an autonomous CAD loop, extending the
+  existing agent loop to emit CAD.
+
+## What this roadmap does not claim
+
+It does not claim any of this is validated by physical test, because none of
+it is. It does not claim a learned model can replace a solver. And it does not
+claim a feature recogniser understands design intent: recognising a
+cylindrical face as a hole is geometry, and why the hole is there is not
+recoverable from the geometry alone.

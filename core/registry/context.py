@@ -81,6 +81,10 @@ class ProblemContext:
     # multibody methods exist only for a mechanism; a single bracket has no
     # mass matrix, and routing one there would return a 0 by 0 answer rather
     # than declining.
+    # Whether the problem arrives as CAD rather than as parameters. A CAD
+    # part has geometry this project did not author and cannot regenerate, so
+    # it routes to reading rather than to building.
+    has_cad_input: bool | None = None
     has_articulated_chain: bool | None = None
     # Whether bodies in the problem can touch each other or the world. Contact
     # is not a refinement of a contactless model, it is a different problem:

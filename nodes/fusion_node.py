@@ -29,7 +29,12 @@ FUSION_CAPABILITY = "analysis.fea.fusion"
 
 # Stated once, used everywhere it needs explaining.
 FUSION_UNAVAILABLE_REASON = (
-    "unavailable: requires Fusion paid entitlement (planned)")
+    "unavailable: requires Fusion paid entitlement, and Fusion does not run "
+    "on Linux where this node lives. The parameters to CAD half runs on a "
+    "Windows host instead; the parametric backend here is build123d, which "
+    "is OpenCASCADE and native. Being a different kernel from Fusion is "
+    "useful rather than a compromise: a STEP file from each is a second "
+    "opinion on the analyzer reading the other")
 
 # The analyses this node is contracted to provide once it exists. Listed so the
 # contract is reviewable now, not so anything can claim to have run them.

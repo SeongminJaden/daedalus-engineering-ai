@@ -16,6 +16,8 @@ from .calculix import (calculix_capability_method,
 from .gmsh_node import gmsh_capability_method, gmsh_descriptor
 from .mujoco_node import mujoco_capability_method, mujoco_descriptor
 from .openfoam import openfoam_capability_method, openfoam_descriptor
+from .step_analyzer import (step_analyzer_capability_method,
+                            step_analyzer_descriptor)
 from .pinocchio_node import (pinocchio_capability_method,
                              pinocchio_descriptor)
 from .engine_node import engine_descriptor
@@ -48,6 +50,8 @@ def build_roster(methods: MethodRegistry | None = None,
     registry.register(gmsh_capability_method(), gmsh_descriptor())
     registry.register(mujoco_capability_method(), mujoco_descriptor())
     registry.register(openfoam_capability_method(), openfoam_descriptor())
+    registry.register(step_analyzer_capability_method(),
+                      step_analyzer_descriptor())
     registry.register(pinocchio_capability_method(),
                       pinocchio_descriptor())
     registry.register(reasoning_capability_method(),

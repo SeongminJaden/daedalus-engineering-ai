@@ -332,6 +332,22 @@ class TetMesh:
     def nodes_at_x(self, x: float, tol: float = 1e-9) -> np.ndarray:
         return np.flatnonzero(np.abs(self.node_coords[:, 0] - x) <= tol)
 
+    def nodes_at_extreme(self, axis: int = 0, side: str = "min",
+                         tol: float = 1e-9) -> np.ndarray:
+        """Nodes on the extreme face along an axis, wherever the part sits.
+
+        A CAD file places its part wherever the author left it. This project's
+        own meshes start at the origin, so code written against them tends to
+        assume x=0 is the root; a STEP solid centred on the origin then yields
+        an empty selection and a boundary condition that was never applied.
+        Selecting by extent rather than by coordinate removes the assumption.
+        """
+        if side not in ("min", "max"):
+            raise ValueError(f"side must be min or max, got {side!r}")
+        column = self.node_coords[:, axis]
+        target = column.min() if side == "min" else column.max()
+        return np.flatnonzero(np.abs(column - target) <= tol)
+
     def volume_m3(self) -> float:
         """Summed tetrahedron volume, from the corner nodes only.
 
@@ -345,6 +361,60 @@ class TetMesh:
         c = corners[:, 3] - corners[:, 0]
         return float(np.abs(np.einsum("ij,ij->i",
                                       np.cross(a, b), c)).sum() / 6.0)
+
+
+def tetrahedral_mesh_from_step(step_path: str, target_size_m: float,
+                               order: int = 2) -> TetMesh:
+    """Mesh a STEP solid with tetrahedra, for a shape this project cannot build.
+
+    This is the entry point that makes CAD analysable here: Gmsh imports the
+    B-rep through its own OpenCASCADE, meshes it, and the result goes to the
+    CalculiX general shape capability. There is no route through the Warp
+    solver, which has no tetrahedral element.
+
+    A caveat that matters for anything curved: Gmsh reads the file in ITS
+    units, and STEP is conventionally millimetres. The mesh therefore comes
+    back in the file's units and is scaled to metres here using the same
+    declaration the analyzer reads, rather than a guess.
+    """
+    from .step_analyzer import read_length_unit_m
+
+    if order not in (1, 2):
+        raise ValueError(f"order must be 1 or 2, got {order}")
+    if target_size_m <= 0.0:
+        raise ValueError("target element size must be positive")
+
+    unit = read_length_unit_m(step_path)
+    size_in_file_units = target_size_m / unit
+
+    with _session("step_tetrahedra") as gmsh:
+        imported = gmsh.model.occ.importShapes(str(step_path))
+        if not imported:
+            raise RuntimeError(f"Gmsh imported no shapes from {step_path}")
+        gmsh.model.occ.synchronize()
+        gmsh.option.setNumber("Mesh.MeshSizeMax", size_in_file_units)
+        gmsh.option.setNumber("Mesh.MeshSizeMin", size_in_file_units * 0.25)
+        gmsh.model.mesh.generate(3)
+        if order == 2:
+            gmsh.model.mesh.setOrder(2)
+
+        tags, flat, _ = gmsh.model.mesh.getNodes()
+        types, _, node_tags = gmsh.model.mesh.getElements(3)
+        types = list(types)
+        wanted = _TET10 if order == 2 else _TET4
+        if wanted not in types:
+            raise RuntimeError(
+                f"Gmsh produced element types {types} for {step_path}, not "
+                f"the tetrahedra asked for")
+        coords = np.asarray(flat, dtype=np.float64).reshape(-1, 3) * unit
+        lookup = {int(tag): i for i, tag in enumerate(tags)}
+        per = 10 if order == 2 else 4
+        raw = np.asarray(node_tags[types.index(wanted)]).reshape(-1, per)
+        connectivity = np.vectorize(lookup.get)(raw)
+
+    if order == 2:
+        connectivity = connectivity[:, list(GMSH_TET10_TO_CALCULIX)]
+    return TetMesh(node_coords=coords, connectivity=connectivity)
 
 
 def tetrahedral_box_mesh(length_m: float, height_m: float, width_m: float,
