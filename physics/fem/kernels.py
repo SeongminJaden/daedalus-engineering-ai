@@ -165,3 +165,69 @@ def element_strain_energy(
                     row += ke[i * ELEM_DOFS + b * 3 + dj] * u[nb * 3 + dj]
             total += u[na * 3 + di] * row
     energy[e] = total
+
+
+# --------------------------------------------------------------------------
+# General elements: one Ke per element.
+#
+# The kernels above rely on every element being the same box, which is what
+# makes a single shared Ke correct. A mesh of arbitrarily shaped hexes has a
+# different Jacobian in every element, so each needs its own 24x24.
+#
+# That is 576 float64 per element, 4.6 kB. The alternative is to rebuild Ke
+# inside the kernel on every matrix-vector product, trading memory for the
+# eight point Gauss loop and a 3x3 inverse per element per iteration. THAT
+# ALTERNATIVE IS NOT IMPLEMENTED HERE, and is not claimed to be better; see
+# docs/scoping_isoparametric.md for the measurement that would decide it.
+
+ELEM_KE_ENTRIES = ELEM_DOFS * ELEM_DOFS
+
+
+@wp.kernel
+def stiffness_matvec_per_element(
+    u: wp.array(dtype=wp.float64),
+    ke: wp.array(dtype=wp.float64),          # flattened (n_elements, 24*24)
+    conn: wp.array2d(dtype=wp.int32),
+    scale: wp.array(dtype=wp.float64),
+    y: wp.array(dtype=wp.float64),
+):
+    """y += K @ u where every element carries its own stiffness matrix.
+
+    Identical in structure to `stiffness_matvec`; the only difference is that
+    the Ke lookup is offset by the element index. Kept as a separate kernel
+    rather than a branch so the structured path pays nothing for the general
+    one existing.
+    """
+    e = wp.tid()
+    s = scale[e]
+    base = e * ELEM_KE_ENTRIES
+    for a in range(8):
+        na = conn[e, a]
+        for di in range(3):
+            i = a * 3 + di
+            acc = wp.float64(0.0)
+            for b in range(8):
+                nb = conn[e, b]
+                for dj in range(3):
+                    acc += ke[base + i * ELEM_DOFS + b * 3 + dj] \
+                        * u[nb * 3 + dj]
+            wp.atomic_add(y, na * 3 + di, s * acc)
+
+
+@wp.kernel
+def stiffness_diagonal_per_element(
+    ke: wp.array(dtype=wp.float64),
+    conn: wp.array2d(dtype=wp.int32),
+    scale: wp.array(dtype=wp.float64),
+    diag: wp.array(dtype=wp.float64),
+):
+    """diag(K) for a mesh of general elements."""
+    e = wp.tid()
+    s = scale[e]
+    base = e * ELEM_KE_ENTRIES
+    for a in range(8):
+        na = conn[e, a]
+        for di in range(3):
+            i = a * 3 + di
+            wp.atomic_add(diag, na * 3 + di,
+                          s * ke[base + i * ELEM_DOFS + i])
