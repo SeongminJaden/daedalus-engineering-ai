@@ -115,6 +115,10 @@ class ProblemContext:
     # small strain assumption bounds it: the solvers here integrate on the
     # undeformed shape, which stops being true once the geometry moves enough
     # to change how the load is carried.
+    # A minimum size without a load is not a question. Stated rather than
+    # inferred from the presence of a geometry, because a context can carry a
+    # shape with no load case attached to it.
+    has_load_case: bool | None = None
     loads_exceed_yield: bool | None = None
     strains_remain_small: bool | None = None
     has_conductor_current: bool | None = None

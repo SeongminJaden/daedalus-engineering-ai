@@ -225,6 +225,38 @@ def build_default_registry() -> MethodRegistry:
               "reference_typical and scatters widely."))
 
     registry.register(Method(
+        name="minimum_sizing",
+        category=Category.ANALYSIS,
+        summary="Smallest rectangular section that satisfies every failure "
+                "mode, and which mode is the reason it cannot be smaller.",
+        inputs=("load", "span", "width", "material", "limits"),
+        outputs=("required_height", "governing_mode", "per_mode_requirement"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("a load and a span are known, since a minimum size "
+                      "without a load is not a question",
+                      lambda c: c.require("has_load_case")),
+        ),
+        implementation="physics.sizing.cantilever."
+                       "size_rectangular_cantilever",
+        evidence="SIMULATED",
+        notes="Each mode is inverted in closed form rather than searched, so "
+              "the answer is exact per mode and the governing one falls out "
+              "of a comparison. It is verified by forward substitution: at "
+              "the returned height the binding mode sits exactly at its "
+              "limit while the others retain margin, which a routine that "
+              "merely returned something safe would fail. Fatigue is included "
+              "ONLY when the caller states the load reverses, because a "
+              "reversing load and a steady one are the same number and "
+              "guessing would either invent a requirement or silently drop "
+              "one. Two omissions are reported rather than left silent: shear "
+              "deflection is neglected, so a span to depth below about ten "
+              "makes the answer optimistic, and lateral torsional buckling is "
+              "not checked at all, so a tall thin result is not safe on this "
+              "function alone. Euler-Bernoulli, small deflection, solid "
+              "rectangle, tip point load."))
+
+    registry.register(Method(
         name="thread_stripping",
         category=Category.ANALYSIS,
         summary="Thread engagement length at which stripping and bolt "
