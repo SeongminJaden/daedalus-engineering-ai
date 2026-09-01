@@ -272,13 +272,13 @@ def realised_l_bracket_thickness(size_m: float, thickness_fraction: float,
                                  n: int) -> float:
     """The arm thickness `l_bracket_mesh` will actually produce.
 
-    The mesh rounds the arm to a whole number of cells, so the bracket it
-    builds is not in general the one that was asked for. This reproduces that
-    rounding so a caller can see the difference instead of discovering it as a
-    volume error later.
+    Delegates rather than reimplementing the rounding. Two copies of this rule
+    would eventually disagree, and the disagreement would look exactly like
+    the meshing error this node exists to detect.
     """
-    arm = max(1, int(round(n * thickness_fraction)))
-    return arm * (size_m / n)
+    from physics.fem.mesh import realised_arm_thickness
+
+    return realised_arm_thickness(size_m, thickness_fraction, n)
 
 
 def check_mesh_volume(mesh: Mesh, exact_m3: float) -> VolumeCheck:

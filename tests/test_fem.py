@@ -362,3 +362,50 @@ def test_fem_evidence_is_still_only_simulation():
     level = derive_level(fem, [])
     assert level is not EvidenceLevel.EXPERIMENTALLY_VALIDATED
     assert level.rank <= EvidenceLevel.HIGH_CONFIDENCE.rank
+
+
+# --- the L bracket arm must land on a cell boundary -------------------------
+
+def test_an_unbuildable_arm_thickness_is_refused_not_rounded():
+    """Silently meshing a different bracket is what this prevents.
+
+    Found by measuring against an independent CAD volume: n=10 with a 0.25
+    fraction used to build a 0.020 arm instead of 0.025, a 17.7 percent volume
+    error, and a solver comparison meshed from here cannot see it because both
+    solvers then agree on the wrong solid.
+    """
+    from physics.fem.mesh import l_bracket_mesh
+
+    with pytest.raises(ValueError, match="allow_snapping"):
+        l_bracket_mesh(0.10, 0.25, 0.01, n=10, nz=2)
+
+
+def test_the_refusal_names_grids_that_would_work():
+    """An error that only says no costs the caller a guessing game."""
+    from physics.fem.mesh import l_bracket_mesh
+
+    with pytest.raises(ValueError) as excinfo:
+        l_bracket_mesh(0.10, 0.25, 0.01, n=10, nz=2)
+    message = str(excinfo.value)
+    assert "n=[" in message
+    for suggested in (4, 8, 12, 16, 20):
+        assert str(suggested) in message
+    # And every suggestion must actually build.
+    for suggested in (4, 8, 12, 16, 20):
+        l_bracket_mesh(0.10, 0.25, 0.01, n=suggested, nz=2)
+
+
+def test_snapping_stays_available_when_it_is_asked_for_explicitly():
+    """Rounding is fine when it is chosen, which is the whole difference."""
+    from physics.fem.mesh import l_bracket_mesh, realised_arm_thickness
+
+    mesh = l_bracket_mesh(0.10, 0.25, 0.01, n=10, nz=2, allow_snapping=True)
+    assert mesh.n_elements > 0
+    assert realised_arm_thickness(0.10, 0.25, 10) == pytest.approx(0.020)
+
+
+def test_a_buildable_request_is_unaffected():
+    from physics.fem.mesh import l_bracket_mesh, realised_arm_thickness
+
+    l_bracket_mesh(0.10, 0.4, 0.01, n=20, nz=2)
+    assert realised_arm_thickness(0.10, 0.4, 20) == pytest.approx(0.040)

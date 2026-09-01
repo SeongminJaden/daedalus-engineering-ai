@@ -140,7 +140,9 @@ def test_the_two_solvers_agree_across_the_field(label, builder):
 @requires_ccx
 def test_the_agreement_holds_on_a_re_entrant_corner():
     """The L-bracket, where the stress field is genuinely awkward."""
-    mesh = l_bracket_mesh(0.10, 0.4, 0.01, 16, nz=2)
+    # Solver against solver on one mesh, so the rounded arm is accepted: the
+    # comparison does not depend on the bracket being exactly 0.4 thick.
+    mesh = l_bracket_mesh(0.10, 0.4, 0.01, 16, nz=2, allow_snapping=True)
     top = mesh.nodes_where(np.abs(mesh.node_coords[:, 1] - 0.10) < 1e-9)
     tip = mesh.nodes_where(np.abs(mesh.node_coords[:, 0] - 0.10) < 1e-9)
 

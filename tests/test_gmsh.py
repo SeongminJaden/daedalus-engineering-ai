@@ -174,7 +174,10 @@ def test_the_l_bracket_meshes_a_different_bracket_when_the_arm_does_not(
     """
     size, width = 0.10, 0.01
     requested = gm.l_bracket_volume(size, size * fraction, width)
-    mesh = l_bracket_mesh(size, fraction, width, n=n, nz=2)
+    with pytest.raises(ValueError, match="allow_snapping"):
+        l_bracket_mesh(size, fraction, width, n=n, nz=2)
+    mesh = l_bracket_mesh(size, fraction, width, n=n, nz=2,
+                          allow_snapping=True)
     error = gm.check_mesh_volume(mesh, requested).relative_error
     assert abs(error) > worst, "this case was supposed to be quantised"
 
@@ -189,7 +192,8 @@ def test_the_realised_thickness_helper_matches_what_the_mesh_builds():
     """The helper must reproduce the mesh's rounding, not a tidier version."""
     size, width = 0.10, 0.01
     for n, fraction in ((10, 0.35), (11, 0.30), (10, 0.25), (20, 0.40)):
-        mesh = l_bracket_mesh(size, fraction, width, n=n, nz=2)
+        mesh = l_bracket_mesh(size, fraction, width, n=n, nz=2,
+                              allow_snapping=True)
         realised = gm.realised_l_bracket_thickness(size, fraction, n)
         centroids = mesh.element_centroids()
         # The vertical arm's material stops at the realised thickness.

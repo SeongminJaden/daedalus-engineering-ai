@@ -23,7 +23,9 @@ E, NU, LOAD, SIZE = 71.7e9, 0.33, 300.0, 0.10
 
 def make_problem(n=8, nz=1, volume_fraction=0.5, limit_pa=60e6, p=8.0,
                  tol=1e-8):
-    mesh = l_bracket_mesh(SIZE, 0.4, 0.01, n, nz=nz)
+    # The exact arm thickness is irrelevant to a topology benchmark, so the
+    # rounded arm is accepted deliberately rather than constraining n.
+    mesh = l_bracket_mesh(SIZE, 0.4, 0.01, n, nz=nz, allow_snapping=True)
     top = mesh.nodes_where(np.abs(mesh.node_coords[:, 1] - SIZE) < 1e-9)
     tip = mesh.nodes_where(np.abs(mesh.node_coords[:, 0] - SIZE) < 1e-9)
     base = SimpProblem(mesh=mesh, youngs_modulus_pa=E, poisson_ratio=NU,

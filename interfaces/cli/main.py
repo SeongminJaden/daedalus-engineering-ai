@@ -1209,12 +1209,24 @@ def _topology_stress(volume_fraction: float, n: int, iterations: int,
     from optimization.topology.simp import compliance_and_sensitivity
     from optimization.topology.stress import (StressProblem, evaluate,
                                               optimize_constrained)
-    from physics.fem.mesh import l_bracket_mesh
+    from physics.fem.mesh import (l_bracket_mesh,
+                                  realised_arm_thickness)
 
     console = Console()
     material = get_material("al_7075_t6")
     size, thickness, width, load = 0.10, 0.4, 0.01, 300.0
-    mesh = l_bracket_mesh(size, thickness, width, n, nz=2)
+    # The arm is a whole number of cells, so not every grid can build the
+    # requested thickness. Snapping is accepted here rather than refusing a
+    # grid the user chose, but the bracket actually meshed is reported: a
+    # silently different benchmark shape is what this exists to prevent.
+    realised = realised_arm_thickness(size, thickness, n)
+    mesh = l_bracket_mesh(size, thickness, width, n, nz=2, allow_snapping=True)
+    if abs(realised - size * thickness) > 1e-9:
+        console.print(
+            f"[yellow]arm snapped to the grid: {to_mm(realised):.3f} mm "
+            f"instead of the requested {to_mm(size * thickness):.3f} mm "
+            f"(n={n}). Pick n so that n x {thickness} is a whole number to "
+            f"get the exact shape.[/yellow]")
     top = mesh.nodes_where(np.abs(mesh.node_coords[:, 1] - size) < 1e-9)
     tip = mesh.nodes_where(np.abs(mesh.node_coords[:, 0] - size) < 1e-9)
     base = SimpProblem(

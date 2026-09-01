@@ -160,8 +160,33 @@ def hollow_rect_mesh(
     return _build(active, nx, ny, nz, length_m / nx, dy, dz)
 
 
+#: How far n * thickness_fraction may sit from a whole number of cells before
+#: the requested bracket is considered unbuildable on that grid.
+ARM_SNAP_TOLERANCE = 1e-9
+
+
+def realised_arm_thickness(size_m: float, thickness_fraction: float,
+                           n: int) -> float:
+    """The arm thickness `l_bracket_mesh` can actually build on an n cell grid.
+
+    The arm is a whole number of cells, so a requested fraction that does not
+    land on a cell boundary cannot be built exactly. This reports what would
+    be built instead of leaving it to be discovered as a volume error.
+    """
+    return max(1, int(round(n * thickness_fraction))) * (size_m / n)
+
+
+def _usable_grid_sizes(thickness_fraction: float, n: int,
+                       window: int = 12) -> list[int]:
+    """Nearby n values on which the requested fraction IS buildable."""
+    return [candidate for candidate in range(max(4, n - window), n + window + 1)
+            if abs(candidate * thickness_fraction
+                   - round(candidate * thickness_fraction))
+            <= ARM_SNAP_TOLERANCE]
+
+
 def l_bracket_mesh(size_m: float, thickness_fraction: float, width_m: float,
-                   n: int, nz: int = 2) -> Mesh:
+                   n: int, nz: int = 2, allow_snapping: bool = False) -> Mesh:
     """An L-shaped bracket: the standard stress-constrained benchmark.
 
     The domain is a square with the upper-right quadrant removed, leaving a
@@ -172,6 +197,18 @@ def l_bracket_mesh(size_m: float, thickness_fraction: float, width_m: float,
 
     Axes follow the project convention: x along the long arm, y vertical, z the
     out-of-plane width.
+
+    THE ARM IS A WHOLE NUMBER OF CELLS. When `n * thickness_fraction` is not an
+    integer the requested bracket cannot be built on that grid, and this used
+    to round silently: n=10 with a fraction of 0.25 produced a 0.020 arm
+    instead of 0.025, a 17.7 percent volume error, and n=16 with 0.4 produced
+    0.0375 instead of 0.040. That is invisible to a solver comparison whose
+    mesh comes from here, because both solvers then agree on the wrong solid.
+    It was found by measuring against an independent CAD volume.
+
+    So an unbuildable request now RAISES. Pass `allow_snapping=True` to accept
+    the rounded arm deliberately, which is reasonable when the exact thickness
+    does not matter, and use `realised_arm_thickness` to see what that will be.
     """
     if not 0.0 < thickness_fraction < 1.0:
         raise ValueError("thickness_fraction must be in (0, 1)")
@@ -179,7 +216,18 @@ def l_bracket_mesh(size_m: float, thickness_fraction: float, width_m: float,
         raise ValueError("n must be at least 4")
 
     cell = size_m / n
-    arm = max(1, int(round(n * thickness_fraction)))
+    exact_arm = n * thickness_fraction
+    arm = max(1, int(round(exact_arm)))
+    if not allow_snapping and abs(exact_arm - arm) > ARM_SNAP_TOLERANCE:
+        usable = _usable_grid_sizes(thickness_fraction, n)
+        raise ValueError(
+            f"a thickness fraction of {thickness_fraction} needs "
+            f"{exact_arm:.4f} cells on an n={n} grid, so the arm would be "
+            f"rounded to {arm} and the bracket built would be "
+            f"{realised_arm_thickness(size_m, thickness_fraction, n):.6f} m "
+            f"thick instead of {size_m * thickness_fraction:.6f} m. "
+            f"Use one of n={usable} instead, or pass allow_snapping=True to "
+            f"accept the rounded arm on purpose")
     active = np.zeros((n, n, nz), dtype=bool)
     # Vertical arm: full height on the left.
     active[:arm, :, :] = True
