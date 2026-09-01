@@ -11,6 +11,7 @@ from __future__ import annotations
 from core.registry import DEFAULT_REGISTRY, MethodRegistry
 
 from .calculix import calculix_capability_method, calculix_descriptor
+from .gmsh_node import gmsh_capability_method, gmsh_descriptor
 from .openfoam import openfoam_capability_method, openfoam_descriptor
 from .pinocchio_node import (pinocchio_capability_method,
                              pinocchio_descriptor)
@@ -39,6 +40,7 @@ def build_roster(methods: MethodRegistry | None = None,
     # from a flag, because whether the binary is there is a fact and not a
     # policy.
     registry.register(calculix_capability_method(), calculix_descriptor())
+    registry.register(gmsh_capability_method(), gmsh_descriptor())
     registry.register(openfoam_capability_method(), openfoam_descriptor())
     registry.register(pinocchio_capability_method(),
                       pinocchio_descriptor())

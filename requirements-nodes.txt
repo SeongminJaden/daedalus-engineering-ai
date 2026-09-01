@@ -53,3 +53,14 @@ mcp>=2.1
 # urdfdom. It requires numpy, which this project already pins; check that a
 # numpy upgrade is not pulled in, because Warp and torch are built against it.
 pin
+
+# ---------------------------------------------------------------------------
+# Gmsh, for the meshing cross-check (nodes/gmsh_node.py).
+#
+#   pip install gmsh
+#
+# 39 MB, no dependencies. It bundles its own OpenCASCADE, which is what
+# supplies the independent CAD volume. Note the narrow reach: this project's
+# solver consumes only axis-aligned uniform hexahedra, so a Gmsh tetrahedral
+# mesh cannot be run here at all.
+gmsh
