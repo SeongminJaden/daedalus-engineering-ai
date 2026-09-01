@@ -6,7 +6,7 @@ message: >-
   physically validated.
 type: software
 authors:
-  - name: SeongminJaden
+  - name: LeeSeongmin
     alias: SeongminJaden
 repository-code: https://github.com/SeongminJaden/daedalus-engineering-ai
 license: Apache-2.0
