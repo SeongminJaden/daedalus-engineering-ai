@@ -285,3 +285,108 @@ def check_mesh_volume(mesh: Mesh, exact_m3: float) -> VolumeCheck:
     """Compare a mesh's material volume against an independent exact figure."""
     return VolumeCheck(exact_m3=exact_m3,
                        meshed_m3=mesh.n_elements * mesh.element_volume)
+
+
+#: Gmsh's element type numbers for the two tetrahedra worth using.
+_TET4 = 4
+_TET10 = 11
+
+#: Gmsh lists a ten node tetrahedron's mid-edge nodes in a different order
+#: from CalculiX. Gmsh gives corners then edges (0,1) (1,2) (0,2) (0,3) (2,3)
+#: (1,3); CalculiX C3D10 wants mid(1,2) mid(2,3) mid(3,1) mid(1,4) mid(2,4)
+#: mid(3,4). Written out rather than assumed, and checked by a patch test,
+#: because a wrong permutation yields a twisted element that still solves.
+GMSH_TET10_TO_CALCULIX = (0, 1, 2, 3, 4, 5, 6, 7, 9, 8)
+
+
+@dataclass(frozen=True)
+class TetMesh:
+    """An unstructured tetrahedral mesh.
+
+    THIS PROJECT'S SOLVER CANNOT RUN THIS. It is defined here, beside the
+    thing that produces it, so that fact stays attached: the Warp solver is an
+    eight node hexahedron on a structured uniform grid and has no tetrahedral
+    element at all. A mesh of this kind exists to be handed to CalculiX, which
+    is the whole point of the general shape route.
+    """
+
+    node_coords: np.ndarray            # (n_nodes, 3) in metres
+    connectivity: np.ndarray           # (n_elements, 4) or (n_elements, 10)
+
+    @property
+    def n_nodes(self) -> int:
+        return int(self.node_coords.shape[0])
+
+    @property
+    def n_elements(self) -> int:
+        return int(self.connectivity.shape[0])
+
+    @property
+    def nodes_per_element(self) -> int:
+        return int(self.connectivity.shape[1])
+
+    @property
+    def is_quadratic(self) -> bool:
+        return self.nodes_per_element == 10
+
+    def nodes_at_x(self, x: float, tol: float = 1e-9) -> np.ndarray:
+        return np.flatnonzero(np.abs(self.node_coords[:, 0] - x) <= tol)
+
+    def volume_m3(self) -> float:
+        """Summed tetrahedron volume, from the corner nodes only.
+
+        For a quadratic mesh this uses the four corners and therefore ignores
+        curved faces, which is exact for the straight sided elements Gmsh
+        produces on a polyhedral domain and an approximation on a curved one.
+        """
+        corners = self.node_coords[self.connectivity[:, :4]]
+        a = corners[:, 1] - corners[:, 0]
+        b = corners[:, 2] - corners[:, 0]
+        c = corners[:, 3] - corners[:, 0]
+        return float(np.abs(np.einsum("ij,ij->i",
+                                      np.cross(a, b), c)).sum() / 6.0)
+
+
+def tetrahedral_box_mesh(length_m: float, height_m: float, width_m: float,
+                         target_size_m: float, order: int = 2) -> TetMesh:
+    """Mesh a box with tetrahedra, for the route this project cannot take.
+
+    A box is chosen for the FIRST general shape deliberately: it is the only
+    domain both meshers can cover, so the tetrahedral answer can be checked
+    against the structured hexahedral one instead of against nothing.
+
+    `order=2` gives ten node tetrahedra and is the default for a reason.
+    Linear tetrahedra are notoriously stiff in bending, and using them on a
+    cantilever would produce a confidently wrong deflection.
+    """
+    if order not in (1, 2):
+        raise ValueError(f"order must be 1 or 2, got {order}")
+    if target_size_m <= 0.0:
+        raise ValueError("target element size must be positive")
+
+    with _session("tetrahedral_box") as gmsh:
+        gmsh.model.occ.addBox(0.0, 0.0, 0.0, length_m, height_m, width_m)
+        gmsh.model.occ.synchronize()
+        gmsh.option.setNumber("Mesh.MeshSizeMax", target_size_m)
+        gmsh.option.setNumber("Mesh.MeshSizeMin", target_size_m * 0.25)
+        gmsh.model.mesh.generate(3)
+        if order == 2:
+            gmsh.model.mesh.setOrder(2)
+
+        tags, flat, _ = gmsh.model.mesh.getNodes()
+        types, _, node_tags = gmsh.model.mesh.getElements(3)
+        types = list(types)
+        wanted = _TET10 if order == 2 else _TET4
+        if wanted not in types:
+            raise RuntimeError(
+                f"Gmsh produced element types {types}, not the tetrahedra "
+                f"asked for")
+        coords = np.asarray(flat, dtype=np.float64).reshape(-1, 3)
+        lookup = {int(tag): i for i, tag in enumerate(tags)}
+        per = 10 if order == 2 else 4
+        raw = np.asarray(node_tags[types.index(wanted)]).reshape(-1, per)
+        connectivity = np.vectorize(lookup.get)(raw)
+
+    if order == 2:
+        connectivity = connectivity[:, list(GMSH_TET10_TO_CALCULIX)]
+    return TetMesh(node_coords=coords, connectivity=connectivity)

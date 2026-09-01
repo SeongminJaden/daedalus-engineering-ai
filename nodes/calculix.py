@@ -71,6 +71,16 @@ class ElementType(str, Enum):
     C3D8 = "C3D8"
     C3D8I = "C3D8I"
     C3D20R = "C3D20R"
+    # The tetrahedra, for shapes this project's structured mesher cannot
+    # cover. C3D10 is the default of the two: a linear tetrahedron is very
+    # stiff in bending and would report a confidently wrong deflection.
+    C3D4 = "C3D4"
+    C3D10 = "C3D10"
+
+    @property
+    def nodes_per_element(self) -> int:
+        return {"C3D8": 8, "C3D8I": 8, "C3D20R": 20,
+                "C3D4": 4, "C3D10": 10}[self.value]
 
 
 def executable() -> str | None:
@@ -147,7 +157,50 @@ def calculix_capability_method():
               "than a bug.")
 
 
-def write_deck(path: Path, mesh: Mesh, youngs_modulus_pa: float,
+CALCULIX_GENERAL_CAPABILITY = "analysis.fea.general_shape"
+
+
+def calculix_general_capability_method():
+    """FEA on a shape this project's own solver cannot mesh.
+
+    Separate from analysis.fea.calculix because the two answer different
+    questions. That one cross-checks the Warp solver on a mesh both share.
+    This one is the ONLY route for a domain the structured mesher cannot
+    cover, so there is nothing to cross-check it against and it must say so.
+    """
+    from core.registry import Category, Condition, Cost, Fidelity, Method
+
+    return Method(
+        name=CALCULIX_GENERAL_CAPABILITY,
+        category=Category.ANALYSIS,
+        summary="Tetrahedral FEA in CalculiX for general shapes, which this "
+                "project's structured hex solver cannot mesh at all.",
+        inputs=("geometry", "material", "boundary_conditions", "load"),
+        outputs=("displacements", "element_stress"),
+        fidelity=Fidelity.FEM3D,
+        cost=Cost.HEAVY,
+        conditions=(
+            Condition("the domain is not a structured hex grid, which is "
+                      "exactly when this route is needed",
+                      lambda c: not (c.supports("prismatic_beam")
+                                     or c.supports("voxel_domain"))),
+        ),
+        implementation="nodes.calculix.solve",
+        evidence="SIMULATED",
+        notes="Gmsh meshes the shape with tetrahedra and CalculiX solves it. "
+              "This project's Warp solver has NO tetrahedral element and "
+              "cannot check the answer, so unlike the hex route there is no "
+              "second opinion here: it is a single solver on a single mesh. "
+              "Quadratic C3D10 is used because linear C3D4 is far too stiff "
+              "in bending, measured at 11 to 18 percent low on a cantilever "
+              "against 0.5 percent for C3D10. Gmsh and CalculiX order the mid "
+              "edge nodes differently and the permutation is applied "
+              "explicitly; getting it wrong makes CalculiX write an empty "
+              "result rather than a wrong one, which is now raised instead of "
+              "being returned as zeros.")
+
+
+def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
                poisson_ratio: float, fixed_nodes: np.ndarray,
                load_nodes: np.ndarray, total_load_n: float,
                load_direction: int = 1,
@@ -170,6 +223,13 @@ def write_deck(path: Path, mesh: Mesh, youngs_modulus_pa: float,
         raise ValueError(
             "no fixed nodes, so the problem is singular and CalculiX will "
             "refuse it as this project's solver would")
+    expected = element_type.nodes_per_element
+    actual = int(np.asarray(mesh.connectivity).shape[1])
+    if actual != expected:
+        raise ValueError(
+            f"element type {element_type.value} takes {expected} nodes per "
+            f"element but the mesh supplies {actual}; a mismatched deck "
+            f"either fails to read or silently describes a different solid")
 
     per_node = total_load_n / len(load_nodes)
     lines: list[str] = ["*HEADING", "cross-validation deck", "*NODE, NSET=Nall"]
@@ -239,6 +299,7 @@ def _parse_dat(path: Path, n_nodes: int, n_elements: int
     displacements = np.zeros((n_nodes, 3))
     stress_sums = np.zeros((n_elements, 6))
     stress_counts = np.zeros(n_elements)
+    seen_displacement = False
 
     section = None
     for raw in path.read_text().splitlines():
@@ -261,17 +322,29 @@ def _parse_dat(path: Path, n_nodes: int, n_elements: int
             node = int(parts[0]) - 1
             if 0 <= node < n_nodes:
                 displacements[node] = [float(v) for v in parts[1:4]]
+                seen_displacement = True
         elif section == "s" and len(parts) >= 8:
             element = int(parts[0]) - 1
             if 0 <= element < n_elements:
                 stress_sums[element] += [float(v) for v in parts[2:8]]
                 stress_counts[element] += 1
 
+    if not seen_displacement:
+        # A run that failed writes an empty .dat, and the arrays above are
+        # still full of zeros. Returning them would hand back a plausible
+        # looking answer for a solve that did not happen: a wrong element
+        # ordering, for instance, produces exactly this and a caller who did
+        # not check `converged` would read it as a rigid structure.
+        raise RuntimeError(
+            f"CalculiX wrote no displacements to {path.name}. The solve "
+            f"failed; a common cause is an element node ordering the solver "
+            f"rejects, which yields an empty result rather than a bad one")
+
     counts = np.where(stress_counts > 0, stress_counts, 1.0)
     return displacements, stress_sums / counts[:, None]
 
 
-def solve(mesh: Mesh, youngs_modulus_pa: float, poisson_ratio: float,
+def solve(mesh: "Mesh | TetMesh", youngs_modulus_pa: float, poisson_ratio: float,
           fixed_nodes: np.ndarray, load_nodes: np.ndarray,
           total_load_n: float, load_direction: int = 1,
           element_type: ElementType = ElementType.C3D8I,
