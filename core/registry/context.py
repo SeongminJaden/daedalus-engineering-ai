@@ -82,6 +82,11 @@ class ProblemContext:
     # mass matrix, and routing one there would return a 0 by 0 answer rather
     # than declining.
     has_articulated_chain: bool | None = None
+    # Whether bodies in the problem can touch each other or the world. Contact
+    # is not a refinement of a contactless model, it is a different problem:
+    # the rigid body methods here assume ideal joints and no contact at all,
+    # so a problem that has it must route somewhere that models it.
+    has_contact: bool | None = None
     has_internal_flow: bool | None = None
     # Whether the internal flow is laminar. The closed-form correlations cover
     # both regimes, but a CFD run configured with a laminar closure covers only

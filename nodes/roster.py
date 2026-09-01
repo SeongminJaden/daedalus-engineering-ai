@@ -12,6 +12,7 @@ from core.registry import DEFAULT_REGISTRY, MethodRegistry
 
 from .calculix import calculix_capability_method, calculix_descriptor
 from .gmsh_node import gmsh_capability_method, gmsh_descriptor
+from .mujoco_node import mujoco_capability_method, mujoco_descriptor
 from .openfoam import openfoam_capability_method, openfoam_descriptor
 from .pinocchio_node import (pinocchio_capability_method,
                              pinocchio_descriptor)
@@ -41,6 +42,7 @@ def build_roster(methods: MethodRegistry | None = None,
     # policy.
     registry.register(calculix_capability_method(), calculix_descriptor())
     registry.register(gmsh_capability_method(), gmsh_descriptor())
+    registry.register(mujoco_capability_method(), mujoco_descriptor())
     registry.register(openfoam_capability_method(), openfoam_descriptor())
     registry.register(pinocchio_capability_method(),
                       pinocchio_descriptor())

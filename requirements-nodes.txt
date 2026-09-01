@@ -64,3 +64,16 @@ pin
 # solver consumes only axis-aligned uniform hexahedra, so a Gmsh tetrahedral
 # mesh cannot be run here at all.
 gmsh
+
+# ---------------------------------------------------------------------------
+# MuJoCo, for general multibody contact simulation (nodes/mujoco_node.py).
+#
+#   pip install mujoco
+#
+# 19 MB plus six small pure-Python dependencies. Not robot specific: the
+# capability registered is contact between rigid bodies in any mechanism.
+# Note that MuJoCo has no coefficient of restitution and its contact is a
+# regularised spring and damper, so bounce is measured from solref rather than
+# set, and solref must be compatible with the timestep or energy inflates
+# silently. See the node docstring for the measured numbers.
+mujoco
