@@ -225,6 +225,37 @@ def build_default_registry() -> MethodRegistry:
               "reference_typical and scatters widely."))
 
     registry.register(Method(
+        name="thread_stripping",
+        category=Category.ANALYSIS,
+        summary="Thread engagement length at which stripping and bolt "
+                "fracture are equally likely.",
+        inputs=("thread_size", "bolt_grade", "nut_material_strength"),
+        outputs=("required_engagement_length", "governing_member"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the joint is a threaded fastener",
+                      lambda c: c.require("has_bolted_joint")),
+        ),
+        implementation="physics.joints.threads.required_engagement_length",
+        evidence="SIMULATED",
+        notes="The thread geometry is not assumed: ISO 68-1 fixes the basic "
+              "profile, so the pitch and minor diameters and both shear "
+              "cylinders follow from the nominal size, and the 0.57735 factor "
+              "is cot(60 degrees) from the flank angle rather than a fitted "
+              "constant. One number is assumed, the shear strength as 0.6 of "
+              "ultimate; a higher fraction would predict a SHORTER engagement, "
+              "which is the unsafe direction, so it is deliberately not the "
+              "most optimistic available. NO MARGIN is included: the result is "
+              "the length at which the two failure modes are equally likely, "
+              "and design practice adds margin on top. The check that it is "
+              "right is independent of it: a same grade steel nut comes out "
+              "needing about 0.49 diameters, comfortably under the roughly "
+              "0.8 diameters of a standard hex nut, which is the height the "
+              "standard chose so that the bolt breaks first. A tapped hole in "
+              "aluminium needs about 0.9 diameters and the nut side governs, "
+              "which is why a steel nut height is not a general rule."))
+
+    registry.register(Method(
         name="fatigue_cumulative_damage",
         category=Category.ANALYSIS,
         summary="Miner's damage sum over a spectrum of stress blocks.",
