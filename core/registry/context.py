@@ -108,6 +108,15 @@ class ProblemContext:
     # into the surface and a static solve understates the resistance, and the
     # permeability must be linear, since past the knee of a B-H curve a linear
     # solve overstates the flux.
+    # Material nonlinearity. A part loaded past yield is a different problem
+    # from a linear one, and a linear solve does not merely lose accuracy
+    # there, it reports a stress the material cannot carry. Whether the load
+    # exceeds yield therefore has to be stated rather than inferred, and the
+    # small strain assumption bounds it: the solvers here integrate on the
+    # undeformed shape, which stops being true once the geometry moves enough
+    # to change how the load is carried.
+    loads_exceed_yield: bool | None = None
+    strains_remain_small: bool | None = None
     has_conductor_current: bool | None = None
     skin_depth_exceeds_conductor: bool | None = None
     magnetically_linear: bool | None = None
