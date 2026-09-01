@@ -267,11 +267,18 @@ def _count_tangent_neighbours(face, edge_map) -> int:
     Seam edges are skipped. A periodic surface closes on itself, so it appears
     as its own neighbour and is trivially tangent there; counting that would
     say nothing.
+
+    Distinct FACES are counted, not tangent edges. Two faces can meet along
+    more than one edge: a bore running into a full toroidal rim blend touches
+    it along two, which counting edges reports as two neighbours where there
+    is one. Measured on a bore blended at both ends, edge counting gave three
+    and face counting gave two. The threshold is a statement about how many
+    faces a blend joins, so faces are what must be counted.
     """
     from OCP.BRepAdaptor import BRepAdaptor_Curve
     from OCP.TopoDS import TopoDS
 
-    checked = 0
+    neighbours = []
     for index in range(1, edge_map.Extent() + 1):
         faces = [TopoDS.Face_s(f) for f in edge_map.FindFromIndex(index)]
         if len(faces) != 2:
@@ -290,8 +297,9 @@ def _count_tangent_neighbours(face, edge_map) -> int:
         if here is None or there is None:
             continue
         if abs(abs(float(np.dot(here, there))) - 1.0) <= TANGENT_TOLERANCE:
-            checked += 1
-    return checked
+            if not any(other.IsSame(seen) for seen in neighbours):
+                neighbours.append(other)
+    return len(neighbours)
 
 
 def recognise(shape, unit_to_metres: float = 1.0) -> FeatureReport:

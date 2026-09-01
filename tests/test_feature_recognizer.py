@@ -371,3 +371,77 @@ def test_a_hole_must_wrap_a_full_turn():
                    for f in _faces_of(shape_e)), \
         "the reentrant blend is a sector, not a full turn"
 
+
+# ------------- fixture F, the bore blended at both ends, which settled the
+# ------------- choice between the two candidate hole rules
+
+FIXTURE_F = Path("tests/fixtures/cad/fixtureF.step")
+requires_f = pytest.mark.skipif(not FIXTURE_F.exists(),
+                                reason="fixture F is not present")
+
+
+@requires_occ
+@requires_f
+def test_a_bore_blended_at_both_ends_is_still_a_hole():
+    """The case the earlier fixtures could not decide.
+
+    Two rules separated the first five fixtures equally well: a full turn, and
+    an absence of tangent neighbours. This bore has two tangent neighbours and
+    still wraps a full turn, so the two rules disagree here. It is a hole.
+    """
+    report = fr.recognise(*read_fixture(FIXTURE_F))
+    assert report.hole_count == 1
+    assert report.fillet_count == 2
+    assert report.hole_diameters_m() == pytest.approx([16e-3], rel=1e-9)
+    assert report.fillet_radii_m() == pytest.approx([3e-3] * 2, rel=1e-9)
+    assert all(f.surface_kind == "torus" for f in report.fillets)
+    assert report.unclassified_faces == 0
+
+
+@requires_occ
+@requires_f
+def test_the_bore_really_does_have_two_tangent_neighbours():
+    """Without this the fixture would not be testing what it claims to.
+
+    If the bore met its rims squarely, both candidate rules would agree and
+    the fixture would decide nothing.
+    """
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+
+    shape, _ = read_fixture(FIXTURE_F)
+    edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(shape, TopAbs_EDGE, TopAbs_FACE, edge_map)
+    bores = [f for f in _faces_of(shape)
+             if BRepAdaptor_Surface(f).GetType()
+             == GeomAbs_SurfaceType.GeomAbs_Cylinder]
+    assert len(bores) == 1
+    assert fr._count_tangent_neighbours(bores[0], edge_map) == 2
+    assert fr._wraps_a_full_turn(BRepAdaptor_Surface(bores[0]))
+
+
+@requires_occ
+@requires_f
+def test_tangent_neighbours_are_faces_not_edges():
+    """The bore meets each rim along two edges but they are one face each.
+
+    Counting edges gave three where the answer is two. No classification
+    changed, because the threshold is two or more, but a count that does not
+    mean what its name says will eventually be read as though it does.
+    """
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+
+    shape, _ = read_fixture(FIXTURE_F)
+    edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(shape, TopAbs_EDGE, TopAbs_FACE, edge_map)
+    for face in _faces_of(shape):
+        if BRepAdaptor_Surface(face).GetType() \
+                == GeomAbs_SurfaceType.GeomAbs_Torus:
+            assert fr._count_tangent_neighbours(face, edge_map) == 2

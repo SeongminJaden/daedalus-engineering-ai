@@ -140,12 +140,17 @@ Three versions, two of them refuted by a fixture rather than by review.
    is a ninety degree sector; a bore is the whole turn.
 
 Two candidates were measured for the third version, a full turn and an absence
-of tangent neighbours, and BOTH separated all five fixtures correctly. The
-fixtures could not choose between them. The full turn was chosen on an
-argument the fixtures do not yet test: a bore blended at both its mouth and
-its bottom has two tangent neighbours, which the tangency candidate would call
-a fillet, while it remains a full turn. That is reasoning, not measurement,
-and it stays unverified until a fixture contains such a hole.
+of tangent neighbours, and BOTH separated the first five fixtures correctly.
+Those fixtures could not choose between them. The full turn was chosen on an
+argument they did not test: a bore blended at both its mouth and its bottom
+has two tangent neighbours, which the tangency candidate would call a fillet,
+while it remains a full turn.
+
+A sixth fixture was then authored to be exactly that bore, and it confirmed
+the argument. The bore is concave, wraps 360 degrees, has two tangent
+neighbours, and is reported as one hole with two toroidal fillets. The
+rejected candidate would have found no hole at all. The choice is no longer
+resting on reasoning alone.
 
 The known limit is stated rather than hidden: a hole broken open by an
 intersecting feature no longer wraps a full turn and will not be reported. That
