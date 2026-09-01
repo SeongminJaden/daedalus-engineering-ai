@@ -33,11 +33,23 @@ checked individually rather than by reputation. Proprietary CAD stays local
 and untracked. The schema carries source and licence as REQUIRED fields, so a
 record whose provenance is unknown cannot be stored at all.
 
-**Rules before learning.** Feature recognition starts rule based: a hole is a
-cylindrical face, a fillet is a tangent toroidal face, and so on, each with a
-stated validity domain. A learned recogniser comes after there are labels to
-learn from, and the rule based one stays as the control to compare against.
-A learned model that agrees with nothing is not evidence.
+**Rules before learning.** Feature recognition starts rule based, each rule
+with a stated validity domain. The rules are less tidy than they sound, and
+the tidy version was wrong. Measured on parts built for the purpose:
+
+    A hole is a CONCAVE cylindrical face. Radius does not identify it, because
+    a fillet is a cylinder too; what separates them is which side the material
+    is on. A part whose fillet radius happens to equal its hole radius would
+    merge the two under a radius rule.
+
+    A fillet is a cylinder, a SPHERE or a torus depending on the edge it runs
+    along. Filleting every edge of a box gives twelve cylinders and eight
+    spheres and no toruses at all. A torus appears where a fillet follows a
+    circular rim, and there the fillet radius is the MINOR radius.
+
+A learned recogniser comes after there are labels to learn from, and the rule
+based one stays as the control to compare against. A learned model that agrees
+with nothing is not evidence.
 
 **A surrogate is not a verification.** The evidence ladder gains a SURROGATE
 level BELOW SIMULATED. A surrogate may screen, rank and suggest. It may never

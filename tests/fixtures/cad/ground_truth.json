@@ -1,0 +1,182 @@
+{
+  "_note": "Ground truth for CAD fixtures authored in Fusion, an independent kernel. These values were supplied with the parts rather than measured here, which is the point: reading them back is a check on this project's analyzer, not a rerun of whatever produced them. Lengths are millimetres, matching the SI_UNIT declaration in each file.",
+  "_units": "mm",
+  "_provenance_kind": "tool_round_trip",
+  "fixtures": {
+    "fixtureA.step": {
+      "purpose": "baseline, same shape as the build123d prototype, so the two kernels can be compared directly",
+      "volume_mm3": 57912.124,
+      "surface_area_mm2": 15736.23,
+      "centre_of_mass_mm": [
+        50.0,
+        30.0,
+        5.0
+      ],
+      "faces": 14,
+      "bounding_box_mm": [
+        100.0,
+        60.0,
+        10.0
+      ],
+      "holes": {
+        "count": 4,
+        "diameter_mm": 8.0,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "concavity": "concave",
+        "through": true,
+        "centres_mm": [
+          [
+            15,
+            15
+          ],
+          [
+            85,
+            15
+          ],
+          [
+            15,
+            45
+          ],
+          [
+            85,
+            45
+          ]
+        ]
+      },
+      "fillets": {
+        "count": 4,
+        "radius_mm": 3.0,
+        "surface_kind": "cylinder",
+        "concavity": "convex"
+      },
+      "edges_supplied_by_fusion_ui": 32,
+      "edges_brep": 36,
+      "vertices_brep": 24,
+      "_edge_count_note": "Fusion's UI reported 32; the B-rep holds 36 EDGE_CURVE entities. Faces agreed at 14, so again only the edge convention differs. The B-rep figure is the one tested, because the file declares it."
+    },
+    "fixtureB.step": {
+      "purpose": "the trap: fillet radius equals hole radius, so a radius based rule merges eight cylinders into one group and only concavity separates them",
+      "volume_mm3": 57852.036,
+      "centre_of_mass_mm": [
+        50.0,
+        30.0,
+        5.0
+      ],
+      "faces": 14,
+      "bounding_box_mm": [
+        100.0,
+        60.0,
+        10.0
+      ],
+      "holes": {
+        "count": 4,
+        "diameter_mm": 8.0,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "concavity": "concave",
+        "through": true,
+        "centres_mm": [
+          [
+            15,
+            15
+          ],
+          [
+            85,
+            15
+          ],
+          [
+            15,
+            45
+          ],
+          [
+            85,
+            45
+          ]
+        ]
+      },
+      "fillets": {
+        "count": 4,
+        "radius_mm": 4.0,
+        "surface_kind": "cylinder",
+        "concavity": "convex"
+      },
+      "edges_supplied_by_fusion_ui": 32,
+      "edges_brep": 36,
+      "vertices_brep": 24,
+      "_edge_count_note": "As with A and C, faces agreed (14) and only the edge convention differed: Fusion's UI reported 32, the B-rep holds 36 EDGE_CURVE entities. The B-rep figure is the one tested, because the file declares it.",
+      "_transport_note": "The base64 this file arrived in was corrupted in transit: in five places the byte sequence '.,5' or '.,6' had collapsed to a comma followed by that digit with its high bit set, losing one byte each. The file was 5 bytes short. It was repaired by inverting exactly that pattern, and the repair is trustworthy only because the md5 supplied with the file then matched: 3052b1cff32d9a30d12a68860f87903c. A repair that no checksum confirms would be an invented fixture, not a recovered one.",
+      "_counterbore_convention": "Decided for the counterbore case that is not yet a fixture: semantically a counterbore is ONE feature, the seat for a bolt head. The MVP single-face rules will report it as TWO concave cylinders, and that is a known gap, not a passing answer. Grouping coaxial cylinders with their annular shoulder into one feature needs adjacency reasoning and belongs to a later phase. Both numbers get recorded when that fixture arrives."
+    },
+    "fixtureC.step": {
+      "purpose": "curved: a filleted rim produces a torus whose MINOR radius is the fillet radius. Also a second trap, because the body wall is a convex cylinder and must not be reported as a fillet",
+      "volume_mm3": 37464.535,
+      "surface_area_mm2": 6117.376,
+      "faces": 4,
+      "face_kinds": {
+        "torus": 1,
+        "cylinder": 1,
+        "plane": 2
+      },
+      "body": {
+        "kind": "cylinder",
+        "radius_mm": 20.0,
+        "height_mm": 30.0,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "concavity": "convex",
+        "is_a_fillet": false
+      },
+      "holes": {
+        "count": 0
+      },
+      "fillets": {
+        "count": 1,
+        "radius_mm": 3.0,
+        "surface_kind": "torus",
+        "torus_major_mm": 17.0,
+        "concavity": "convex"
+      },
+      "edges_supplied_by_fusion_ui": 3,
+      "edges_brep": 5,
+      "_edge_count_note": "Two different counts, both correct in their own terms. Fusion's UI reported 3; the B-rep holds 5 EDGE_CURVE entities, which is what the file itself declares and what an analyzer reading the file can check. The B-rep figure is the one tested. Faces agreed at 4, so only the edge convention differs.",
+      "vertices_brep": 3
+    },
+    "fixtureD.step": {
+      "purpose": "a chamfer, which is a cone. The minimal pair against fixture C's toroidal rim fillet: same cylinder, same rim, blended one way and cut the other.",
+      "volume_mm3": 37161.899,
+      "faces": 4,
+      "edges_supplied_by_fusion_ui": 3,
+      "edges_brep": 5,
+      "vertices_brep": 3,
+      "face_kinds": {
+        "Cone": 1,
+        "Cylinder": 1,
+        "Plane": 2
+      },
+      "chamfer": {
+        "size_mm": 3.0,
+        "half_angle_rad": 0.785398163397449
+      },
+      "holes": {
+        "count": 0
+      },
+      "fillets": {
+        "count": 0
+      },
+      "_expectation": "A chamfer is neither a hole nor a fillet under the MVP rules, so it must fall through to unclassified. Being claimed as a fillet would mean the tangency rule is wrong, since a 45 degree cone is not tangent to either neighbour. Recognising chamfers as such is later work; this fixture only asserts that the current rules do not invent a feature that is not there.",
+      "provenance": "authored in Fusion, supplied with bytes and md5",
+      "md5": "f4a5cc96049bbecea265e58c64307711"
+    }
+  },
+  "_counting_note": "Topology counts are of DISTINCT entities. Walking a solid yields an edge once per face that uses it, so a naive traversal counts uses: this fixture gives 10 edge uses against 5 edges and 20 vertex uses against 3 vertices. The inflated numbers look entirely plausible, which is why a part with a known answer was needed to notice."
+}

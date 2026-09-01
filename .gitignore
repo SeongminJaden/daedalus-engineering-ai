@@ -35,6 +35,13 @@ env/
 #     are run artifacts, regenerated from the design parameters) ---
 *.step
 *.stp
+# ...except CAD test fixtures, which are INPUTS rather than outputs. They
+# cannot be regenerated here: they are authored in another kernel on purpose,
+# so that reading them is an independent check on the analyzer rather than a
+# rerun of whatever wrote them. Root anchored, for the reason recorded above
+# the run artifact rules.
+!/tests/fixtures/cad/*.step
+!/tests/fixtures/cad/*.stp
 *.stl
 *.iges
 *.igs

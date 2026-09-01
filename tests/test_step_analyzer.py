@@ -240,3 +240,77 @@ def test_step_reaches_a_solver_and_returns_a_deflection():
     tip = result.displacements[mesh.nodes_at_extreme(0, "max"), 1].mean()
     assert tip < 0.0, "a downward load must deflect downward"
     assert abs(tip) < 0.01, "a metre scale deflection would be nonsense here"
+
+
+# ------------------------------- fixtures from an independent kernel (Fusion)
+
+FIXTURE_DIR = Path("tests/fixtures/cad")
+FIXTURE_C = FIXTURE_DIR / "fixtureC.step"
+
+
+def ground_truth(name: str) -> dict:
+    import json
+
+    return json.loads((FIXTURE_DIR / "ground_truth.json").read_text()
+                      )["fixtures"][name]
+
+
+def tool_provenance() -> Provenance:
+    return Provenance(kind=ProvenanceKind.TOOL_ROUND_TRIP,
+                      source="authored in Fusion on the Windows host",
+                      licence=Licence(identifier="Apache-2.0",
+                                      redistributable=True))
+
+
+@requires_occ
+@pytest.mark.skipif(not FIXTURE_C.exists(), reason="fixture C is not present")
+def test_a_part_from_another_kernel_reads_to_its_stated_values():
+    """The independent check. Fusion authored it, this reads it back.
+
+    Agreement here is not the analyzer agreeing with itself: the part was
+    built by a different kernel on a different machine, and the expected
+    numbers came with it.
+    """
+    truth = ground_truth("fixtureC.step")
+    record = sa.analyse_step(FIXTURE_C, tool_provenance())[0]
+    assert record.geometry.volume_m3 * 1e9 == pytest.approx(
+        truth["volume_mm3"], rel=1e-7)
+    assert record.geometry.surface_area_m2 * 1e6 == pytest.approx(
+        truth["surface_area_mm2"], rel=1e-6)
+    assert record.topology.faces == truth["faces"]
+
+
+@requires_occ
+@pytest.mark.skipif(not FIXTURE_C.exists(), reason="fixture C is not present")
+def test_topology_counts_distinct_entities_not_uses():
+    """The bug this fixture caught, pinned so it cannot come back.
+
+    An edge belongs to two faces, so walking the solid returns it twice. The
+    inflated count looks perfectly reasonable, and only a part whose answer
+    was known beforehand exposed it: 10 uses against 5 edges, and 20 against
+    3 vertices.
+    """
+    truth = ground_truth("fixtureC.step")
+    record = sa.analyse_step(FIXTURE_C, tool_provenance())[0]
+    assert record.topology.edges == truth["edges_brep"]
+    assert record.topology.vertices == truth["vertices_brep"]
+
+    # And the file itself agrees, independently of OpenCASCADE.
+    text = FIXTURE_C.read_text(errors="ignore")
+    assert text.count("=EDGE_CURVE") == truth["edges_brep"]
+    assert text.count("=VERTEX_POINT") == truth["vertices_brep"]
+    assert text.count("=ORIENTED_EDGE") == 2 * truth["edges_brep"]
+
+
+@requires_occ
+@requires_arm
+def test_the_hollow_section_topology_is_countable_by_hand():
+    """Ten faces, twenty four edges, sixteen vertices, and why.
+
+    Four outer walls, four inner walls and two ends. Eight edges round each
+    end and four running the length, inside and out.
+    """
+    for record in sa.analyse_step(ARM_STEP, provenance()):
+        assert record.topology.faces == 10
+        assert record.topology.edges == 24
+        assert record.topology.vertices == 16

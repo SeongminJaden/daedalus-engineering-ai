@@ -152,6 +152,12 @@ class StepContents:
 
 
 def _explore(shape, kind) -> list:
+    """Every occurrence of a sub-shape, including repeats.
+
+    Right for iterating faces, which each appear once. WRONG for counting
+    edges or vertices: an edge is shared by two faces and comes back twice.
+    Use `_count_unique` for counts.
+    """
     from OCP.TopExp import TopExp_Explorer
 
     found = []
@@ -160,6 +166,24 @@ def _explore(shape, kind) -> list:
         found.append(explorer.Current())
         explorer.Next()
     return found
+
+
+def _count_unique(shape, kind) -> int:
+    """How many DISTINCT sub-shapes of this kind the solid has.
+
+    Traversal yields an edge once per face that uses it, so a plain walk
+    counts uses rather than edges. On the filleted cylinder fixture that is 10
+    against 5, and 20 vertices against 3, which matches the STEP file's own
+    ORIENTED_EDGE count rather than its EDGE_CURVE count. The numbers looked
+    entirely reasonable, which is why this needed a part with a known answer
+    to catch.
+    """
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    mapping = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(shape, kind, mapping)
+    return mapping.Extent()
 
 
 def read_step(path: str | Path) -> StepContents:
@@ -224,11 +248,11 @@ def _topology_of(shape) -> TopologySummary:
                             TopAbs_SOLID, TopAbs_VERTEX)
 
     return TopologySummary(
-        solids=max(1, len(_explore(shape, TopAbs_SOLID))),
-        shells=max(1, len(_explore(shape, TopAbs_SHELL))),
-        faces=len(_explore(shape, TopAbs_FACE)),
-        edges=len(_explore(shape, TopAbs_EDGE)),
-        vertices=len(_explore(shape, TopAbs_VERTEX)))
+        solids=max(1, _count_unique(shape, TopAbs_SOLID)),
+        shells=max(1, _count_unique(shape, TopAbs_SHELL)),
+        faces=_count_unique(shape, TopAbs_FACE),
+        edges=_count_unique(shape, TopAbs_EDGE),
+        vertices=_count_unique(shape, TopAbs_VERTEX))
 
 
 def analyse_step(path: str | Path, provenance: Provenance,
