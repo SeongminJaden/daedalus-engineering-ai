@@ -71,6 +71,25 @@ def constraint_values(
     }
     if op.max_deflection_m is not None:
         out["deflection"] = 1.0 - np.asarray(deflection_m) / op.max_deflection_m
+
+    xa = np.atleast_2d(x)
+    b, h, t = xa[..., 0], xa[..., 1], xa[..., 2]
+    if op.min_clear_bore_m is not None:
+        # Whatever has to pass through the member does not care which way it
+        # is pinched, so both directions are constrained.
+        bore = op.min_clear_bore_m
+        out["bore_b"] = ((b - 2.0 * t) - bore) / bore
+        out["bore_h"] = ((h - 2.0 * t) - bore) / bore
+    if op.applied_torque_nm:
+        # Bredt for a single closed cell: the shear flow is constant around
+        # the section, so a uniform wall carries a uniform shear stress. The
+        # midline encloses (b - t) by (h - t), NOT the outer dimensions.
+        enclosed = (b - t) * (h - t)
+        shear = op.applied_torque_nm / (2.0 * enclosed * t)
+        bending = np.asarray(stress_pa).reshape(shear.shape)
+        # Plane stress with one direct and one shear component.
+        von_mises = np.sqrt(bending ** 2 + 3.0 * shear ** 2)
+        out["combined_stress"] = 1.0 - von_mises / op.allowable_stress_pa
     return out
 
 
@@ -150,6 +169,30 @@ def constraint_jacobian(
     }
     if op.max_deflection_m is not None:
         out["deflection"] = -vec("tip_deflection_m") / op.max_deflection_m
+
+    if op.min_clear_bore_m is not None:
+        # d/db[(b - 2t - bore)/bore] = 1/bore ; d/dt = -2/bore
+        bore = op.min_clear_bore_m
+        out["bore_b"] = np.array([1.0 / bore, 0.0, -2.0 / bore])
+        out["bore_h"] = np.array([0.0, 1.0 / bore, -2.0 / bore])
+
+    if op.applied_torque_nm:
+        # tau = T / (2 A t) with A = (b - t)(h - t), so
+        #   d(ln tau)/db = -(dA/db)/A
+        #   d(ln tau)/dt = -(dA/dt)/A - 1/t
+        # and the von Mises combination follows by the chain rule:
+        #   d/dx sqrt(s^2 + 3 tau^2) = (s ds/dx + 3 tau dtau/dx) / V
+        area = (b - t) * (h - t)
+        tau = op.applied_torque_nm / (2.0 * area * t)
+        d_area = np.array([h - t, b - t, -(h - t) - (b - t)])
+        d_tau = -tau * (d_area / area + np.array([0.0, 0.0, 1.0 / t]))
+
+        sigma = float(evaluate_beam([op.genome(x)], op.problem).candidate(0)
+                      ["max_bending_stress_pa"])
+        d_sigma = vec("max_bending_stress_pa")
+        von_mises = float(np.sqrt(sigma ** 2 + 3.0 * tau ** 2))
+        d_vm = (sigma * d_sigma + 3.0 * tau * d_tau) / von_mises
+        out["combined_stress"] = -d_vm / op.allowable_stress_pa
     return out
 
 

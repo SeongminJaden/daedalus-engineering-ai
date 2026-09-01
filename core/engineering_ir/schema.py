@@ -33,6 +33,10 @@ class SectionType(str, Enum):
 
 class LoadType(str, Enum):
     POINT_FORCE = "point_force"
+    # A torque the section carries at the same time as the force load. Kept a
+    # LOAD rather than a constraint because that is what it is; the beam model
+    # selects the point force it needs and leaves this to the section checks.
+    TORQUE = "torque"
 
 
 class LoadApplication(str, Enum):
@@ -129,6 +133,10 @@ class Constraints(_Strict):
     max_deflection_m: float | None = Field(default=None, gt=0.0)
     min_safety_factor: float | None = Field(default=None, gt=0.0)
     min_natural_frequency_hz: float | None = Field(default=None, gt=0.0)
+    # Smallest clear opening the cavity must leave, for anything that has to
+    # pass through the member: an actuator, a shaft, a loom. Applies to both
+    # section directions, since a cable does not care which way it is pinched.
+    min_clear_bore_m: float | None = Field(default=None, gt=0.0)
     no_collision: bool = False
 
 

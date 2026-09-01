@@ -318,7 +318,7 @@ def test_rejects_pinned_boundary(problem):
 def test_rejects_multiple_loads(problem):
     bad = problem.model_copy(deep=True)
     bad.loads.append(problem.loads[0].model_copy(deep=True))
-    with pytest.raises(NotImplementedError, match="one load"):
+    with pytest.raises(NotImplementedError, match="one point force load"):
         load_case_from_problem(bad)
 
 

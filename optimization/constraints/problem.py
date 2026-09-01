@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from core.design_genome import DesignBounds, DesignGenome, HollowRectangleSection
+from core.engineering_ir import LoadType
 from core.materials import get_material
 
 # Keep the wall strictly off the degenerate t = min(b,h)/2 boundary, where I
@@ -42,6 +43,11 @@ class OptimizationProblem:
     bounds: DesignBounds
     allowable_stress_pa: float
     max_deflection_m: float | None
+    # Smallest clear opening the cavity must leave, and the torque the section
+    # carries at the same time as the bending load. Both default to absent, so
+    # a problem that states neither behaves exactly as it did before.
+    min_clear_bore_m: float | None = None
+    applied_torque_nm: float = 0.0
 
     @property
     def lower(self) -> np.ndarray:
@@ -127,4 +133,11 @@ def build_optimization_problem(
         max_deflection_m=(
             None if c.max_deflection_m is None else float(c.max_deflection_m)
         ),
+        min_clear_bore_m=(
+            None if c.min_clear_bore_m is None else float(c.min_clear_bore_m)
+        ),
+        # Torque loads sum: two torques about the same axis are one torque.
+        applied_torque_nm=float(sum(
+            load.magnitude_n for load in problem.loads
+            if load.type is LoadType.TORQUE)),
     )

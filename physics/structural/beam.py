@@ -108,14 +108,15 @@ def load_case_from_problem(problem, shear_deformation: bool = True) -> BeamLoadC
             f"beam model handles {SectionType.HOLLOW_RECTANGLE.value}, "
             f"problem asks for {problem.geometry.section_type.value}"
         )
-    if len(problem.loads) != 1:
+    forces = [load for load in problem.loads
+              if load.type is LoadType.POINT_FORCE]
+    if len(forces) != 1:
+        # NotImplementedError, not ValueError: the problem is well formed, this
+        # model just does not cover it. Callers distinguish the two.
         raise NotImplementedError(
-            f"beam model handles exactly one load, got {len(problem.loads)}"
-        )
-
-    load = problem.loads[0]
-    if load.type is not LoadType.POINT_FORCE:
-        raise NotImplementedError(f"unsupported load type {load.type.value}")
+            f"beam model handles exactly one point force load, "
+            f"got {len(forces)}")
+    load = forces[0]
     if load.application is not LoadApplication.TIP:
         raise NotImplementedError(
             f"beam model applies the load at the tip, got {load.application.value}"
