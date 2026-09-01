@@ -317,7 +317,32 @@ def test_the_new_methods_are_gated():
 
 
 def test_unimplemented_element_methods_are_not_registered():
+    """Nothing may be registered before it exists.
+
+    thread_stripping was on this list and has been removed from it, because it
+    is now implemented in physics.joints.threads and verified against the
+    reason a standard nut is 0.8 diameters tall. Removing a name from here is
+    the ONLY way a capability should become registered: the guard failed first
+    and was updated deliberately, rather than the list being kept vague enough
+    never to fail.
+    """
     registry = build_default_registry()
-    for absent in ("weld_fatigue", "gdt_tolerance_stackup", "fretting",
-                   "thread_stripping"):
+    for absent in ("weld_fatigue", "gdt_tolerance_stackup", "fretting"):
         assert absent not in registry
+
+
+def test_thread_stripping_is_registered_and_has_an_implementation():
+    """The other half of the guard above.
+
+    Deleting a name from the absent list must not be enough on its own; the
+    method has to resolve to code that actually exists.
+    """
+    import importlib
+
+    registry = build_default_registry()
+    assert "thread_stripping" in registry
+
+    method = registry.get("thread_stripping")
+    module_path, _, function = method.implementation.rpartition(".")
+    module = importlib.import_module(module_path)
+    assert callable(getattr(module, function))
