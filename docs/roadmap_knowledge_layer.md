@@ -125,3 +125,28 @@ it is. It does not claim a learned model can replace a solver. And it does not
 claim a feature recogniser understands design intent: recognising a
 cylindrical face as a hole is geometry, and why the hole is there is not
 recoverable from the geometry alone.
+
+## The hole rule, and what refuted each version of it
+
+Three versions, two of them refuted by a fixture rather than by review.
+
+1. **A hole is a small cylinder.** Refuted by the equal radius fixture, where
+   four bores and four corner fillets are all radius 4. A radius test has
+   nothing to sort on.
+2. **A hole is a concave cylinder.** Refuted by the L bracket, whose reentrant
+   corner blend is concave and is a fillet. Both are concave, so concavity
+   cannot separate them.
+3. **A hole is a concave cylinder that wraps a full turn.** Current. The blend
+   is a ninety degree sector; a bore is the whole turn.
+
+Two candidates were measured for the third version, a full turn and an absence
+of tangent neighbours, and BOTH separated all five fixtures correctly. The
+fixtures could not choose between them. The full turn was chosen on an
+argument the fixtures do not yet test: a bore blended at both its mouth and
+its bottom has two tangent neighbours, which the tangency candidate would call
+a fillet, while it remains a full turn. That is reasoning, not measurement,
+and it stays unverified until a fixture contains such a hole.
+
+The known limit is stated rather than hidden: a hole broken open by an
+intersecting feature no longer wraps a full turn and will not be reported. That
+gap is preferred to misreporting ordinary blended holes.

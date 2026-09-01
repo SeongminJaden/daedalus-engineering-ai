@@ -71,6 +71,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import math
+
 import numpy as np
 
 from .descriptor import CapabilityUnavailable, NodeDescriptor, Transport
@@ -236,6 +238,24 @@ def _is_concave_cylinder(face, adaptor) -> bool:
     return float(np.dot(normal, radial)) < 0.0
 
 
+#: A drilled hole's wall wraps a full turn about its axis. Anything less is
+#: a piece of a cylinder, not a bore. Generous, because the span is compared
+#: against an exact 2 pi that the kernel reproduces to machine precision.
+FULL_TURN_TOLERANCE_RAD = 1e-6
+
+
+def _wraps_a_full_turn(adaptor) -> bool:
+    """Whether a cylindrical face closes on itself about its axis.
+
+    This is what separates a hole from a concave fillet, and concavity alone
+    cannot do it: the fillet in a reentrant corner is concave too. It is a
+    ninety degree sector of a cylinder, while a bore is the whole three
+    hundred and sixty.
+    """
+    span = adaptor.LastUParameter() - adaptor.FirstUParameter()
+    return abs(span - 2.0 * math.pi) <= FULL_TURN_TOLERANCE_RAD
+
+
 #: A blend joins at least this many faces. One tangent neighbour is a body
 #: wall running into a fillet, not a fillet itself.
 MIN_TANGENT_NEIGHBOURS = 2
@@ -306,7 +326,8 @@ def recognise(shape, unit_to_metres: float = 1.0) -> FeatureReport:
         adaptor = BRepAdaptor_Surface(face)
         kind = _surface_kind(adaptor)
 
-        if kind == "cylinder" and _is_concave_cylinder(face, adaptor):
+        if kind == "cylinder" and _is_concave_cylinder(face, adaptor) \
+                and _wraps_a_full_turn(adaptor):
             cylinder = adaptor.Cylinder()
             axis = cylinder.Axis().Direction()
             origin = cylinder.Axis().Location()

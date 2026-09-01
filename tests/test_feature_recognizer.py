@@ -162,6 +162,20 @@ requires_a = pytest.mark.skipif(not FIXTURE_A.exists(),
                                 reason="fixture A is not present")
 
 
+
+def _faces_of(shape):
+    """Every face of a shape, once each."""
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+
+    faces = []
+    explorer = TopExp_Explorer(shape, TopAbs_ShapeEnum.TopAbs_FACE)
+    while explorer.More():
+        faces.append(TopoDS.Face_s(explorer.Current()))
+        explorer.Next()
+    return faces
+
 def read_fixture(path):
     from nodes.step_analyzer import read_step
 
@@ -298,3 +312,62 @@ def test_fixture_d_really_does_contain_a_cone():
     text = FIXTURE_D.read_text(errors="ignore")
     assert text.count("=CONICAL_SURFACE") == 1
     assert text.count("=CYLINDRICAL_SURFACE") == 1
+
+
+# ------------- fixture E, the one that refuted "a hole is a concave cylinder"
+
+FIXTURE_E = Path("tests/fixtures/cad/fixtureE.step")
+requires_e = pytest.mark.skipif(not FIXTURE_E.exists(),
+                                reason="fixture E is not present")
+
+
+@requires_occ
+@requires_e
+def test_a_concave_fillet_is_not_a_hole():
+    """An L bracket's reentrant corner blend is concave, and is not a hole.
+
+    This is the case that refuted the original rule. Concavity cannot separate
+    a bore from a reentrant blend because both are concave; the blend is a
+    ninety degree sector while a bore wraps a full turn.
+    """
+    report = fr.recognise(*read_fixture(FIXTURE_E))
+    assert report.hole_count == 0
+    assert report.fillet_count == 1
+    assert report.fillets[0].radius_m == pytest.approx(5e-3, rel=1e-9)
+    assert report.fillets[0].surface_kind == "cylinder"
+    assert report.unclassified_faces == 0
+
+
+@requires_occ
+@requires_e
+def test_the_fillet_in_fixture_e_really_is_concave():
+    """The premise. If this face ever stopped being concave the fixture would
+    still pass while testing nothing."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType
+
+    shape, _ = read_fixture(FIXTURE_E)
+    cylinders = [f for f in _faces_of(shape)
+                 if BRepAdaptor_Surface(f).GetType()
+                 == GeomAbs_SurfaceType.GeomAbs_Cylinder]
+    assert len(cylinders) == 1
+    face = cylinders[0]
+    assert fr._is_concave_cylinder(face, BRepAdaptor_Surface(face))
+
+
+@requires_occ
+@requires_e
+def test_a_hole_must_wrap_a_full_turn():
+    """The new condition, stated directly rather than only through outcomes."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+
+    shape, _ = read_fixture(FIXTURE_A)
+    spans = [BRepAdaptor_Surface(f) for f in _faces_of(shape)]
+    full = [a for a in spans if fr._wraps_a_full_turn(a)]
+    assert len(full) == 4, "the four bores wrap a full turn"
+
+    shape_e, _ = read_fixture(FIXTURE_E)
+    assert not any(fr._wraps_a_full_turn(BRepAdaptor_Surface(f))
+                   for f in _faces_of(shape_e)), \
+        "the reentrant blend is a sector, not a full turn"
+

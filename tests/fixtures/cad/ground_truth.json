@@ -176,7 +176,91 @@
       "_expectation": "A chamfer is neither a hole nor a fillet under the MVP rules, so it must fall through to unclassified. Being claimed as a fillet would mean the tangency rule is wrong, since a 45 degree cone is not tangent to either neighbour. Recognising chamfers as such is later work; this fixture only asserts that the current rules do not invent a feature that is not there.",
       "provenance": "authored in Fusion, supplied with bytes and md5",
       "md5": "f4a5cc96049bbecea265e58c64307711"
+    },
+    "fixtureE.step": {
+      "purpose": "the refutation: a fillet that is CONCAVE. An L bracket's reentrant corner blend is a concave cylinder, so it satisfies the old hole rule and the fillet rule at once.",
+      "volume_mm3": 40214.602,
+      "faces": 9,
+      "face_kinds": {
+        "Cylinder": 1,
+        "Plane": 8
+      },
+      "geometry": {
+        "horizontal_leg_mm": [
+          60,
+          10
+        ],
+        "vertical_leg_mm": [
+          10,
+          40
+        ],
+        "reentrant_corner_mm": [
+          10,
+          10
+        ],
+        "fillet_radius_mm": 5.0,
+        "fillet_axis": "z"
+      },
+      "holes": {
+        "count": 0
+      },
+      "fillets": {
+        "count": 1,
+        "radius_mm": 5.0,
+        "surface_kind": "cylinder",
+        "concave": true
+      },
+      "_what_it_refuted": "Before this fixture the hole rule was 'concave cylindrical face'. That reported this fillet as a 10 mm diameter hole. Concavity cannot separate a bore from a reentrant blend, because both are concave.",
+      "provenance": "authored in Fusion, supplied with bytes and md5",
+      "md5": "94d7d6867d0caab7230feef26a98adb5"
     }
   },
-  "_counting_note": "Topology counts are of DISTINCT entities. Walking a solid yields an edge once per face that uses it, so a naive traversal counts uses: this fixture gives 10 edge uses against 5 edges and 20 vertex uses against 3 vertices. The inflated numbers look entirely plausible, which is why a part with a known answer was needed to notice."
+  "_counting_note": "Topology counts are of DISTINCT entities. Walking a solid yields an edge once per face that uses it, so a naive traversal counts uses: this fixture gives 10 edge uses against 5 edges and 20 vertex uses against 3 vertices. The inflated numbers look entirely plausible, which is why a part with a known answer was needed to notice.",
+  "_hole_rule_history": {
+    "rule_now": "concave cylindrical face that wraps a full turn about its axis",
+    "measured_on_all_five_fixtures": {
+      "A_B_holes": {
+        "concave": true,
+        "u_span_deg": 360,
+        "tangent_neighbours": 0
+      },
+      "A_B_fillets": {
+        "concave": false,
+        "u_span_deg": 90,
+        "tangent_neighbours": 2
+      },
+      "C_body_wall": {
+        "concave": false,
+        "u_span_deg": 360,
+        "tangent_neighbours": 1
+      },
+      "D_body_wall": {
+        "concave": false,
+        "u_span_deg": 360,
+        "tangent_neighbours": 0
+      },
+      "E_fillet": {
+        "concave": true,
+        "u_span_deg": 90,
+        "tangent_neighbours": 2
+      }
+    },
+    "why_not_the_other_candidate": "Both candidates, a full turn and an absence of tangent neighbours, separate all five fixtures correctly, so the fixtures could not choose between them. The full turn was chosen because it survives a case the fixtures do not yet contain: a bore whose mouth and whose bottom are both blended is tangent to two neighbours, which the tangency candidate would then call a fillet, while it remains a full turn and stays a hole. That reasoning is an argument, not a measurement, and it is untested until such a fixture exists.",
+    "known_limit": "A hole broken open by an intersecting feature no longer wraps a full turn and will not be reported as a hole. That is a real gap and is preferred to the alternative, since the alternative misreports ordinary blended holes.",
+    "prediction_for_a_bore_blended_at_both_ends": {
+      "written": "before the fixture was received, so it can actually be wrong",
+      "committed_rule_is": "full turn",
+      "predicted_result": {
+        "holes": 1,
+        "fillets": 2,
+        "unclassified": 0
+      },
+      "predicted_because": "the bore still wraps 360 degrees, so the committed rule keeps calling it a hole even though it now has two tangent neighbours",
+      "the_rejected_candidate_would_give": {
+        "holes": 0,
+        "fillets": 3
+      },
+      "if_the_prediction_fails": "the full turn choice was wrong and the rule needs replacing again, not patching to make this one fixture pass"
+    }
+  }
 }
