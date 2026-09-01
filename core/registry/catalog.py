@@ -225,6 +225,37 @@ def build_default_registry() -> MethodRegistry:
               "reference_typical and scatters widely."))
 
     registry.register(Method(
+        name="fatigue_cumulative_damage",
+        category=Category.ANALYSIS,
+        summary="Miner's damage sum over a spectrum of stress blocks.",
+        inputs=("stress_blocks", "material"),
+        outputs=("damage_fraction", "cycles_to_failure_per_block"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("the duty involves repeated loading",
+                      lambda c: c.require("has_cyclic_load")),
+            Condition("the duty is a MIXTURE of load levels, since a single "
+                      "repeated cycle is answered more directly by the "
+                      "stress-life check",
+                      lambda c: c.require("has_duty_cycle")),
+        ),
+        implementation="physics.fatigue.miner.cumulative_damage",
+        evidence="SIMULATED",
+        notes="Miner's rule is independent of the ORDER the blocks are "
+              "applied in, and real parts are not: observed damage sums at "
+              "failure scatter roughly between 0.3 and 3 for that reason, so "
+              "a sum below one is evidence rather than a guarantee. The S-N "
+              "line is anchored at 0.9 times the ultimate at a thousand "
+              "cycles, which is the usual BENDING figure; the customary axial "
+              "value is 0.75, so applying this to an axially loaded part is "
+              "unconservative. Stresses implying fewer than about a thousand "
+              "cycles are refused rather than extrapolated, because life "
+              "there is governed by plastic strain and a stress-life curve "
+              "does not apply. It inherits every optimism of the stress-life "
+              "check it is built on: no notch, surface, size or temperature "
+              "factor, each of which lowers a real endurance limit."))
+
+    registry.register(Method(
         name="buckling_euler",
         category=Category.ANALYSIS,
         summary="Elastic column buckling, with the Euler validity check.",
