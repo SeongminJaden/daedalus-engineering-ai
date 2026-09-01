@@ -66,6 +66,12 @@ STANDARD_GRAVITY = 9.80665
 CLEAR_BORE_M = 0.015
 WRIST_TORQUE_NM = 5.0
 
+#: Thinnest wall the process can make, ASSUMED and PROCESS DEPENDENT. This
+#: figure suits a printed polymer shell, which is where the reference's 2 to 4
+#: mm prior came from. Machined aluminium goes thinner and would use a smaller
+#: number; the point is that the figure belongs to the process, not the part.
+MANUFACTURING_WALL_M = 0.002
+
 BASELINE = "baseline"
 PACKAGED = "packaged"
 
@@ -75,8 +81,15 @@ def forearm_problem(variant: str = BASELINE) -> EngineeringProblem:
 
     `BASELINE` states only bending, which is what the first run solved.
     `PACKAGED` adds the requirements a real forearm actually carries: a clear
-    bore for the actuator and loom, and a wrist torque acting at the same time
-    as the payload. Both figures are representative and marked ASSUMED above.
+    bore for the actuator and loom, a wrist torque acting at the same time as
+    the payload, and the thinnest wall the process can make. All three figures
+    are representative and marked ASSUMED above.
+
+    The wall floor is there because a torque sweep to 400 N m showed no load
+    ever lifts the wall off its lower bound: a closed section carries torsion
+    as shear flow, so enlarging the section always beats thickening the wall.
+    The reference's 2 to 4 mm wall came from a paper on printed shells, and
+    the only honest way to honour it is as a process constraint.
     """
     if variant not in (BASELINE, PACKAGED):
         raise ValueError(f"unknown variant {variant!r}")
@@ -93,6 +106,7 @@ def forearm_problem(variant: str = BASELINE) -> EngineeringProblem:
                           direction=Vec3(x=1.0, y=0.0, z=0.0),
                           application=LoadApplication.TIP))
         constraints["min_clear_bore_m"] = CLEAR_BORE_M
+        constraints["min_manufacturing_wall_m"] = MANUFACTURING_WALL_M
 
     return EngineeringProblem(
         name=f"humanoid_forearm_link_{variant}",
@@ -206,14 +220,25 @@ def record(variant: str = PACKAGED, run_id: str | None = None,
     meta["requirements_added"] = (
         [] if variant == BASELINE else
         [f"clear bore {CLEAR_BORE_M} m [ASSUMED]",
-         f"wrist torque {WRIST_TORQUE_NM} N m [ASSUMED]"])
+         f"wrist torque {WRIST_TORQUE_NM} N m [ASSUMED]",
+         f"minimum manufacturing wall {MANUFACTURING_WALL_M} m "
+         f"[ASSUMED, PROCESS DEPENDENT]"])
     meta["active_constraints"] = best.evaluation.active_constraints()
-    meta["prior_ranges_respected"] = False
+    meta["reference_decomposition"] = {
+        "wall_thickness_m": "manufacturing process, satisfied once stated",
+        "outer_width_m": "clear bore; b equals bore plus twice the wall "
+                         "exactly, so the 20 to 40 mm prior means a 16 to "
+                         "36 mm bore",
+        "outer_height_m": "load level; nothing here requires height, and the "
+                          "torque sweep reaches 39 mm only near 200 N m",
+    }
     meta["note"] = (
-        "the optimum sits below every dimensional prior in both variants. The "
-        "reference describes a family of parts; these load cases do not need "
-        "that much material. Adding the bore requirement widened the member "
-        "by 70 percent, which a prior asking for the same thing could not do.")
+        "no prior was ever forced. Each was traced to the KIND of requirement "
+        "that produces it, and only then entered the problem. The wall prior "
+        "is now met because a process floor was stated; the width prior is a "
+        "packaging statement about the actuator; the height prior belongs to "
+        "a much more heavily loaded arm than this one. At this load nothing "
+        "structural binds at all.")
 
     memory = EpisodicMemory(BrainDB(db_path))
     identifier = run_id or f"humanoid-forearm-{variant}"

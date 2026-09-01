@@ -47,10 +47,11 @@ def test_the_baseline_forearm_has_no_bore_or_torsion_constraint(baseline):
         == {"stress", "cavity_b", "cavity_h", "deflection"}
 
 
-def test_the_packaged_forearm_adds_exactly_three_constraints(packaged):
+def test_the_packaged_forearm_adds_exactly_the_requirements_stated(packaged):
+    """Two from the bore, one from the torque, one from the process."""
     assert set(evaluate_design(packaged, PROBE).constraints) \
         == {"stress", "cavity_b", "cavity_h", "deflection",
-            "bore_b", "bore_h", "combined_stress"}
+            "bore_b", "bore_h", "combined_stress", "manufacturing_wall"}
 
 
 # ---------------------------------------------------- the constraints are right
@@ -167,3 +168,105 @@ def test_the_packaged_design_actually_passes_every_check():
     assert all(value >= -1e-4 for value in evaluation.constraints.values())
     # The bore is what binds, so it should sit on its limit.
     assert "bore_b" in evaluation.active_constraints()
+
+
+# --------------------------------- the wall floor is a process, not a strength
+
+def test_the_manufacturing_wall_defaults_to_absent():
+    """A problem that does not state a process is unaffected by this."""
+    mvp = build_optimization_problem(build_mvp_problem())
+    assert mvp.min_manufacturing_wall_m is None
+    assert "manufacturing_wall" not in evaluate_design(
+        mvp, np.array([0.05, 0.05, 0.005])).constraints
+
+
+def test_the_wall_constraint_measures_the_wall_against_the_floor(packaged):
+    from projects.humanoid_arm.forearm import MANUFACTURING_WALL_M
+
+    floor = packaged.min_manufacturing_wall_m
+    assert floor == MANUFACTURING_WALL_M
+    value = evaluate_design(packaged, PROBE).constraints["manufacturing_wall"]
+    assert value == pytest.approx((PROBE[2] - floor) / floor)
+
+
+def test_the_wall_gradient_matches_finite_differences(packaged):
+    analytic = constraint_jacobian(packaged, PROBE)["manufacturing_wall"]
+    step = 1e-4 * PROBE[2]
+    up, down = PROBE.copy(), PROBE.copy()
+    up[2] += step
+    down[2] -= step
+    numeric = (evaluate_design(packaged, up).constraints["manufacturing_wall"]
+               - evaluate_design(packaged,
+                                 down).constraints["manufacturing_wall"]) \
+        / (2 * step)
+    assert analytic[2] == pytest.approx(numeric, rel=1e-6)
+    assert analytic[0] == 0.0 and analytic[1] == 0.0
+
+
+def test_no_load_lifts_the_wall_off_its_floor():
+    """The measurement that made the process constraint the right answer.
+
+    A closed section carries torsion as shear flow q = T/(2A), so enlarging
+    the section always beats thickening the wall on mass. The optimiser knows
+    that and never buys wall.
+    """
+    import projects.humanoid_arm.forearm as forearm
+
+    original = forearm.WRIST_TORQUE_NM
+    try:
+        walls = []
+        for torque in (5.0, 100.0, 400.0):
+            forearm.WRIST_TORQUE_NM = torque
+            problem = build_optimization_problem(
+                forearm.forearm_problem(PACKAGED))
+            result = optimize_slsqp(problem, x0=default_start(problem))
+            walls.append(result.x[2])
+    finally:
+        forearm.WRIST_TORQUE_NM = original
+    floor = forearm.MANUFACTURING_WALL_M
+    assert all(w == pytest.approx(floor, abs=1e-9) for w in walls)
+
+
+# ----------------------------------- the reference decomposes into requirements
+
+def test_the_wall_prior_is_satisfied_once_the_process_is_stated():
+    """The reference asked for 2 to 4 mm. A process constraint delivers it."""
+    prior = build_reference().prior("wall_thickness_m")
+    wall = run(PACKAGED)["from_reference"].x[2]
+    assert prior.minimum <= wall + 1e-9 <= prior.maximum
+
+
+def test_the_width_is_set_by_the_bore_and_not_by_strength():
+    """b = bore + 2t exactly, so the width prior is a packaging statement.
+
+    Inverting it: the reference's 20 to 40 mm width corresponds to a 16 to
+    36 mm clear bore, which is a checkable claim about what the reference was
+    describing rather than a guess.
+    """
+    import projects.humanoid_arm.forearm as forearm
+
+    original = forearm.CLEAR_BORE_M
+    try:
+        for bore in (0.015, 0.020, 0.036):
+            forearm.CLEAR_BORE_M = bore
+            problem = build_optimization_problem(
+                forearm.forearm_problem(PACKAGED))
+            result = optimize_slsqp(problem, x0=default_start(problem))
+            assert result.x[0] == pytest.approx(bore + 2 * result.x[2],
+                                                abs=1e-9)
+    finally:
+        forearm.CLEAR_BORE_M = original
+
+
+def test_at_this_load_the_forearm_is_not_a_structural_problem():
+    """Nothing structural binds: packaging and process decide the section.
+
+    Worth asserting because it is the conclusion, and because a later change
+    that makes strength bind again should say so loudly.
+    """
+    evaluation = run(PACKAGED)["from_reference"].evaluation
+    active = set(evaluation.active_constraints())
+    assert active == {"bore_b", "bore_h", "manufacturing_wall"}
+    for name in ("stress", "combined_stress", "deflection"):
+        assert evaluation.constraints[name] > 0.1
+    assert evaluation.safety_factor > 50.0

@@ -80,6 +80,11 @@ def constraint_values(
         bore = op.min_clear_bore_m
         out["bore_b"] = ((b - 2.0 * t) - bore) / bore
         out["bore_h"] = ((h - 2.0 * t) - bore) / bore
+    if op.min_manufacturing_wall_m is not None:
+        # A process floor, not a strength requirement. Normalised by the floor
+        # so it reads on the same scale as the others.
+        floor = op.min_manufacturing_wall_m
+        out["manufacturing_wall"] = (t - floor) / floor
     if op.applied_torque_nm:
         # Bredt for a single closed cell: the shear flow is constant around
         # the section, so a uniform wall carries a uniform shear stress. The
@@ -176,6 +181,10 @@ def constraint_jacobian(
         out["bore_b"] = np.array([1.0 / bore, 0.0, -2.0 / bore])
         out["bore_h"] = np.array([0.0, 1.0 / bore, -2.0 / bore])
 
+    if op.min_manufacturing_wall_m is not None:
+        # d/dt[(t - floor)/floor] = 1/floor, and nothing else depends on it.
+        out["manufacturing_wall"] = np.array(
+            [0.0, 0.0, 1.0 / op.min_manufacturing_wall_m])
     if op.applied_torque_nm:
         # tau = T / (2 A t) with A = (b - t)(h - t), so
         #   d(ln tau)/db = -(dA/db)/A

@@ -137,6 +137,13 @@ class Constraints(_Strict):
     # pass through the member: an actuator, a shaft, a loom. Applies to both
     # section directions, since a cable does not care which way it is pinched.
     min_clear_bore_m: float | None = Field(default=None, gt=0.0)
+    # Thinnest wall the chosen PROCESS can actually make. This is not a
+    # structural limit and no load produces it: a closed section carries
+    # torsion as shear flow, so growing the section always beats thickening
+    # the wall, and an optimiser left alone drives the wall to its lower bound
+    # at any torque. The figure is entirely process dependent, so it belongs
+    # in the problem statement rather than in a material or a section.
+    min_manufacturing_wall_m: float | None = Field(default=None, gt=0.0)
     no_collision: bool = False
 
 

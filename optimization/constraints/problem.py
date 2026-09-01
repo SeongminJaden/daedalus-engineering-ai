@@ -47,6 +47,7 @@ class OptimizationProblem:
     # carries at the same time as the bending load. Both default to absent, so
     # a problem that states neither behaves exactly as it did before.
     min_clear_bore_m: float | None = None
+    min_manufacturing_wall_m: float | None = None
     applied_torque_nm: float = 0.0
 
     @property
@@ -135,6 +136,10 @@ def build_optimization_problem(
         ),
         min_clear_bore_m=(
             None if c.min_clear_bore_m is None else float(c.min_clear_bore_m)
+        ),
+        min_manufacturing_wall_m=(
+            None if c.min_manufacturing_wall_m is None
+            else float(c.min_manufacturing_wall_m)
         ),
         # Torque loads sum: two torques about the same axis are one torque.
         applied_torque_nm=float(sum(
