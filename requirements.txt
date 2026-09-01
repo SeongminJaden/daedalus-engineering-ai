@@ -26,6 +26,10 @@ tqdm
 
 # --- geometry / mesh ---
 trimesh
+# Marching cubes for turning a topology density field into a smooth surface.
+# The existing voxel export is exact but blocky by construction; an isosurface
+# is what makes an organic shape possible at all.
+scikit-image
 
 # --- test ---
 psutil
