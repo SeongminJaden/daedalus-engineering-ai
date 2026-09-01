@@ -208,14 +208,31 @@ def test_the_coriolis_residual_is_differencing_error_not_a_bug():
 
 
 @requires_pinocchio
-def test_the_shipped_step_is_small_enough_to_be_dominated_by_round_off():
-    """The default sits past the truncation regime, which is the safe side."""
+def test_the_shipped_step_beats_the_steps_on_either_side_of_it():
+    """The default is the measured optimum, not a round number.
+
+    Truncation falls as h^2 and round-off grows as 1/h, so the best step is
+    where they cross. Checking that the neighbours are both worse is what
+    makes it an optimum rather than an assertion.
+    """
+    import pinocchio
+
     arm = build_arm()
     q, qd = np.array([np.pi / 4, 0.3]), np.array([0.7, -0.4])
-    result = pn.compare(arm, q, qd, np.zeros(2), DENSITY)
-    truncation = 1.6e-4 * CHRISTOFFEL_STEP ** 2
-    assert result.coriolis_error > truncation
-    assert result.coriolis_error < 1e-10
+    model, data, _ = pn.load_model(arm, DENSITY)
+    reference = np.asarray(pinocchio.computeCoriolisMatrix(model, data, q, qd))
+    n = arm.dof
+
+    def error_at(step: float) -> float:
+        dm = mass_matrix_derivative(arm, q, DENSITY, step=step)
+        built = np.array([[0.5 * sum(
+            (dm[i, j, k] + dm[i, k, j] - dm[j, k, i]) * qd[k] for k in range(n))
+            for j in range(n)] for i in range(n)])
+        return float(np.abs(built - reference).max())
+
+    shipped = error_at(CHRISTOFFEL_STEP)
+    assert shipped < error_at(CHRISTOFFEL_STEP * 10.0)   # truncation side
+    assert shipped < error_at(CHRISTOFFEL_STEP / 10.0)   # round-off side
 
 
 # ------------------------------------------- the control that makes it mean something

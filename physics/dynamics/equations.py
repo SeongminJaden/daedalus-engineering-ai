@@ -25,9 +25,19 @@ from core.assembly.model import Assembly
 from core.assembly.statics import joint_torques, link_com_positions
 
 # Step for the numerical derivatives of M used by the Christoffel symbols.
-# Central differences, so the error is O(h^2); 1e-6 keeps truncation and
-# round-off comparable for the magnitudes here.
-CHRISTOFFEL_STEP = 1e-6
+# Central differences, so truncation falls as h^2 while round-off grows as
+# 1/h, and the best step is where the two cross. That crossing was MEASURED
+# against Pinocchio's analytic Coriolis matrix rather than estimated: the
+# error over h^2 is constant at 1.5985e-04 for h of 1e-2, 1e-3 and 1e-4,
+# confirming pure truncation there, and the total error is 1.6e-12 at h=1e-6
+# against 8.3e-14 at h=1e-5. The earlier 1e-6 sat past the crossing, in the
+# round-off dominated region, and cost about seventeen times the error for
+# nothing. See tests/test_pinocchio.py, which measures the exponent.
+#
+# The absolute size of either figure is meaningless beside any physical
+# uncertainty in a real mechanism; this is chosen because there is no reason
+# to prefer the worse of two free options, not because it matters physically.
+CHRISTOFFEL_STEP = 1e-5
 
 
 def link_world_inertia(assembly: Assembly, pose, link, density_kg_m3: float
