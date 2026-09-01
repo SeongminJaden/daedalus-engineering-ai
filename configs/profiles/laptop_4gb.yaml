@@ -1,6 +1,23 @@
 # Tier: single laptop GPU with ~4 GB VRAM (e.g. RTX 3050 Laptop).
-# This is the CURRENT default target. Values are deliberately conservative:
-# the display server also lives on this GPU, so headroom matters.
+# This is the CURRENT default target.
+#
+# WHICH OF THESE KEYS ACTUALLY DO ANYTHING
+#
+# Measured by searching for consumers, because a profile that advertises
+# control it does not have is worse than one with fewer knobs: someone tunes a
+# value, measures no change, and concludes the hardware is the limit.
+#
+#   READ by code:  fem_max_dofs, max_batch, generations, train_batch,
+#                  dataset_samples, max_evaluations, max_seconds, refresh_hz
+#   READ BY NOTHING: mesh_resolution, max_substeps, contact_max_pairs,
+#                  candidate_pool, checkpoint_every, infer_batch,
+#                  grad_checkpointing, reserve_vram_gb, amp
+#
+# The second list is kept rather than deleted because the other profiles
+# declare the same keys and the capabilities are planned, but tuning any of
+# them today changes nothing. Note that reserve_vram_gb is in that list: the
+# headroom this file promises the compositor is documentation, not a limit
+# anything enforces.
 name: laptop_4gb
 description: RTX 3050 Laptop class. 4 GB VRAM, shared with the desktop compositor.
 
@@ -31,6 +48,20 @@ compute:
 
 simulation:
   fidelity: low
+  # NOT a memory budget on this machine, which is what it looks like. Measured
+  # on the 3D FEM: 451,875 DOFs peaked at 253 MiB and 1,482,627 DOFs at
+  # 331 MiB, against roughly 3300 MiB usable. Memory would not bind until
+  # somewhere near 15 million DOFs. TIME binds long before that, and steeply,
+  # because conjugate gradient iterations grow with problem size: 2.4 s, 8.4 s,
+  # 25.4 s and 54.8 s for one hollow section cantilever at one, two, three and
+  # four elements through the wall.
+  #
+  # Left at 150000 after measuring what more would buy. Holding the axial
+  # count fixed and refining only through the wall, tip deflection moves
+  # 2.429 percent, then 0.861, then 0.427. This cap already admits three
+  # elements through the wall for a 3 mm section, which is the 0.427 percent
+  # point at 25 s. Raising it to admit four costs 55 s for roughly two tenths
+  # of a percent. That is a worse tool, not a faster one.
   fem_max_dofs: 150000
   mesh_resolution: 48       # voxels along the longest bbox axis
   max_substeps: 8
