@@ -264,6 +264,47 @@
       },
       "provenance": "authored in Fusion, sent in two parts with per part md5",
       "md5": "48470672c9acaa8c16f2ea1675ddde0e"
+    },
+    "fixtureG.step": {
+      "purpose": "tests the tangency rule the way fixture F tested the hole rule: a spherical corner blend whose tangent neighbours are ALL fillets and no planes.",
+      "volume_mm3": 71031.823,
+      "faces": 10,
+      "edges_supplied_by_fusion_ui": 21,
+      "face_kinds": {
+        "Sphere": 1,
+        "Cylinder": 3,
+        "Plane": 6
+      },
+      "geometry": {
+        "block_mm": [
+          60,
+          40,
+          30
+        ],
+        "blended_corner_mm": [
+          0,
+          0,
+          30
+        ],
+        "fillet_radius_mm": 6.0
+      },
+      "holes": {
+        "count": 0
+      },
+      "fillets": {
+        "count": 4,
+        "cylinder": 3,
+        "sphere": 1,
+        "radius_mm": 6.0
+      },
+      "measured_on_the_sphere": {
+        "tangent_neighbour_faces": 3,
+        "all_of_them_are_fillets": true,
+        "tangent_planar_neighbours": 0
+      },
+      "_what_it_confirms": "The tangent neighbour count was never restricted to planar neighbours, so a blend whose only neighbours are other blends is still recognised. Had the count been written to look only at planes, the sphere would have scored zero and fallen through to unclassified. Confirmed on another kernel's output rather than only on geometry built here.",
+      "provenance": "authored in Fusion, sent in two parts with per part md5",
+      "md5": "2264ca13dc88641cb6a835cbc1f19732"
     }
   },
   "_counting_note": "Topology counts are of DISTINCT entities. Walking a solid yields an edge once per face that uses it, so a naive traversal counts uses: this fixture gives 10 edge uses against 5 edges and 20 vertex uses against 3 vertices. The inflated numbers look entirely plausible, which is why a part with a known answer was needed to notice.",
@@ -326,6 +367,7 @@
     "predicted_breakdown": "3 cylindrical edge blends plus 1 spherical corner blend",
     "predicted_because": "the tangent neighbour count was never restricted to planar neighbours; it counts any face the blend is tangent to. The sphere is tangent to three cylinders, which is at or above the threshold of two, so it should be named a fillet.",
     "confidence_is_not_high_because_it_is_untested": "a synthetic box with every edge blended already reported 12 cylinders and 8 spheres as fillets, which is the same situation, so this prediction rests on prior evidence rather than on hope. It is still a prediction until fixture G runs.",
-    "if_it_fails": "the tangency rule counts the wrong thing and needs replacing, not a special case for spheres"
+    "if_it_fails": "the tangency rule counts the wrong thing and needs replacing, not a special case for spheres",
+    "outcome": "CONFIRMED. Measured holes=0 fillets=4 unclassified=0, with the sphere reporting three tangent neighbour faces, all cylindrical fillets."
   }
 }

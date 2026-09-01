@@ -445,3 +445,49 @@ def test_tangent_neighbours_are_faces_not_edges():
         if BRepAdaptor_Surface(face).GetType() \
                 == GeomAbs_SurfaceType.GeomAbs_Torus:
             assert fr._count_tangent_neighbours(face, edge_map) == 2
+
+
+# ------------- fixture G, a corner blend whose neighbours are all fillets
+
+FIXTURE_G = Path("tests/fixtures/cad/fixtureG.step")
+requires_g = pytest.mark.skipif(not FIXTURE_G.exists(),
+                                reason="fixture G is not present")
+
+
+@requires_occ
+@requires_g
+def test_a_corner_blend_is_recognised_though_it_touches_no_plane():
+    """Three edge blends meeting at a corner, plus the sphere that joins them.
+
+    The sphere is tangent only to the three cylindrical fillets. A tangency
+    rule written to look at planar neighbours would score it zero and leave it
+    unclassified.
+    """
+    report = fr.recognise(*read_fixture(FIXTURE_G))
+    assert report.hole_count == 0
+    assert report.fillet_count == 4
+    kinds = collections.Counter(f.surface_kind for f in report.fillets)
+    assert kinds == {"cylinder": 3, "sphere": 1}
+    assert report.fillet_radii_m() == pytest.approx([6e-3] * 4, rel=1e-9)
+    assert report.unclassified_faces == 0
+
+
+@requires_occ
+@requires_g
+def test_the_sphere_in_fixture_g_touches_only_fillets():
+    """The premise. If the sphere also met a plane tangentially the fixture
+    would not be testing what it claims to."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+
+    shape, _ = read_fixture(FIXTURE_G)
+    edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(shape, TopAbs_EDGE, TopAbs_FACE, edge_map)
+    spheres = [f for f in _faces_of(shape)
+               if BRepAdaptor_Surface(f).GetType()
+               == GeomAbs_SurfaceType.GeomAbs_Sphere]
+    assert len(spheres) == 1
+    assert fr._count_tangent_neighbours(spheres[0], edge_map) == 3
