@@ -20,12 +20,22 @@ VALIDITY, before the implementation:
 * **A failing design is not ranked against passing ones.** It is reported as
   failing. Sorting it into a list by margin would put it in a position
   implying it is merely worse, and it is not admissible at all.
+
+* **Dominance is a stronger statement than a ranking, and a weaker one than a
+  choice.** A design no better than another on ANY axis and worse on some can
+  be discarded without arguing about criteria. What survives is the set worth
+  arguing over, and that set usually has more than one member. Saying which of
+  them to build is still a judgement and this does not make it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+
+import numpy as np
+
+from optimization.multi_objective.pareto import non_dominated_mask
 
 from .checks import AssemblyStatus, AssemblyVerdict
 
@@ -113,6 +123,38 @@ class MultiDesignReview:
 
     def criteria_agree(self) -> bool:
         return len(set(self.disagreement().values())) == 1
+
+    def _objective_matrix(self, entries) -> np.ndarray:
+        """Every axis as a MINIMISED column, which is what the filter expects.
+
+        The governing margin is maximised, so it is negated here. Passing it
+        raw would select exactly the wrong designs, which is the failure the
+        shared filter's own docstring warns about.
+
+        Mass and cost default to zero. When a caller leaves them unset they are
+        constant across the entries and therefore do not discriminate, which is
+        correct: an axis carrying no information should not decide anything.
+        """
+        return np.array([[e.mass_kg, e.cost_usd, -e.governing_margin,
+                          float(e.gap_count)] for e in entries], dtype=float)
+
+    def non_dominated(self) -> list[DesignEntry]:
+        """Admissible designs that nothing else beats outright.
+
+        Uses the project's existing non-dominated filter rather than a second
+        implementation of dominance, so there is one definition to be right
+        about.
+        """
+        entries = self.admissible
+        if not entries:
+            return []
+        mask = non_dominated_mask(self._objective_matrix(entries))
+        return [entry for entry, keep in zip(entries, mask) if keep]
+
+    def dominated(self) -> list[DesignEntry]:
+        """Designs that can be discarded without choosing a criterion."""
+        surviving = {id(e) for e in self.non_dominated()}
+        return [e for e in self.admissible if id(e) not in surviving]
 
     def comparable_checks(self) -> set[str]:
         """Failure modes every admissible design actually assessed.

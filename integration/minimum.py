@@ -83,6 +83,11 @@ def is_monotonic_increasing(evaluate: Callable[[float], float],
     return all(b >= a * (1.0 - 1e-9) for a, b in zip(values, values[1:]))
 
 
+# Related: physics.sizing.cantilever inverts each failure mode in closed form
+# and reports which one governs. Use that where the closed forms exist; use
+# this where they do not and only a callable is available.
+
+
 def minimum_dimension(evaluate: Callable[[float], float], low: float,
                       high: float, target: float = 1.5,
                       tolerance: float = 1e-6,

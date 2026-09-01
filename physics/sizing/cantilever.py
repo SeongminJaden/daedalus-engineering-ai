@@ -17,6 +17,14 @@ VALIDITY, stated before use:
   assumption held, and a ratio below about 10 means the answer is optimistic.
 * Small deflection. The moment arm is taken as the undeformed length.
 * A solid rectangle, bending about the strong axis, with a tip point load.
+RELATED, and deliberately not merged with it: `integration.minimum_dimension`
+sizes by BISECTION on any callable returning a safety factor, which is the
+right tool when the relationship has no closed form and the wrong one here.
+This module inverts each mode exactly and identifies which one governs, which
+bisection on a single combined factor cannot do. Its result type was renamed
+to SectionSizing so the two are not confused; both existing at once is
+deliberate, and either being mistaken for the other is not.
+
 * Lateral torsional buckling is NOT checked. A tall thin section can fail
   that way at a load below its yield capacity, so a result with a large
   height to width ratio is not safe on the strength of this function alone.
@@ -60,7 +68,7 @@ class ModeRequirement:
 
 
 @dataclass(frozen=True)
-class SizingResult:
+class SectionSizing:
     """The smallest height that satisfies every mode, and why."""
 
     height_m: float
@@ -126,7 +134,7 @@ def size_rectangular_cantilever(
         deflection_limit_m: float | None = None,
         fully_reversed: bool = False,
         fatigue_criterion: MeanStressCriterion = MeanStressCriterion.GOODMAN,
-        minimum_height_m: float | None = None) -> SizingResult:
+        minimum_height_m: float | None = None) -> SectionSizing:
     """The smallest section height that satisfies every mode requested.
 
     `fully_reversed` states that the tip load reverses, which makes fatigue a
@@ -185,7 +193,7 @@ def size_rectangular_cantilever(
 
     governing = max(requirements, key=lambda r: r.height_m)
     height = governing.height_m
-    return SizingResult(
+    return SectionSizing(
         height_m=height, governing=governing.mode,
         requirements=tuple(requirements), width_m=width_m, length_m=length_m,
         span_to_depth=length_m / height, aspect_ratio=height / width_m)

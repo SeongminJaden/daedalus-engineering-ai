@@ -118,6 +118,9 @@ class ProblemContext:
     # A minimum size without a load is not a question. Stated rather than
     # inferred from the presence of a geometry, because a context can carry a
     # shape with no load case attached to it.
+    # More than one candidate design exists to compare. A review of one is a
+    # verdict, which is a different and already answered question.
+    has_multiple_candidates: bool | None = None
     has_load_case: bool | None = None
     loads_exceed_yield: bool | None = None
     strains_remain_small: bool | None = None

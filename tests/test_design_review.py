@@ -259,3 +259,116 @@ def test_more_power_means_more_temperature_and_more_thermal_stress(aluminium):
         4.0 * low.temperature_rise_k)
     assert abs(high.thermal_stress_pa) == pytest.approx(
         4.0 * abs(low.thermal_stress_pa))
+
+
+# ------------------------------------------------- dominance, added later
+# These reuse build_entry above rather than defining a second way to make a
+# design, so a change to the verdict shape cannot leave half the file behind.
+
+
+def test_a_design_worse_on_every_axis_is_dominated():
+    """Heavier, dearer and weaker at once. No criterion can prefer it, so it
+    can be discarded without arguing about which criterion to use."""
+    review = MultiDesignReview([
+        build_entry("good", factor=3.0, gaps=0, mass=1.0, cost=10.0),
+        build_entry("bad", factor=2.0, gaps=1, mass=2.0, cost=20.0)])
+
+    assert [e.name for e in review.non_dominated()] == ["good"]
+    assert [e.name for e in review.dominated()] == ["bad"]
+
+
+def test_a_trade_off_survives_dominance():
+    """Lighter but weaker against heavier but stronger is a real trade.
+
+    Dominance must NOT resolve it: that is a judgement, and a filter that
+    returned one of them would be deciding by arithmetic.
+    """
+    review = MultiDesignReview([
+        build_entry("light", factor=2.0, gaps=0, mass=1.0, cost=10.0),
+        build_entry("strong", factor=4.0, gaps=0, mass=3.0, cost=10.0)])
+
+    assert len(review.non_dominated()) == 2
+    assert review.dominated() == []
+
+
+def test_the_strict_winner_on_an_axis_is_never_dominated():
+    """A design uniquely best on some axis cannot be dominated.
+
+    Anything dominating it would have to be no worse everywhere, which on that
+    axis is impossible. Worth asserting because it is a property of dominance
+    rather than of this particular data.
+    """
+    review = MultiDesignReview([
+        build_entry("lightest", factor=1.6, gaps=0, mass=0.5, cost=99.0),
+        build_entry("strongest", factor=9.0, gaps=0, mass=8.0, cost=99.0),
+        build_entry("cheapest", factor=1.7, gaps=0, mass=7.9, cost=1.0)])
+
+    surviving = {e.name for e in review.non_dominated()}
+    assert {"lightest", "strongest", "cheapest"} <= surviving
+
+
+def test_a_failing_design_is_not_considered_for_dominance():
+    """It is inadmissible, not merely worse, so it is neither kept as
+    non-dominated nor reported as dominated."""
+    review = MultiDesignReview([
+        build_entry("good", factor=3.0, gaps=0, mass=1.0, cost=10.0),
+        build_entry("broken", factor=0.4, gaps=0, mass=0.1, cost=1.0,
+                    failing=True)])
+
+    assert [e.name for e in review.non_dominated()] == ["good"]
+    assert "broken" not in [e.name for e in review.dominated()]
+    assert "broken" in [e.name for e in review.rejected]
+
+
+def test_more_margin_wins_when_nothing_else_separates_designs():
+    """The shared dominance filter minimises every column, so the governing
+    margin has to be negated on the way in.
+
+    Passing it raw would select exactly the wrong designs, which is the
+    mistake the filter's own docstring warns about. Here mass, cost and gaps
+    are identical, so only the margin separates them and MORE must win.
+    """
+    review = MultiDesignReview([
+        build_entry("weak", factor=1.6, gaps=0, mass=1.0, cost=5.0),
+        build_entry("strong", factor=8.0, gaps=0, mass=1.0, cost=5.0)])
+
+    assert [e.name for e in review.non_dominated()] == ["strong"]
+
+
+def test_an_axis_carrying_no_information_decides_nothing():
+    """Mass and cost default to zero. When a caller leaves them unset they are
+    constant across the entries, and a constant axis must not decide."""
+    review = MultiDesignReview([
+        build_entry("a", factor=3.0, gaps=0, mass=0.0, cost=0.0),
+        build_entry("b", factor=2.0, gaps=0, mass=0.0, cost=0.0)])
+
+    assert [e.name for e in review.non_dominated()] == ["a"]
+
+
+def test_the_capability_refuses_a_single_candidate():
+    """A review of one design is a verdict, and that question is answered
+    elsewhere. Selecting this method for it would add ranking machinery to a
+    problem that has nothing to rank."""
+    from core.registry.context import ProblemContext
+    from nodes.roster import build_roster
+
+    method = next(c.method for c in build_roster().all()
+                  if c.name == "multi_design_review")
+    reasons = " ".join(str(r) for r
+                       in method.applicability(ProblemContext()).failed)
+    assert "has_multiple_candidates" in reasons
+    assert not list(method.applicability(
+        ProblemContext(has_multiple_candidates=True)).failed)
+
+
+def test_the_review_reports_its_own_numbers_from_the_verdicts():
+    """It must not recompute anything.
+
+    Its whole claim to trust is that the numbers are the verified checks'
+    numbers. If it derived a safety factor itself there would be two sources
+    for one quantity and they could disagree.
+    """
+    entry = build_entry("only", factor=2.75, gaps=0, mass=1.0, cost=1.0)
+    assert entry.governing_margin == pytest.approx(2.75)
+    assert entry.governing_margin == pytest.approx(
+        entry.verdict.governing_safety_factor)

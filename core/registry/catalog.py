@@ -225,6 +225,39 @@ def build_default_registry() -> MethodRegistry:
               "reference_typical and scatters widely."))
 
     registry.register(Method(
+        name="multi_design_review",
+        category=Category.ANALYSIS,
+        summary="Compare complete designs across every check at once, rank "
+                "them by a stated criterion, and name what each ranking costs.",
+        inputs=("candidate_verdicts", "mass", "cost"),
+        outputs=("ranking", "non_dominated_set", "rejected", "disagreement"),
+        fidelity=Fidelity.ANALYTICAL, cost=Cost.TRIVIAL,
+        conditions=(
+            Condition("more than one candidate design exists, since a review "
+                      "of one is a verdict and that question is answered "
+                      "elsewhere",
+                      lambda c: c.require("has_multiple_candidates")),
+        ),
+        implementation="integration.multi_review.MultiDesignReview",
+        evidence="SIMULATED",
+        notes="It computes nothing itself. It consumes the verdicts the "
+              "verified checks already produced, so its numbers are those "
+              "checks' numbers and cannot drift from them. Three things it "
+              "deliberately refuses to do. It does not rank a FAILING design "
+              "against passing ones, because sorting it by margin would place "
+              "it as merely worse when it is inadmissible. It does not treat "
+              "designs as comparable on a check only one of them ran, and the "
+              "count of unassessed modes travels with each design. And it "
+              "does not resolve a genuine trade off: dominance discards only "
+              "what is worse on every axis at once, and what survives is the "
+              "set worth arguing over, usually with more than one member. "
+              "Ranking needs a criterion and there is no neutral one, so the "
+              "report shows what each alternative criterion would have chosen "
+              "instead of hiding that the choice was made. Dominance reuses "
+              "the project's existing non-dominated filter rather than a "
+              "second definition."))
+
+    registry.register(Method(
         name="minimum_sizing",
         category=Category.ANALYSIS,
         summary="Smallest rectangular section that satisfies every failure "
