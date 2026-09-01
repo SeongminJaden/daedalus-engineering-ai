@@ -29,3 +29,6 @@ trimesh
 
 # --- test ---
 pytest
+# Parallel test distribution. See pytest.ini for when it helps and when
+# it does not; it is not enabled by default.
+pytest-xdist

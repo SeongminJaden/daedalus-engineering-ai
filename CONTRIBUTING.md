@@ -16,7 +16,7 @@ python3 -m venv .venv
 env -u PYTHONPATH .venv/bin/python -m pip install -U pip wheel
 env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
 env -u PYTHONPATH .venv/bin/python scripts/gpu_sanity.py
-env -u PYTHONPATH .venv/bin/python -m pytest tests/ -q
+env -u PYTHONPATH .venv/bin/python -m pytest tests/ -q -n 8 --dist loadfile
 ```
 
 Run the venv with a clean `PYTHONPATH`: a sourced shell environment can export
@@ -43,6 +43,9 @@ not know**. Please keep that intact:
 
 ## Pull requests
 
-- Keep the change focused, and make sure `pytest tests/ -q` passes.
+- Keep the change focused, and make sure the full suite passes.
+- Use `-n 8 --dist loadfile` for the WHOLE suite only. It is about
+  2.1x faster there and slower on a single file, because each worker
+  pays its own CUDA and Warp startup. pytest.ini carries the numbers.
 - Explain *why*, not just *what*, in the description.
 - Report measured numbers honestly, including ones that are worse than hoped.
