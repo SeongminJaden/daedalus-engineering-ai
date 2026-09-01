@@ -19,8 +19,10 @@ class RunState:
     generations_total: int = 0
     best_objective: float | None = None
     evaluated: int = 0
-    gpu_mem_used_gb: float = 0.0
-    gpu_mem_total_gb: float = 0.0
+    # None, not 0.0. An unread GPU and an idle GPU are different states, and
+    # a default of zero makes them indistinguishable on the panel.
+    gpu_mem_used_gb: float | None = None
+    gpu_mem_total_gb: float | None = None
     status: str = "idle"
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -50,7 +52,11 @@ class Dashboard:
             "best objective",
             "-" if s.best_objective is None else f"{s.best_objective:.6g}",
         )
-        if s.gpu_mem_total_gb:
+        # Silently dropping the row would make an unread GPU look like a
+        # machine that has none, so say which it is.
+        if s.gpu_mem_total_gb is None or s.gpu_mem_used_gb is None:
+            table.add_row("gpu memory", "unavailable")
+        else:
             table.add_row(
                 "gpu memory",
                 f"{s.gpu_mem_used_gb:.2f} / {s.gpu_mem_total_gb:.2f} GB",

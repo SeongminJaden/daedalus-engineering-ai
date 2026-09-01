@@ -2412,5 +2412,38 @@ def elements(
         "parent-metal fatigue check badly overstates it.")
 
 
+@app.command()
+def monitor(
+    refresh_hz: int = typer.Option(2, "--refresh-hz",
+                                   help="redraws per second"),
+    seconds: float = typer.Option(None, "--seconds",
+                                  help="stop after this long; default runs "
+                                       "until interrupted"),
+    once: bool = typer.Option(False, "--once",
+                              help="print one snapshot and exit"),
+    as_json: bool = typer.Option(False, "--json",
+                                 help="print one snapshot as JSON and exit"),
+):
+    """Live CPU, memory and GPU readings.
+
+    A value the driver will not report shows as "unavailable" rather than as
+    zero: this machine's GPU reports power draw but not its power limit, and
+    a zero there would look like a broken device instead of a missing field.
+    """
+    from rich.console import Console
+
+    from monitoring.resources import live, render_panel, snapshot
+
+    if as_json:
+        import json
+
+        print(json.dumps(snapshot().as_dict(), indent=2))
+        return
+    if once:
+        Console().print(render_panel())
+        return
+    live(refresh_hz=refresh_hz, duration_s=seconds)
+
+
 if __name__ == "__main__":
     app()
