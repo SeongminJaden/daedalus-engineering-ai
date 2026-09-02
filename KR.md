@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1674%20passing-brightgreen.svg)](#현재-상태)
 [![Capabilities](https://img.shields.io/badge/capabilities-57%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
@@ -79,7 +79,7 @@ UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPE
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 1616개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+**테스트 1674개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
 검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
 확인한다.
 
@@ -305,7 +305,7 @@ python -m interfaces.cli.main brain --generalize
 
 **내보낸 CAD는 해석 형상이지 제조 준비 형상이 아니다.** STEP 출력은 파라메트릭 솔리드에 대해 정확하고, B-rep 부피가 물리가 쓴 질량과 어긋나면 아예 거부하므로 파일은 항상 해석한 그 부품이다. 하지만 필렛도 체결 피처도 공차도 없고, 날카로운 근부 모서리는 Phase 7이 응력집중을 찾아낸 바로 그 위치다. 유기·토폴로지 형상은 깨끗한 STEP을 받지 **못한다**. 표면 재구성이 필요하며, 메시 경로는 제조 가능해 보이는 지오메트리를 뱉는 대신 그렇다고 말한다.
 
-**재료 값에는 각자의 단서가 붙는다.** DB의 15종은 전부 인증된 데이터시트가 아니라 `reference_typical`이다. 고분자 물성은 온도·변형률·공정 의존이 크고 프린팅 부품은 등방이 아니므로, 여기 저장된 벌크 값은 프린팅 부품의 **상한**이다. 알루미나는 **연성 항복점이 없어서** 항복 기준 안전율이 틀린 파괴 기준이다. CFRP는 직교이방이며 섬유방향과 횡방향 강도비가 30배라 단일 항복값을 제공하지 않는다. 유도값(E와 ν에서 얻는 G 등)은 정확하며 유도됨으로 표시되고, 추정값은 불확실성을 동반하며 재료 status를 `ASSUMED`로 강등시킨다.
+**재료 값에는 각자의 단서가 붙는다.** DB는 19종이고 저장된 모든 숫자가 읽은 문서와 표, 인쇄된 원값을 가리킨다: 제조사 데이터시트(Kaiser, Outokumpu, Special Metals, Carpenter, Victrex, EOS, Stratasys, NatureWorks, Hexcel)는 primary, 출처 없이 숫자를 옮긴 데이터베이스(MatWeb, AZoM, MakeItFrom)는 secondary, 정확한 계산은 derived. 문서가 주지 않는 값은 추정하지 않고 비워 둔다: 여러 항목에 피로강도가 없고 피로 방법은 그 재료를 거부한다. 온도 곡선은 INCONEL 718 탄성계수 하나만 출처가 있다. 고분자 물성은 온도·변형률·공정 의존이 크고 프린팅 부품은 등방이 아니므로, 여기 저장된 벌크 값은 프린팅 부품의 **상한**이다. 알루미나는 **연성 항복점이 없어서** 항복 기준 안전율이 틀린 파괴 기준이다. CFRP는 직교이방이며 섬유방향과 횡방향 강도비가 30배라 단일 항복값을 제공하지 않는다. 유도값(E와 ν에서 얻는 G 등)은 정확하며 유도됨으로 표시되고, 추정값은 불확실성을 동반하며 재료 status를 `ASSUMED`로 강등시킨다.
 
 **최적해는 가정된 제조 bound에 의존한다.** 설계변수 3개 중 2개가 bound에 붙어서
 끝나고, 그중 1 mm 최소 벽 두께는 유도된 값이 아니라 **[ASSUMED]** CNC 알루미늄

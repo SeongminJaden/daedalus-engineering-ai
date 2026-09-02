@@ -139,7 +139,7 @@ def cycles_to_failure(alternating_pa: float, material: MaterialSpec) -> float | 
     if alternating_pa <= 0.0:
         return None
 
-    endurance = material.fatigue_strength_pa
+    endurance = material.require_fatigue_strength_pa()
     if alternating_pa <= endurance:
         if has_endurance_limit(material):
             return None

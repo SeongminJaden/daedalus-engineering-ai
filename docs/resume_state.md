@@ -8,8 +8,8 @@ repository is SIMULATED or below; nothing has been physically tested.
 
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
-- Capabilities registered: 56 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1617, 1616 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7, 8 for P8, 6 for P9).
+- Capabilities registered: 57 (`nodes.roster.build_roster`, `len`). Nodes: 13.
+- Tests collected: 1674, all passing, no xfail left (the Code_Aster contact one was fixed on 2026-09-02).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -27,6 +27,18 @@ repository is SIMULATED or below; nothing has been physically tested.
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## Second work list (from the coordinating session, 2026-09-02)
+
+| item | what | state |
+|---|---|---|
+| 1 | sourced materials table with per-value citations, temperature ranges, optional fatigue | DONE: 19 materials, `sources` and `value_sources` on MaterialSpec, MatWeb values kept but graded secondary, 718 modulus curve |
+| 2 | industrial-scale dataset spec and generation (families, load cases, materials, cost table, resumable batches) | after 1 |
+| 3 | aesthetics B and C plus per-process manufacturability rules | pending |
+| 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
+| 5 | catalogue part shapes with material links | pending |
+| 6 | Gazebo and Isaac Sim verification pipeline; machine has Gazebo Fortress 6.18 and ros_gz Humble, no Isaac Sim | pending |
+| 7 | measurement and evaluation guideline document | pending |
 
 ## P9 generative CAD loop, as built
 

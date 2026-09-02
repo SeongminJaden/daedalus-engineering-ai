@@ -20,12 +20,17 @@ from .db import (
     MaterialDB,
     MaterialSpec,
     MaterialStatus,
+    MissingMaterialValue,
+    SourceDocument,
+    SourceGrade,
+    ValueSource,
     get_material,
     load_materials,
 )
 
 __all__ = [
     "DEFAULT_DB_PATH", "MaterialClass", "MaterialDB", "MaterialSpec", "MaterialStatus",
+    "MissingMaterialValue", "SourceDocument", "SourceGrade", "ValueSource",
     "Estimate", "apply_estimate", "check_derived_fields",
     "check_stiffness", "compliance_matrix", "estimate_fatigue_strength",
     "get_material",

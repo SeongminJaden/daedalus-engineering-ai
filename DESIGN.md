@@ -1815,6 +1815,51 @@ COEF_MULT 가 부등식 방향을 뒤집는 방법이다. 스터디는 COEF_MULT
 교차검증이고, 시스템에서 접촉을 푸는 유일한 방법이다. notes 에 측정 오차와 부호 규약을
 적었다. 검증 안 된 것도 적었다: 마찰, 두 변형체, 큰 미끄럼, 비축대칭.
 
+## 물성표: 모든 숫자에 문서를 붙이다 (구현 완료)
+
+**요구.** 산업·로봇·항공우주 부품 재료 세트, 값마다 출처와 온도 범위, 출처 없는 값은
+넣지 말고 없음으로.
+
+**스키마.** `MaterialSpec` 에 `sources`(읽은 문서: id, 제목, 발행자, 등급, URL, 문서 날짜,
+읽은 날짜)와 `value_sources`(필드별: 어느 문서, 어느 표, 인쇄된 원값과 단위, 조건)를
+추가했다. 등급 셋: primary(제조사 데이터시트나 규격을 그날 끝까지 읽음), secondary
+(MatWeb·AZoM·MakeItFrom 처럼 출처 없이 숫자를 옮기는 곳, 확인용으로 이름만),
+derived(저장값에서 정확히 계산). 검증기가 인용된 문서가 실제로 목록에 있는지, 필드명이
+실재하는지, derived 등급이 derived_fields 에도 있는지, 온도 곡선에 출처가 있고 온도가
+오름차순인지 확인한다. `fatigue_strength_pa` 는 None 허용으로 바꿨다. None 은 0 이 아니라
+"출처 있는 값 없음"이고, 피로 방법 셋(S-N, Miner, 샤프트)은 `require_fatigue_strength_pa()`
+를 통해 그런 재료를 거부한다. `service_temperature_k` 와 `temperature_dependence`(출처 있는
+곡선만)도 추가. `unsourced_fields()` 가 문서 없는 숫자를 세고 테스트가 0 임을 확인한다.
+
+**읽은 문서(primary).** Kaiser 7075 판재·6061 봉재, Outokumpu 304/304L·316/316L 북미판,
+Special Metals SMC-045(INCONEL 718: Table 2·4·5, AMS 최소값), Carpenter·ATI Ti-6Al-4V,
+Victrex 450G, EOS PA 2200, Stratasys ABS-M30, NatureWorks 4043D, Hexcel HexPly 8552/AS4.
+MatWeb 은 자동 조회에 403 을 돌려줘 다시 읽지 못했다. 그 위에 서 있던 기존 값은 그대로
+두되 secondary 로 등급을 낮추고 "이 세션에서 재확인 안 됨"이라고 적었다.
+
+**옮기지 않은 값.** al_7075_t6 의 E 71.7 GPa·밀도 2810·피로 159 MPa 는 이 저장소의 모든
+고정 결과(MVP 0.250 kg 등)가 의존한다. Kaiser 판재는 71.0·2800·158 을 준다. 1 퍼센트
+미만 차이지만 바꾸면 수십 개 테스트가 움직이므로 기존 값을 두고 Kaiser 숫자를 notes 에
+적었다. 반대로 ss_316 은 아무 고정 결과도 의존하지 않아 Outokumpu 값으로 옮겼다(밀도 8000
+→ 7889, E 193 → 200 GPa, 항복 290 → 303 MPa).
+
+**추가.** ss_304, inconel_718(E-온도 곡선 294~1366 K, 사용 범위 20~977 K), peek,
+steel_4140_annealed. cfrp_ud 는 Hexcel 라미나로 갱신(E1 141, E2 10 GPa, 인장 2207/81 MPa,
+전단 114, 압축 1531, 밀도 1580); G12·nu·팽창계수는 Hexcel 에 없어 typical 로 남고 secondary.
+
+**없음으로 둔 것.** 피로강도: 4140 annealed, 718, ABS, PLA, PA12, PEEK. 팽창계수: PLA, PA12.
+사용 온도 범위: 알루미늄·스테인리스(출처가 용융 범위나 어닐링 온도만 줌). 등방성 CFRP
+항목: 강성은 `quasi_isotropic_modulus_estimate_pa()` 로 3/8 E1 + 5/8 E2 = 59 GPa 을 derived
+로 내주지만 강도는 정직하게 유도할 수 없어 항목을 만들지 않았다.
+
+**스키마와 데이터시트가 맞지 않는 자리.** ABS-M30 과 PLA 4043D 는 항복이 파단보다 높다(연성
+플라스틱의 네킹). 스키마의 "항복 < 극한" 규칙 때문에 파단값을 yield, 항복값을 ultimate 로
+저장하고 value_sources 의 note 에 뒤집었다고 적었다. PEEK 은 항복만 주어 극한을 0.1 퍼센트
+위에 두고 측정값이 아니라고 적었다. 이 세 곳은 스키마가 바뀌어야 할 자리이고 숨기지 않았다.
+
+**Poisson 비.** 제조사 시트 어느 것도 주지 않는다(718 만 Table 4 에 0.294). 나머지는
+secondary(AZoM, MakeItFrom, 유통사 페이지) 또는 기존 MatWeb 값이며 전부 그렇게 표기했다.
+
 ## Method Registry와 향후 방법 라이브러리 확장
 registry에 등록된 방법이 시스템의 능력 상한이다. 지금 **없는** 것을 적어 둔다. 이후 단계는 이것들을 하나씩 **검증하고 등록하는** 일이며, 검증 없이 등록하는 것은 금지된다.
 

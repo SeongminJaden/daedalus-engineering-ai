@@ -12,8 +12,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen.svg)](#status)
-[![Capabilities](https://img.shields.io/badge/capabilities-56%20registered-orange.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1674%20passing-brightgreen.svg)](#status)
+[![Capabilities](https://img.shields.io/badge/capabilities-57%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
 
@@ -33,7 +33,7 @@ Everything below has been built, tested against an independent reference, and
 run on the development machine. Nothing below has been physically tested, and
 the code grades its own output accordingly.
 
-**56 registered capabilities on 13 nodes.** A capability is a method plus the
+**57 registered capabilities on 13 nodes.** A capability is a method plus the
 node that runs it, and one rule routes all of them: a method is a candidate
 only when it applies to the problem and its node is available. Excluded
 methods report why.
@@ -41,7 +41,7 @@ methods report why.
 | where it runs | count | what is there |
 |---|---|---|
 | in-process engine, GPU | 43 | beam and Timoshenko theory, matrix-free 3D FEM, fatigue (S-N, Goodman, Miner), Euler buckling, shafts, bearings, bolts, threads, gears, keys, welds, press fits, ISO 286 fits, Hertz contact, thermal networks and transients, pipe flow, drag, fluid actuators, laminates (CLT), statics, rigid-body dynamics, motor and gearbox selection, SLSQP, differential evolution, NSGA-II, SIMP topology (compliance and stress), generative CAD over the synthetic part families, minimum sizing, multi-design review |
-| external solver nodes, stdio | 7 | CalculiX (FEA and general shapes), Code_Aster (plasticity), Elmer (magnetostatics), OpenFOAM (CFD), Gmsh (meshing), Pinocchio (multibody), MuJoCo (contact) |
+| external solver nodes, stdio | 8 | CalculiX (FEA and general shapes), Code_Aster (plasticity, and unilateral contact verified against Hertz), Elmer (magnetostatics), OpenFOAM (CFD), Gmsh (meshing), Pinocchio (multibody), MuJoCo (contact) |
 | CAD knowledge layer | 4 | STEP analyzer, rule-based feature recognition, shape descriptors with rule-based family classification (UNKNOWN for anything outside the five synthetic families), wall thickness and draft checks; build123d parametric shapes to STEP |
 | stubs, honestly unavailable | 2 | Fusion round trip (needs a Windows host and an entitlement), external LLM reasoner |
 
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1616 tests pass**, including independent verification of every critical
+**1674 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -322,7 +322,7 @@ that is the documented seam where an LLM policy plugs in.
 
 **Exported CAD is analysis geometry, not a manufacturing-ready part.** STEP export is exact for parametric solids and is refused outright if the B-rep volume disagrees with the mass the physics used, so the file is always the part that was analysed. But it has no fillets, no fastener features and no tolerances, and its sharp root corner is precisely where Phase 7 found the stress concentration. Organic and topology-optimized shapes do **not** get a clean STEP: that needs surface reconstruction, and the mesh path says so rather than emitting geometry that looks manufacturable.
 
-**Material values carry their own caveats.** The database holds 15 materials, all `reference_typical` rather than certified datasheet values. Polymer properties depend strongly on temperature, strain rate and process, and a printed part is not isotropic, so the bulk values stored here are an upper bound on a printed one. Alumina has **no ductile yield point**, so a yield-based safety factor is the wrong failure criterion for it. CFRP is orthotropic with a 30x ratio between fibre-direction and transverse strength, which is why a single yield number is not offered for it. Derived values (such as G from E and nu) are exact and marked as derived; estimated values carry an uncertainty and force the material's status down to `ASSUMED`.
+**Material values carry their own caveats.** The database holds 19 materials, and every stored number names the document it was read from, at which table, with the value as printed: producer datasheets (Kaiser, Outokumpu, Special Metals, Carpenter, Victrex, EOS, Stratasys, NatureWorks, Hexcel) graded primary, databases that restate numbers without attribution (MatWeb, AZoM, MakeItFrom) graded secondary, and exact computations graded derived. A value no document gives is absent, never estimated: several entries have no fatigue strength, and the fatigue methods refuse them rather than invent one. Only INCONEL 718 has a sourced modulus versus temperature curve; nothing is interpolated from a room temperature value. Polymer properties depend strongly on temperature, strain rate and process, and a printed part is not isotropic, so the bulk values stored here are an upper bound on a printed one. Alumina has **no ductile yield point**, so a yield-based safety factor is the wrong failure criterion for it. CFRP is orthotropic with a 30x ratio between fibre-direction and transverse strength, which is why a single yield number is not offered for it. Derived values (such as G from E and nu) are exact and marked as derived; estimated values carry an uncertainty and force the material's status down to `ASSUMED`.
 
 **The optimum depends on an assumed manufacturing bound.** Two of three design
 variables land on their bounds, and the 1 mm minimum wall thickness is an

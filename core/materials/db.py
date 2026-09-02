@@ -44,6 +44,58 @@ class MaterialStatus(str, Enum):
     ASSUMED = "assumed"                        # placeholder, not defensible
 
 
+class SourceGrade(str, Enum):
+    """How close a cited document is to a measurement.
+
+    PRIMARY    the producer's own datasheet or a standard, read in full
+    SECONDARY  a database or article that restates values without attributing
+               them to a measurement; named so it can be checked, not trusted
+    DERIVED    computed exactly from other stored values
+    """
+
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    DERIVED = "derived"
+
+
+class SourceDocument(BaseModel):
+    """One document a value was read from, identified well enough to find."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    publisher: str = Field(min_length=1)
+    grade: SourceGrade
+    url: str = ""
+    document_date: str = ""       # as printed on the document, or "not printed"
+    retrieved: str = ""           # ISO date the document was read
+    notes: str = ""
+
+
+class ValueSource(BaseModel):
+    """Where ONE stored value came from, by field name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1)    # a SourceDocument id in `sources`
+    grade: SourceGrade
+    location: str = ""                   # table, page or row in the document
+    #: The document's own number and unit, before conversion to SI, so the
+    #: conversion can be checked.
+    as_printed: str = ""
+    condition: str = ""                  # temper, product form, orientation
+    note: str = ""
+
+
+class MissingMaterialValue(ValueError):
+    """A property this database does not have a sourced value for.
+
+    Raised instead of returning a guess. A method that needs the value has to
+    say so, and the caller has to find a source or choose another material.
+    """
+
+
 class MaterialSpec(BaseModel):
     """One material. All values SI."""
 
@@ -61,9 +113,34 @@ class MaterialSpec(BaseModel):
     ultimate_strength_pa: float = Field(gt=0.0)
     poisson_ratio: float = Field(gt=0.0, lt=0.5)
     shear_modulus_pa: float = Field(gt=0.0)
-    fatigue_strength_pa: float = Field(gt=0.0)
+    #: None means NO SOURCED VALUE EXISTS in this database, not zero. The
+    #: fatigue methods refuse such a material through
+    #: `require_fatigue_strength_pa` rather than inventing an endurance limit.
+    fatigue_strength_pa: float | None = Field(default=None, gt=0.0)
     source: str = Field(min_length=1)
     status: MaterialStatus
+
+    # --- provenance per document and per value ------------------------------
+    #
+    # `source` above is the one-line summary that every consumer prints.
+    # `sources` are the documents themselves and `value_sources` says which
+    # field came from which document, at which table, in which condition,
+    # with the number as printed so the SI conversion can be checked. A value
+    # with no entry in `value_sources` has no better provenance than the
+    # one-line summary, and the tests count those.
+    sources: list[SourceDocument] = Field(default_factory=list)
+    value_sources: dict[str, ValueSource] = Field(default_factory=dict)
+    #: Service temperature range the source states, in kelvin, or None when
+    #: the source states none. Not a limit anything enforces yet; recorded so
+    #: that a thermal problem can be refused before it is solved wrongly.
+    service_temperature_k: tuple[float, float] | None = None
+    #: Sourced temperature curves, field name to a list of (T_K, value)
+    #: pairs, only where a document tabulates them. Nothing here is
+    #: interpolated from a room temperature value.
+    temperature_dependence: dict[str, list[tuple[float, float]]] = Field(
+        default_factory=dict)
+    temperature_dependence_sources: dict[str, ValueSource] = Field(
+        default_factory=dict)
 
     material_class: MaterialClass = MaterialClass.ISOTROPIC
 
@@ -138,6 +215,95 @@ class MaterialSpec(BaseModel):
     derived_fields: list[str] = Field(default_factory=list)
     # Free-text caveats that travel with the material.
     notes: str = ""
+
+    @model_validator(mode="after")
+    def _provenance_is_consistent(self) -> "MaterialSpec":
+        """Every cited document exists, every cited field exists, and a value
+        graded DERIVED is listed among the derived fields."""
+        ids = {d.id for d in self.sources}
+        if len(ids) != len(self.sources):
+            raise ValueError(f"{self.id}: duplicate source ids")
+        fields = set(type(self).model_fields)
+        for name, vs in {**self.value_sources,
+                         **self.temperature_dependence_sources}.items():
+            if name not in fields:
+                raise ValueError(f"{self.id}: value source names unknown field "
+                                 f"{name!r}")
+            if vs.source not in ids:
+                raise ValueError(f"{self.id}: field {name!r} cites source "
+                                 f"{vs.source!r}, which is not in sources")
+        for name, vs in self.value_sources.items():
+            if vs.grade is SourceGrade.DERIVED and name not in self.derived_fields:
+                raise ValueError(f"{self.id}: {name!r} is graded derived but not "
+                                 f"listed in derived_fields")
+        for name, curve in self.temperature_dependence.items():
+            if name not in fields:
+                raise ValueError(f"{self.id}: temperature curve names unknown "
+                                 f"field {name!r}")
+            if name not in self.temperature_dependence_sources:
+                raise ValueError(f"{self.id}: temperature curve for {name!r} "
+                                 f"has no source; a curve without one is a guess")
+            temps = [t for t, _ in curve]
+            if len(curve) < 2 or temps != sorted(temps):
+                raise ValueError(f"{self.id}: temperature curve for {name!r} "
+                                 f"needs at least two points in rising order")
+        if self.service_temperature_k is not None:
+            low, high = self.service_temperature_k
+            if not 0.0 < low < high:
+                raise ValueError(f"{self.id}: service temperature range must be "
+                                 f"positive and rising")
+        return self
+
+    def require_fatigue_strength_pa(self) -> float:
+        """The endurance value, or a refusal naming the material."""
+        if self.fatigue_strength_pa is None:
+            raise MissingMaterialValue(
+                f"{self.id} has no sourced fatigue strength; the database "
+                f"records none rather than a guess, so a fatigue check cannot "
+                f"run on it")
+        return self.fatigue_strength_pa
+
+    def unsourced_fields(self) -> list[str]:
+        """Stored numeric values with no per-value source entry."""
+        numeric = ("density_kg_m3", "youngs_modulus_pa", "yield_strength_pa",
+                   "ultimate_strength_pa", "poisson_ratio", "shear_modulus_pa",
+                   "fatigue_strength_pa", "thermal_expansion_1_k")
+        return [f for f in numeric if getattr(self, f) is not None
+                and f not in self.value_sources]
+
+    def modulus_at_temperature_pa(self, temperature_k: float) -> float:
+        """Young's modulus from the sourced curve, linearly interpolated
+        INSIDE its range. Refuses to extrapolate and refuses when no curve is
+        stored; the room temperature value is not a curve."""
+        curve = self.temperature_dependence.get("youngs_modulus_pa")
+        if not curve:
+            raise MissingMaterialValue(
+                f"{self.id} has no sourced modulus versus temperature curve")
+        temps = [t for t, _ in curve]
+        if not temps[0] <= temperature_k <= temps[-1]:
+            raise MissingMaterialValue(
+                f"{self.id}: {temperature_k:.0f} K is outside the sourced "
+                f"curve {temps[0]:.0f} to {temps[-1]:.0f} K; no extrapolation")
+        for (t0, v0), (t1, v1) in zip(curve, curve[1:]):
+            if t0 <= temperature_k <= t1:
+                frac = 0.0 if t1 == t0 else (temperature_k - t0) / (t1 - t0)
+                return v0 + frac * (v1 - v0)
+        return curve[-1][1]
+
+    def quasi_isotropic_modulus_estimate_pa(self) -> float:
+        """For an orthotropic lamina, the in-plane modulus a quasi-isotropic
+        laminate of it would have, by the common estimate 3/8 E1 + 5/8 E2.
+
+        DERIVED and approximate: the exact laminate result needs G12 and nu12
+        through classical lamination theory, and this estimate is what is
+        usually quoted before that is done. It is a stiffness only. No
+        strength follows from it, which is why no isotropic CFRP entry exists
+        in this database: a strength for it would have to be invented.
+        """
+        if self.material_class is not MaterialClass.ORTHOTROPIC:
+            raise MissingMaterialValue(
+                f"{self.id} is not orthotropic; the estimate is for laminae")
+        return 3.0 / 8.0 * self.e1_pa + 5.0 / 8.0 * self.e2_pa
 
     @model_validator(mode="after")
     def _yield_below_ultimate(self) -> "MaterialSpec":

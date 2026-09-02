@@ -233,7 +233,7 @@ def test_all_new_materials_are_present():
     ids = DB.ids()
     for material_id in NEW_IDS:
         assert material_id in ids, f"{material_id} missing"
-    assert len(DB.materials) == 15
+    assert len(DB.materials) == 19
 
 
 @pytest.mark.parametrize("material_id", NEW_IDS)
@@ -244,7 +244,10 @@ def test_new_material_values_are_physically_consistent(material_id):
     assert m.yield_strength_pa < m.ultimate_strength_pa
     assert 0 < m.poisson_ratio < 0.5
     assert m.source.strip()
-    assert m.status is MaterialStatus.REFERENCE_TYPICAL
+    # a producer datasheet read in full earns supplier_datasheet; a database
+    # value stays reference_typical; nothing here is measured
+    assert m.status in (MaterialStatus.REFERENCE_TYPICAL,
+                        MaterialStatus.SUPPLIER_DATASHEET)
 
 
 @pytest.mark.parametrize("material_id", NEW_IDS)
@@ -259,14 +262,14 @@ def test_specific_values_are_as_specified():
     assert DB.get("ti_6al_4v").youngs_modulus_pa == 113.8e9
     assert DB.get("ti_6al_4v").density_kg_m3 == 4430.0
     assert DB.get("steel_scm440").yield_strength_pa == 655e6
-    assert DB.get("ss_316").poisson_ratio == 0.30
+    assert DB.get("ss_316").poisson_ratio == 0.28          # MakeItFrom, secondary
     assert DB.get("mg_az31b").density_kg_m3 == 1770.0
-    assert DB.get("pla").youngs_modulus_pa == 3.5e9
+    assert DB.get("pla").youngs_modulus_pa == 3.6e9         # NatureWorks 4043D
     assert DB.get("alumina_al2o3").poisson_ratio == 0.22
     cfrp = DB.get("cfrp_ud")
-    assert cfrp.e1_pa == 135e9 and cfrp.e2_pa == 10e9
+    assert cfrp.e1_pa == 141e9 and cfrp.e2_pa == 10e9       # Hexcel 8552/AS4
     assert cfrp.g23_pa == 3.5e9 and cfrp.nu23 == 0.45
-    assert cfrp.strength_long_pa == 1500e6 and cfrp.strength_trans_pa == 50e6
+    assert cfrp.strength_long_pa == 2207e6 and cfrp.strength_trans_pa == 81e6
 
 
 def test_cfrp_is_orthotropic_with_directional_strengths():
@@ -309,7 +312,7 @@ def test_incomplete_orthotropic_entry_is_rejected():
 # 5 & 6. beam model and the inference layer
 # =========================================================================== #
 def test_axial_modulus_is_e1_for_orthotropic():
-    assert DB.get("cfrp_ud").axial_modulus_pa() == 135e9
+    assert DB.get("cfrp_ud").axial_modulus_pa() == 141e9   # Hexcel 8552/AS4 E1
     iso = DB.get("al_7075_t6")
     assert iso.axial_modulus_pa() == iso.youngs_modulus_pa
 

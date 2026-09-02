@@ -1,304 +1,1669 @@
 # Material property database. All values SI.
 #
-# STATUS / SOURCE ARE PART OF THE SCHEMA ON PURPOSE.
-# Every entry here is `reference_typical`: handbook/database TYPICAL values,
-# NOT a specific supplier's certified datasheet. Typical values vary with
-# temper, product form (plate vs extrusion vs bar), thickness and heat lot.
-# Before anything is manufactured, each value must be re-checked against the
-# actual supplier datasheet for the actual product form, and the status
-# upgraded accordingly. Design decisions made on these numbers carry that
-# caveat with them.
+# EVERY VALUE SAYS WHERE IT CAME FROM. Each material carries `sources`, the
+# documents that were read, and `value_sources`, which field came from which
+# document at which table, with the number as printed so the SI conversion can
+# be checked. Grades:
+#   primary    the producer's datasheet or a standard, read in full on the
+#              retrieval date
+#   secondary  a database or article that restates numbers without attributing
+#              them to a measurement (MatWeb, AZoM, MakeItFrom); named so it
+#              can be checked, not trusted
+#   derived    computed exactly from other stored values
+# A value that no document gives is ABSENT (None), never estimated. Fatigue
+# strength is None for several entries for exactly that reason, and the
+# fatigue methods refuse those materials rather than inventing an endurance
+# limit.
 #
-# SCOPE: this database currently holds ISOTROPIC, linear-elastic METALS only.
-# CFRP and 3D-printed plastics are anisotropic and must NOT be added to this
-# single-E/single-yield schema - they need the direction-dependent schema and
-# the anisotropic solver first (see the material roadmap in DESIGN.md, step 3).
+# The MatWeb pages this file cited in earlier revisions returned HTTP 403 to
+# automated retrieval on 2026-09-02 and were not re-read. Values that still
+# rest on them are graded secondary and say so. al_7075_t6 in particular keeps
+# its MatWeb/MMPDS numbers because every pinned result in this repository
+# depends on them; the Kaiser primary numbers, which differ by under one
+# percent, are written in its notes.
 #
-# fatigue_strength_pa is a representative endurance value (R.R. Moore rotating
-# beam, ~5e8 cycles for these alloys). Aluminium has no true endurance limit,
-# so this is a reference point, not a guarantee of infinite life.
+# STATUS is per material: `supplier_datasheet` where the load bearing values
+# are primary, `reference_typical` where they are not. Typical values vary
+# with temper, product form, thickness and lot; before anything is
+# manufactured each value must be re-checked against the datasheet for the
+# actual product, and the status upgraded to `measured` only by a test.
 #
-# thermal_expansion_1_k is the linear coefficient in 1/K, reference_typical at
-# room temperature. Two caveats travel with it. It is TEMPERATURE DEPENDENT and
-# the single value here is a room-temperature figure, so a large excursion
-# needs a curve rather than this number. And the polymer values scatter far
-# more than the metal ones, easily +/- 20% between grades and fillers, so treat
-# abs/pla/petg/pc/pa12 as order-of-magnitude.
+# service_temperature_k is what the source states as a use range or a
+# softening point, in kelvin, or absent where the source states none. It is
+# recorded, not enforced. temperature_dependence holds sourced curves only;
+# INCONEL 718 has a modulus curve from 294 to 1366 K, nothing else does, and
+# nothing here is interpolated from a room temperature value.
 #
-# CFRP carries DIRECTIONAL coefficients because a single value would be worse
-# than useless there: carbon fibre contracts along its length when heated, so
-# alpha_1 is NEGATIVE while alpha_2 across the fibres is large and positive.
+# fatigue_strength_pa is a representative endurance value (R.R. Moore
+# rotating beam, about 5e8 cycles, for the aluminium entries). Aluminium has
+# no true endurance limit, so this is a reference point, not a guarantee of
+# infinite life.
 #
 # price_per_kg_usd is RAW MATERIAL only, reference_typical, in USD per kg.
-# VALIDITY: it is not a part cost and must not be presented as one. Machining,
-# finishing, assembly, tooling, scrap and quantity discounts are all excluded,
-# and for a small machined bracket those dominate the material by an order of
-# magnitude. The scatter on the material price itself is also larger than any
-# other field here: alloy prices move with commodity markets, form (bar, plate,
-# powder) changes them severalfold, and small quantities carry a large premium.
-# Use these to RANK materials against each other, not to quote anything.
+# It is not a part cost and must not be presented as one. Use it to RANK
+# materials against each other, not to quote anything. Absent where no
+# defensible figure was recorded.
 
 materials:
-  - id: al_7075_t6
-    name: Aluminium 7075-T6
-    density_kg_m3: 2810.0
-    youngs_modulus_pa: 71.7e9
-    yield_strength_pa: 503.0e6
-    ultimate_strength_pa: 572.0e6
-    poisson_ratio: 0.33
-    shear_modulus_pa: 26.9e9
-    fatigue_strength_pa: 159.0e6
-    thermal_expansion_1_k: 2.36e-05
-    price_per_kg_usd: 6
-    source: MatWeb/MMPDS typical (verify vs supplier datasheet)
-    status: reference_typical
-
-  - id: al_6061_t6
-    name: Aluminium 6061-T6
-    density_kg_m3: 2700.0
-    youngs_modulus_pa: 68.9e9
-    yield_strength_pa: 276.0e6
-    ultimate_strength_pa: 310.0e6
-    poisson_ratio: 0.33
-    shear_modulus_pa: 26.0e9
-    fatigue_strength_pa: 96.5e6
-    thermal_expansion_1_k: 2.36e-05
-    price_per_kg_usd: 3
-    source: MatWeb typical (verify vs supplier datasheet)
-    status: reference_typical
-  - id: al_2024_t3
-    name: Aluminium 2024-T3
-    density_kg_m3: 2780.0
-    youngs_modulus_pa: 7.31e+10
-    yield_strength_pa: 3.45e+08
-    ultimate_strength_pa: 4.83e+08
-    poisson_ratio: 0.33
-    shear_modulus_pa: 27481203007.518795
-    fatigue_strength_pa: 1.38e+08
-    thermal_expansion_1_k: 2.36e-05
-    price_per_kg_usd: 6
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: MatWeb/MMPDS typical (verify vs supplier datasheet)
-    status: reference_typical
-  - id: ti_6al_4v
-    name: Titanium Ti-6Al-4V (Grade 5)
-    density_kg_m3: 4430.0
-    youngs_modulus_pa: 1.138e+11
-    yield_strength_pa: 8.8e+08
-    ultimate_strength_pa: 9.5e+08
-    poisson_ratio: 0.342
-    shear_modulus_pa: 42399403874.813705
-    fatigue_strength_pa: 5.1e+08
-    thermal_expansion_1_k: 8.6e-06
-    price_per_kg_usd: 40
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: MatWeb typical, annealed (verify vs supplier datasheet)
-    status: reference_typical
-  - id: steel_s45c
-    name: Carbon steel S45C (AISI 1045)
-    density_kg_m3: 7850.0
-    youngs_modulus_pa: 2.05e+11
-    yield_strength_pa: 3.43e+08
-    ultimate_strength_pa: 5.69e+08
-    poisson_ratio: 0.29
-    shear_modulus_pa: 79457364341.08527
-    fatigue_strength_pa: 2.45e+08
-    thermal_expansion_1_k: 1.17e-05
-    price_per_kg_usd: 1
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: JIS G4051 / MatWeb typical, normalized (verify vs supplier datasheet)
-    status: reference_typical
-  - id: steel_scm440
-    name: Alloy steel SCM440 (AISI 4140)
-    density_kg_m3: 7850.0
-    youngs_modulus_pa: 2.05e+11
-    yield_strength_pa: 6.55e+08
-    ultimate_strength_pa: 8.5e+08
-    poisson_ratio: 0.29
-    shear_modulus_pa: 79457364341.08527
-    fatigue_strength_pa: 3.95e+08
-    thermal_expansion_1_k: 1.17e-05
-    price_per_kg_usd: 2
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: JIS G4105 / MatWeb typical, Q&T (verify vs supplier datasheet)
-    status: reference_typical
-  - id: ss_316
-    name: Stainless steel 316
-    density_kg_m3: 8000.0
-    youngs_modulus_pa: 1.93e+11
-    yield_strength_pa: 2.9e+08
-    ultimate_strength_pa: 5.8e+08
-    poisson_ratio: 0.3
-    shear_modulus_pa: 74230769230.76923
-    fatigue_strength_pa: 2.4e+08
-    thermal_expansion_1_k: 1.6e-05
-    price_per_kg_usd: 5
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: MatWeb typical, annealed (verify vs supplier datasheet)
-    status: reference_typical
-  - id: mg_az31b
-    name: Magnesium AZ31B
-    density_kg_m3: 1770.0
-    youngs_modulus_pa: 4.5e+10
-    yield_strength_pa: 2e+08
-    ultimate_strength_pa: 2.6e+08
-    poisson_ratio: 0.35
-    shear_modulus_pa: 16666666666.666666
-    fatigue_strength_pa: 1.1e+08
-    thermal_expansion_1_k: 2.6e-05
-    price_per_kg_usd: 5
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    source: MatWeb typical (verify vs supplier datasheet)
-    status: reference_typical
-  - id: abs
-    name: ABS (acrylonitrile butadiene styrene)
-    density_kg_m3: 1050.0
-    youngs_modulus_pa: 2.3e+09
-    yield_strength_pa: 4e+07
-    ultimate_strength_pa: 4.4e+07
-    poisson_ratio: 0.35
-    shear_modulus_pa: 851851851.8518518
-    fatigue_strength_pa: 1.5e+07
-    thermal_expansion_1_k: 9e-05
-    price_per_kg_usd: 3
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
-    source: MatWeb typical bulk values (verify vs supplier datasheet)
-    status: reference_typical
-  - id: pla
-    name: PLA (polylactic acid)
-    density_kg_m3: 1240.0
-    youngs_modulus_pa: 3.5e+09
-    yield_strength_pa: 5e+07
-    ultimate_strength_pa: 5.5e+07
-    poisson_ratio: 0.36
-    shear_modulus_pa: 1286764705.882353
-    fatigue_strength_pa: 1.8e+07
-    thermal_expansion_1_k: 7e-05
-    price_per_kg_usd: 3
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
-    source: MatWeb typical bulk values (verify vs supplier datasheet)
-    status: reference_typical
-  - id: pa12
-    name: PA12 (nylon 12)
-    density_kg_m3: 1010.0
-    youngs_modulus_pa: 1.4e+09
-    yield_strength_pa: 4.5e+07
-    ultimate_strength_pa: 5e+07
-    poisson_ratio: 0.39
-    shear_modulus_pa: 503597122.30215824
-    fatigue_strength_pa: 1.7e+07
-    thermal_expansion_1_k: 9e-05
-    price_per_kg_usd: 3
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
-    source: MatWeb typical bulk values (verify vs supplier datasheet)
-    status: reference_typical
-  - id: petg
-    name: PETG
-    density_kg_m3: 1270.0
-    youngs_modulus_pa: 2.1e+09
-    yield_strength_pa: 5e+07
-    ultimate_strength_pa: 5.3e+07
-    poisson_ratio: 0.38
-    shear_modulus_pa: 760869565.2173914
-    fatigue_strength_pa: 1.8e+07
-    thermal_expansion_1_k: 7e-05
-    price_per_kg_usd: 3
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
-    source: MatWeb typical bulk values (verify vs supplier datasheet)
-    status: reference_typical
-  - id: pc
-    name: Polycarbonate
-    density_kg_m3: 1200.0
-    youngs_modulus_pa: 2.3e+09
-    yield_strength_pa: 6.2e+07
-    ultimate_strength_pa: 6.6e+07
-    poisson_ratio: 0.37
-    shear_modulus_pa: 839416058.3941605
-    fatigue_strength_pa: 2.2e+07
-    thermal_expansion_1_k: 7e-05
-    price_per_kg_usd: 3
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed parts) process parameters and build direction. A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.
-    source: MatWeb typical bulk values (verify vs supplier datasheet)
-    status: reference_typical
-  - id: alumina_al2o3
-    name: Alumina (Al2O3, 99.5%)
-    density_kg_m3: 3900.0
-    youngs_modulus_pa: 3.7e+11
-    yield_strength_pa: 3.5e+08
-    ultimate_strength_pa: 3.6e+08
-    poisson_ratio: 0.22
-    shear_modulus_pa: 151639344262.29507
-    fatigue_strength_pa: 2.0e+08
-    thermal_expansion_1_k: 8e-06
-    price_per_kg_usd: 20
-    material_class: isotropic
-    derived_fields: [shear_modulus_pa]
-    notes: >-
-      BRITTLE CERAMIC: there is NO ductile yield point. The yield field carries
-      the flexural strength (~350 MPa) so the schema stays usable, but a
-      yield-based safety factor is the wrong failure criterion here. Ceramic
-      strength is scatter-dominated and size dependent; a Weibull treatment is
-      required for real design, and this database does not provide one.
-    source: MatWeb typical 99.5% alumina (verify vs supplier datasheet)
-    status: reference_typical
-  - id: cfrp_ud
-    name: CFRP unidirectional laminate (carbon/epoxy)
-    density_kg_m3: 1600.0
-    youngs_modulus_pa: 1.35e+11
-    yield_strength_pa: 1.5e+09
-    ultimate_strength_pa: 1.6e+09
-    poisson_ratio: 0.3
-    shear_modulus_pa: 5.0e+09
-    fatigue_strength_pa: 6.0e+08
-    thermal_expansion_1_k: -5e-07
-    price_per_kg_usd: 60
-    cte1_1_k: -0.5e-06
-    cte2_1_k: 25.0e-06
-    cte3_1_k: 25.0e-06
-    material_class: orthotropic
-    e1_pa: 1.35e+11
-    e2_pa: 1.0e+10
-    e3_pa: 1.0e+10
-    g12_pa: 5.0e+09
-    g13_pa: 5.0e+09
-    g23_pa: 3.5e+09
-    nu12: 0.3
-    nu13: 0.3
-    nu23: 0.45
-    strength_long_pa: 1.5e+09
-    strength_trans_pa: 5.0e+07
-    strength_shear_pa: 7.0e+07
-    strength_long_compressive_pa: 1.2e+09
-    strength_trans_compressive_pa: 2.0e+08
-    orientation_deg: [0.0]
-    layup: [UD-0]
-    notes: >-
-      ORTHOTROPIC. Strength along the fibres is roughly 30x the transverse
-      strength, so a single yield number is meaningless: use the directional
-      values. Properties are process dependent (fibre volume fraction, cure,
-      void content) and the isotropic fields above are the axis-1 values kept
-      only for reporting. Off-axis loading couples extension and shear and
-      cannot be represented by the 1D beam model.
-    source: Typical UD carbon/epoxy laminate values (verify vs supplier datasheet)
-    status: reference_typical
+- id: al_7075_t6
+  name: Aluminium 7075-T6
+  density_kg_m3: 2810.0
+  youngs_modulus_pa: 71700000000.0
+  yield_strength_pa: 503000000.0
+  ultimate_strength_pa: 572000000.0
+  poisson_ratio: 0.33
+  shear_modulus_pa: 26900000000.0
+  fatigue_strength_pa: 159000000.0
+  thermal_expansion_1_k: 2.36e-05
+  price_per_kg_usd: 6
+  source: MatWeb/MMPDS typical, with Kaiser Aluminum T651 sheet and plate as the primary cross-reference
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  - id: kaiser_7075_sheet
+    title: Sheet Coil & Plate Alloy 7075 Technical Data
+    publisher: Kaiser Aluminum
+    grade: primary
+    url: https://online.kaiseraluminum.com/depot/PublicProductInformation/Document/1017/Kaiser_Aluminum_7075_Sheet_Coil_and_Plate.pdf
+    document_date: Rev. 05/06
+    retrieved: '2026-09-02'
+    notes: Typical mechanical properties table (T651 sheet and plate) and typical physical properties
+      table.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      condition: T6 typical
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T6 typical
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      condition: T6 typical
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T6 typical
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      condition: T6 typical
+      note: not re-read this session
+    yield_strength_pa:
+      source: kaiser_7075_sheet
+      grade: primary
+      location: Typical mechanical properties, T651
+      as_printed: 73 ksi, 503 MPa
+      condition: T651 sheet and plate
+    ultimate_strength_pa:
+      source: kaiser_7075_sheet
+      grade: primary
+      location: Typical mechanical properties, T651
+      as_printed: 83 ksi, 572 MPa
+      condition: T651 sheet and plate
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb typical; Kaiser gives no shear modulus
+  notes: Kaiser T651 sheet and plate (primary) lists E 71.0 GPa, density 2.80 Mg/m3, endurance limit 158
+    MPa at 5e8 cycles and linear expansion 23.4 um/m K over 20 to 100 C. The stored E 71.7 GPa, density
+    2810 and fatigue 159 MPa are the MatWeb/MMPDS typical values this file has always carried; they differ
+    from Kaiser by under 1 percent, and changing them would move every pinned result in this repository,
+    so they stay, graded secondary, with the primary numbers written here for the reader to choose.
+- id: al_6061_t6
+  name: Aluminium 6061-T6
+  density_kg_m3: 2700.0
+  youngs_modulus_pa: 68900000000.0
+  yield_strength_pa: 276000000.0
+  ultimate_strength_pa: 310000000.0
+  poisson_ratio: 0.33
+  shear_modulus_pa: 26000000000.0
+  fatigue_strength_pa: 96500000.0
+  thermal_expansion_1_k: 2.36e-05
+  price_per_kg_usd: 3
+  source: MatWeb typical, cross-checked against Kaiser Aluminum rod and bar T6
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  - id: kaiser_6061_rod
+    title: Rod & Bar Alloy 6061 Technical Data
+    publisher: Kaiser Aluminum
+    grade: primary
+    url: https://online.kaiseraluminum.com/depot/PublicProductInformation/Document/1025/Kaiser_Aluminum_6061_Rod_and_Bar.pdf
+    document_date: KA-RBH-6061-8.10
+    retrieved: '2026-09-02'
+  - id: azom_6061
+    title: Aluminium / Aluminum 6061 Alloy (UNS A96061)
+    publisher: AZoM (AZoNetwork)
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=6636
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: States no source for its numbers.
+  value_sources:
+    density_kg_m3:
+      source: kaiser_6061_rod
+      grade: primary
+      location: Typical physical properties
+      as_printed: 2.70 Mg/m3 at 20 C
+    yield_strength_pa:
+      source: kaiser_6061_rod
+      grade: primary
+      location: Typical mechanical properties, T6 and T651
+      as_printed: 40 ksi, 276 MPa
+      condition: T6, T651 rod and bar
+    ultimate_strength_pa:
+      source: kaiser_6061_rod
+      grade: primary
+      location: Typical mechanical properties, T6 and T651
+      as_printed: 45 ksi, 310 MPa
+      condition: T6, T651 rod and bar
+    thermal_expansion_1_k:
+      source: kaiser_6061_rod
+      grade: primary
+      location: Typical physical properties
+      as_printed: 23.6 micro m/m K, 20 to 100 C
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb 68.9 GPa; Kaiser rod and bar gives 68.3 GPa, AZoM 68.9 GPa
+    poisson_ratio:
+      source: azom_6061
+      grade: secondary
+      location: Mechanical properties
+      as_printed: '0.33'
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb 96.5 MPa; Kaiser 97 MPa at 5e8 cycles, AZoM 96.5 MPa
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb typical 26.0 GPa; exact E/(2(1+nu)) would be 25.9
+- id: al_2024_t3
+  name: Aluminium 2024-T3
+  density_kg_m3: 2780.0
+  youngs_modulus_pa: 73100000000.0
+  yield_strength_pa: 345000000.0
+  ultimate_strength_pa: 483000000.0
+  poisson_ratio: 0.33
+  shear_modulus_pa: 27481203007.518795
+  fatigue_strength_pa: 138000000.0
+  thermal_expansion_1_k: 2.36e-05
+  price_per_kg_usd: 6
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: MatWeb/MMPDS typical (verify vs supplier datasheet)
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    ultimate_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      condition: T3 typical
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+- id: ti_6al_4v
+  name: Titanium Ti-6Al-4V (Grade 5)
+  density_kg_m3: 4430.0
+  youngs_modulus_pa: 113800000000.0
+  yield_strength_pa: 880000000.0
+  ultimate_strength_pa: 950000000.0
+  poisson_ratio: 0.342
+  shear_modulus_pa: 42399403874.813705
+  fatigue_strength_pa: 510000000.0
+  thermal_expansion_1_k: 8.6e-06
+  price_per_kg_usd: 40
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: MatWeb typical, annealed; Carpenter and ATI datasheets as primary cross-references
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  - id: carpenter_ti64
+    title: Titanium Alloy Ti 6Al-4V Technical Datasheet
+    publisher: Carpenter Technology
+    grade: primary
+    url: https://www.carpentertechnology.com/hubfs/7407324/Material%20Saftey%20Data%20Sheets/Ti%206Al-4V.pdf
+    document_date: not printed (10 pages)
+    retrieved: '2026-09-02'
+    notes: Specific gravity, modulus, room temperature minimum and typical tensile properties by condition,
+      service temperature statement.
+  - id: ati_ti64
+    title: ATI Ti-6Al-4V, Grade 5 Technical Data Sheet
+    publisher: Allegheny Technologies Incorporated
+    grade: primary
+    url: https://www.atimaterials.com/Products/Documents/datasheets/titanium/alloyed/ati_6-4_tds_en_v1.pdf
+    document_date: Version 1, 1/31/2012
+    retrieved: '2026-09-02'
+    notes: Density and melting range in text; modulus and expansion only as graphs, which were not read
+      as numbers.
+  - id: azom_ti64
+    title: Titanium Alloys Ti6Al4V Grade 5
+    publisher: AZoM (AZoNetwork), article by U.S. Titanium Industry Inc.
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=1547
+    document_date: July 30, 2002
+    retrieved: '2026-09-02'
+  - id: makeitfrom_ti64
+    title: Annealed Grade 5 Titanium
+    publisher: MakeItFrom.com
+    grade: secondary
+    url: https://www.makeitfrom.com/material-properties/Annealed-Grade-5-Titanium
+    document_date: not printed
+    retrieved: '2026-09-02'
+  value_sources:
+    density_kg_m3:
+      source: carpenter_ti64
+      grade: primary
+      location: Physical properties
+      as_printed: specific gravity 0.160 lb/in3, 4429 kg/m3
+      note: ATI gives 4.47 g/cc, AZoM 4.42; stored 4430
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb 113.8 GPa; Carpenter prints 15.2e6 psi (104.8 GPa), AZoM 114 GPa, MakeItFrom 110 GPa.
+        The spread is real and product-form dependent
+    yield_strength_pa:
+      source: carpenter_ti64
+      grade: primary
+      location: Room temperature mechanical properties, typical, annealed
+      as_printed: 875 to 995 MPa (127 to 144 ksi)
+      condition: annealed
+      note: stored 880 MPa sits at the low end of the typical range; the specified minimum is 827 MPa
+    ultimate_strength_pa:
+      source: carpenter_ti64
+      grade: primary
+      location: Room temperature mechanical properties, typical, annealed
+      as_printed: 965 to 1090 MPa (140 to 158 ksi)
+      condition: annealed
+      note: stored 950 MPa is below the typical range and above the 896 MPa minimum
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: MatWeb 0.342; MakeItFrom 0.32; neither primary sheet states it
+    fatigue_strength_pa:
+      source: carpenter_ti64
+      grade: primary
+      location: Fatigue limits, axial R 0.06 to 0.1, smooth, annealed wrought
+      as_printed: 400 to 700 MPa
+      condition: annealed
+      note: stored 510 MPa lies inside the range; the notched (Kt 3) range is 140 to 270 MPa
+    thermal_expansion_1_k:
+      source: azom_ti64
+      grade: secondary
+      as_printed: 8.6e-6 /C over 0 to 100 C
+      note: ATI and Carpenter give the same quantity only as graphs, roughly 8 to 9 um/m K near room temperature
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  service_temperature_k:
+  - 73.15
+  - 623.15
+  notes: 'Carpenter: recommended for service up to approximately 350 C; ATI: usable to about 427 C. The
+    lower bound here is the cryogenic use ATI mentions without a number, set to liquid nitrogen temperature
+    as a placeholder that the range field should not be read as a property. STA condition (yield 1035
+    to 1130 MPa typical) is a different material state and is not stored.'
+- id: steel_s45c
+  name: Carbon steel S45C (AISI 1045)
+  density_kg_m3: 7850.0
+  youngs_modulus_pa: 205000000000.0
+  yield_strength_pa: 343000000.0
+  ultimate_strength_pa: 569000000.0
+  poisson_ratio: 0.29
+  shear_modulus_pa: 79457364341.08527
+  fatigue_strength_pa: 245000000.0
+  thermal_expansion_1_k: 1.17e-05
+  price_per_kg_usd: 1
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: JIS G 4051 minimums (normalized) via metaldata.info; density, modulus, Poisson's ratio and fatigue
+    MatWeb typical
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  - id: metaldata_s45c
+    title: S45C JIS G 4051 (Japan), WinSteel 7 report
+    publisher: metaldata.info (WinSteel)
+    grade: secondary
+    url: https://www.metaldata.info/reports/S45C.pdf
+    document_date: 16.04.14
+    retrieved: '2026-09-02'
+    notes: 'Quotes JIS G 4051 minimums by condition: N (normalized) yield over 343 MPa, tensile over 569
+      MPa; H (quenched and tempered) yield over 490 MPa, tensile over 686 MPa. No density, modulus or
+      Poisson''s ratio.'
+  value_sources:
+    yield_strength_pa:
+      source: metaldata_s45c
+      grade: secondary
+      location: Properties by JIS G 4051, N
+      as_printed: over 343 MPa
+      condition: normalized
+      note: a standard minimum, not a typical
+    ultimate_strength_pa:
+      source: metaldata_s45c
+      grade: secondary
+      location: Properties by JIS G 4051, N
+      as_printed: over 569 MPa
+      condition: normalized
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  notes: Quenched and tempered (JIS H) minimums are yield over 490 MPa and tensile over 686 MPa; not stored
+    as a separate entry because no density or modulus source for that condition was read.
+- id: steel_scm440
+  name: Alloy steel SCM440 (AISI 4140), quenched and tempered
+  density_kg_m3: 7850.0
+  youngs_modulus_pa: 205000000000.0
+  yield_strength_pa: 655000000.0
+  ultimate_strength_pa: 850000000.0
+  poisson_ratio: 0.29
+  shear_modulus_pa: 79457364341.08527
+  fatigue_strength_pa: 395000000.0
+  thermal_expansion_1_k: 1.17e-05
+  price_per_kg_usd: 2
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: JIS G4105 / MatWeb typical, Q&T (verify vs supplier datasheet)
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    ultimate_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      condition: quenched and tempered
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+- id: steel_4140_annealed
+  name: Alloy steel AISI 4140, annealed
+  density_kg_m3: 7850.0
+  youngs_modulus_pa: 200000000000.0
+  yield_strength_pa: 415000000.0
+  ultimate_strength_pa: 655000000.0
+  poisson_ratio: 0.29
+  shear_modulus_pa: 77519379844.96124
+  thermal_expansion_1_k: 1.22e-05
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: AZoM AISI 4140 article (secondary, condition of the strengths not stated there; annealed by
+    comparison with other references)
+  status: reference_typical
+  sources:
+  - id: azom_4140
+    title: AISI 4140 Alloy Steel (UNS G41400)
+    publisher: AZoM (AZoNetwork)
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=6769
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: Heat treatment condition of the strength values is NOT stated in the article; 415 and 655 MPa
+      correspond to the annealed condition in other references and are recorded as annealed with that
+      caveat.
+  value_sources:
+    density_kg_m3:
+      source: azom_4140
+      grade: secondary
+      location: Physical properties
+      as_printed: 7.85 g/cm3
+    youngs_modulus_pa:
+      source: azom_4140
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 190 to 210 GPa
+      note: midpoint stored
+    poisson_ratio:
+      source: azom_4140
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 0.27 to 0.30
+      note: 0.29 stored
+    yield_strength_pa:
+      source: azom_4140
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 415 MPa
+      condition: annealed (inferred, see source notes)
+    ultimate_strength_pa:
+      source: azom_4140
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 655 MPa
+      condition: annealed (inferred, see source notes)
+    thermal_expansion_1_k:
+      source: azom_4140
+      grade: secondary
+      location: Thermal properties
+      as_printed: 12.2 um/m C, 0 to 100 C
+    shear_modulus_pa:
+      source: azom_4140
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  notes: 'No fatigue strength: the source gives none and none is invented. For the quenched and tempered
+    condition use steel_scm440.'
+- id: ss_304
+  name: Stainless steel 304 / 304L, annealed
+  density_kg_m3: 7889.0
+  youngs_modulus_pa: 200000000000.0
+  yield_strength_pa: 290000000.0
+  ultimate_strength_pa: 600000000.0
+  poisson_ratio: 0.28
+  shear_modulus_pa: 78125000000.0
+  fatigue_strength_pa: 210000000.0
+  thermal_expansion_1_k: 1.69e-05
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: Outokumpu North American datasheet 10866EN (primary); Poisson's ratio and fatigue from MakeItFrom
+    (secondary)
+  status: supplier_datasheet
+  sources:
+  - id: outokumpu_304
+    title: Type 304, Type 304L UNS S30400, UNS S30403, North American version, imperial units
+    publisher: Outokumpu
+    grade: primary
+    url: https://www.kmsheetmetal.com/wp-content/uploads/colors-and-materials/submittals/datasheet-304-304l-hpsa-imperial-outokumpu-en-americas.pdf
+    document_date: 10866EN, August 2013
+    retrieved: '2026-09-02'
+    notes: Table 1 mechanical (typical on 0.375 inch plate, and ASTM minimums), Table 3 physical.
+  - id: azom_304
+    title: Stainless Steel Grade 304 (UNS S30400)
+    publisher: AZoM (AZoNetwork)
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=965
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: States no source; the expansion values are given for three ranges.
+  - id: makeitfrom_304
+    title: Annealed 304 Stainless Steel
+    publisher: MakeItFrom.com
+    grade: secondary
+    url: https://www.makeitfrom.com/material-properties/Annealed-304-Stainless-Steel
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: Aggregator; lists applicable standards, states no source for the numbers.
+  value_sources:
+    density_kg_m3:
+      source: outokumpu_304
+      grade: primary
+      location: Table 3
+      as_printed: 0.285 lb/in3
+      note: 7889 kg/m3 converted; AZoM gives 8000
+    youngs_modulus_pa:
+      source: outokumpu_304
+      grade: primary
+      location: Table 3
+      as_printed: 29e6 psi
+      note: 199.9 GPa; AZoM 193 GPa
+    yield_strength_pa:
+      source: outokumpu_304
+      grade: primary
+      location: Table 1, typical
+      as_printed: 42 ksi
+      condition: annealed 0.375 inch plate
+      note: ASTM minimum 30 ksi (207 MPa) for 304, 25 ksi for 304L
+    ultimate_strength_pa:
+      source: outokumpu_304
+      grade: primary
+      location: Table 1, typical
+      as_printed: 87 ksi
+      condition: annealed 0.375 inch plate
+      note: ASTM minimum 75 ksi (517 MPa) for 304
+    thermal_expansion_1_k:
+      source: outokumpu_304
+      grade: primary
+      location: Table 3
+      as_printed: 9.4e-6 /F over 68 to 212 F
+      note: 16.9e-6 /K over 20 to 100 C; AZoM 17.2 over 0 to 100 C
+    poisson_ratio:
+      source: makeitfrom_304
+      grade: secondary
+      as_printed: '0.28'
+    fatigue_strength_pa:
+      source: makeitfrom_304
+      grade: secondary
+      as_printed: 210 MPa
+      note: unattributed aggregator value; treat as order of magnitude
+    shear_modulus_pa:
+      source: outokumpu_304
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  notes: Typical strengths are for 0.375 inch annealed plate; other forms differ. The datasheet gives
+    annealing at 1900 F minimum and no service temperature range, so none is stored.
+- id: ss_316
+  name: Stainless steel 316 / 316L, annealed
+  density_kg_m3: 7889.0
+  youngs_modulus_pa: 200000000000.0
+  yield_strength_pa: 303000000.0
+  ultimate_strength_pa: 586000000.0
+  poisson_ratio: 0.28
+  shear_modulus_pa: 78125000000.0
+  fatigue_strength_pa: 210000000.0
+  thermal_expansion_1_k: 1.6e-05
+  price_per_kg_usd: 5
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: Outokumpu North American datasheet (primary); Poisson's ratio and fatigue from MakeItFrom (secondary)
+  status: supplier_datasheet
+  sources:
+  - id: outokumpu_316
+    title: Type 316, Type 316L UNS S31600, UNS S31603, North American version, imperial units
+    publisher: Outokumpu
+    grade: primary
+    url: https://irp.cdn-website.com/3f9752a2/files/uploaded/316-OUT-Data-Sheet.pdf
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: Table 1 mechanical (typical on 0.375 inch plate, and ASTM minimums), Table 3 physical.
+  - id: azom_316
+    title: Stainless Steel Grade 316 (UNS S31600)
+    publisher: AZoM (AZoNetwork), citing Atlas Steels Australia
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=863
+    document_date: not printed
+    retrieved: '2026-09-02'
+  - id: makeitfrom_316
+    title: Annealed 316 Stainless Steel
+    publisher: MakeItFrom.com
+    grade: secondary
+    url: https://www.makeitfrom.com/material-properties/Annealed-316-Stainless-Steel
+    document_date: not printed
+    retrieved: '2026-09-02'
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: outokumpu_316
+      grade: primary
+      location: Table 3
+      as_printed: 0.285 lb/in3
+      note: 7889 kg/m3; the previous revision stored 8000 from MatWeb
+    youngs_modulus_pa:
+      source: outokumpu_316
+      grade: primary
+      location: Table 3
+      as_printed: 29e6 psi
+      note: 199.9 GPa; previous revision 193 GPa from MatWeb, which AZoM also gives
+    yield_strength_pa:
+      source: outokumpu_316
+      grade: primary
+      location: Table 1, typical
+      as_printed: 44 ksi
+      condition: annealed 0.375 inch plate
+      note: 303 MPa; ASTM minimum 30 ksi for 316, 25 ksi for 316L
+    ultimate_strength_pa:
+      source: outokumpu_316
+      grade: primary
+      location: Table 1, typical
+      as_printed: 85 ksi
+      condition: annealed 0.375 inch plate
+      note: 586 MPa; ASTM minimum 75 ksi for 316
+    thermal_expansion_1_k:
+      source: outokumpu_316
+      grade: primary
+      location: Table 3
+      as_printed: 8.9e-6 /F over 68 to 212 F
+      note: 16.0e-6 /K; AZoM (Atlas Steels) 15.9 over 0 to 100 C
+    poisson_ratio:
+      source: makeitfrom_316
+      grade: secondary
+      as_printed: '0.28'
+      note: previous revision 0.30 from MatWeb
+    fatigue_strength_pa:
+      source: makeitfrom_316
+      grade: secondary
+      as_printed: 210 MPa
+      note: previous revision 240 MPa from MatWeb; unattributed either way
+    shear_modulus_pa:
+      source: outokumpu_316
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  notes: 'Values moved from MatWeb typicals to the Outokumpu datasheet in this revision: density 8000
+    to 7889, E 193 to 200 GPa, yield 290 to 303 MPa, tensile 580 to 586 MPa. No pinned result in this
+    repository depends on ss_316, which is why this entry could move and al_7075_t6 could not.'
+- id: inconel_718
+  name: Nickel alloy INCONEL 718, solution annealed and aged
+  density_kg_m3: 8221.0
+  youngs_modulus_pa: 200000000000.0
+  yield_strength_pa: 1034000000.0
+  ultimate_strength_pa: 1241000000.0
+  poisson_ratio: 0.294
+  shear_modulus_pa: 77200000000.0
+  thermal_expansion_1_k: 1.316e-05
+  material_class: isotropic
+  source: Special Metals publication SMC-045 (primary)
+  status: supplier_datasheet
+  sources:
+  - id: special_metals_718
+    title: INCONEL alloy 718
+    publisher: Special Metals Corporation
+    grade: primary
+    url: https://www.specialmetals.com/documents/technical-bulletins/inconel/inconel-alloy-718.pdf
+    document_date: Publication SMC-045, Sept 2007
+    retrieved: '2026-09-02'
+    notes: Tables 2 (physical constants), 4 (modulus and Poisson's ratio versus temperature, hot-rolled
+      flat annealed 1800 F and aged), 5 (thermal properties) and the AMS 5596 / AMS 5662 room temperature
+      minimums.
+  value_sources:
+    density_kg_m3:
+      source: special_metals_718
+      grade: primary
+      location: Table 2
+      as_printed: 0.297 lb/in3, annealed and aged
+      condition: annealed and aged
+    youngs_modulus_pa:
+      source: special_metals_718
+      grade: primary
+      location: Table 4, 70 F
+      as_printed: 29.0e3 ksi
+      condition: hot-rolled flat, annealed 1800 F and aged
+    shear_modulus_pa:
+      source: special_metals_718
+      grade: primary
+      location: Table 4, 70 F, torsional modulus
+      as_printed: 11.2e3 ksi
+      condition: hot-rolled flat, annealed 1800 F and aged
+    poisson_ratio:
+      source: special_metals_718
+      grade: primary
+      location: Table 4, 70 F
+      as_printed: '0.294'
+      note: computed by the source from E and G
+    yield_strength_pa:
+      source: special_metals_718
+      grade: primary
+      location: AMS 5596 sheet, strip and plate, room temperature minimum
+      as_printed: 150 ksi (0.2 percent offset)
+      condition: 1700 to 1850 F anneal and age
+      note: a specification minimum, not a typical; AMS 5662 bars give the same 150 ksi
+    ultimate_strength_pa:
+      source: special_metals_718
+      grade: primary
+      location: AMS 5596 sheet, strip and plate, room temperature minimum
+      as_printed: 180 ksi
+      condition: 1700 to 1850 F anneal and age
+      note: specification minimum; bars 185 ksi
+    thermal_expansion_1_k:
+      source: special_metals_718
+      grade: primary
+      location: Table 5, mean linear expansion 70 to 200 F
+      as_printed: 7.31e-6 in/in F
+      condition: annealed and aged
+  service_temperature_k:
+  - 20.0
+  - 977.0
+  temperature_dependence:
+    youngs_modulus_pa:
+    - - 294.3
+      - 199900000000.0
+    - - 310.9
+      - 198600000000.0
+    - - 366.5
+      - 195800000000.0
+    - - 422.0
+      - 193100000000.0
+    - - 477.6
+      - 190300000000.0
+    - - 533.2
+      - 186800000000.0
+    - - 588.7
+      - 184100000000.0
+    - - 644.3
+      - 180600000000.0
+    - - 699.8
+      - 177900000000.0
+    - - 755.4
+      - 174400000000.0
+    - - 810.9
+      - 171000000000.0
+    - - 866.5
+      - 166900000000.0
+    - - 922.0
+      - 163400000000.0
+    - - 977.6
+      - 158600000000.0
+    - - 1033.2
+      - 153800000000.0
+    - - 1088.7
+      - 146900000000.0
+    - - 1144.3
+      - 139300000000.0
+    - - 1199.8
+      - 129600000000.0
+    - - 1255.4
+      - 120000000000.0
+    - - 1310.9
+      - 109600000000.0
+    - - 1366.5
+      - 98600000000.0
+  temperature_dependence_sources:
+    youngs_modulus_pa:
+      source: special_metals_718
+      grade: primary
+      location: Table 4, Young's modulus, 70 to 2000 F
+      as_printed: 29.0 to 14.3 x 10^3 ksi
+      condition: hot-rolled flat, annealed 1800 F and aged
+      note: converted with 1 ksi = 6.894757 MPa and T_K = (T_F + 459.67) / 1.8
+  notes: 'Used at -423 to 1300 F per the source (20 to 977 K stored). No fatigue strength stored: the
+    bulletin has fatigue sections that were not read in this session, so the field is None rather than
+    a number from memory. The strengths are AMS minimums; typical values run higher.'
+- id: mg_az31b
+  name: Magnesium AZ31B, extruded
+  density_kg_m3: 1770.0
+  youngs_modulus_pa: 45000000000.0
+  yield_strength_pa: 200000000.0
+  ultimate_strength_pa: 260000000.0
+  poisson_ratio: 0.35
+  shear_modulus_pa: 16666666666.666666
+  fatigue_strength_pa: 110000000.0
+  thermal_expansion_1_k: 2.6e-05
+  price_per_kg_usd: 5
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  source: AZoM AZ31B article (secondary, extruded form); fatigue MatWeb typical
+  status: reference_typical
+  sources:
+  - id: azom_az31b
+    title: Magnesium AZ31B Alloy (UNS M11311)
+    publisher: AZoM (AZoNetwork)
+    grade: secondary
+    url: https://www.azom.com/article.aspx?ArticleID=6707
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: Extruded form. States no source.
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: azom_az31b
+      grade: secondary
+      location: Physical properties
+      as_printed: 1.77 g/cm3
+    youngs_modulus_pa:
+      source: azom_az31b
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 44.8 GPa
+      note: 45 GPa stored
+    poisson_ratio:
+      source: azom_az31b
+      grade: secondary
+      location: Mechanical properties
+      as_printed: '0.35'
+    yield_strength_pa:
+      source: azom_az31b
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 200 MPa at 0.2 percent
+      condition: extruded
+    ultimate_strength_pa:
+      source: azom_az31b
+      grade: secondary
+      location: Mechanical properties
+      as_printed: 260 MPa
+      condition: extruded
+    thermal_expansion_1_k:
+      source: azom_az31b
+      grade: secondary
+      location: Thermal properties
+      as_printed: 26 um/m C, 0 to 100 C
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    shear_modulus_pa:
+      source: azom_az31b
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  notes: Sheet tempers (H24, O) have different strengths and are not stored. No primary producer datasheet
+    was read.
+- id: abs
+  name: ABS (acrylonitrile butadiene styrene), Stratasys ABS-M30 as printed, XZ
+  density_kg_m3: 1050.0
+  youngs_modulus_pa: 2400000000.0
+  yield_strength_pa: 28100000.0
+  ultimate_strength_pa: 30800000.0
+  poisson_ratio: 0.35
+  shear_modulus_pa: 888888888.8888888
+  thermal_expansion_1_k: 5.865e-05
+  price_per_kg_usd: 3
+  source: Stratasys ABS-M30 data sheet (primary, as printed XZ orientation); Poisson's ratio MatWeb typical
+    bulk
+  status: supplier_datasheet
+  sources:
+  - id: stratasys_abs_m30
+    title: ABS-M30 Data Sheet, FDM Thermoplastic Filament
+    publisher: Stratasys
+    grade: primary
+    url: https://www.stratasys.com/siteassets/materials/materials-catalog/fdm-materials/abs-m30/mds_fdm_abs-m30_0921a.pdf
+    document_date: MDS_FDM_ABS-M30_0921a
+    retrieved: '2026-09-02'
+    notes: Table 4 physical and Table 5 mechanical (F900, T16 tip, 0.254 mm layers), XZ and ZX orientations;
+      the XZ (on edge) values are stored.
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: stratasys_abs_m30
+      grade: primary
+      location: Table 4, specific gravity ASTM D257 at 23 C
+      as_printed: '1.05'
+    youngs_modulus_pa:
+      source: stratasys_abs_m30
+      grade: primary
+      location: Table 5, tensile modulus ASTM D638, XZ
+      as_printed: 2.40 GPa (sd 0.080)
+      condition: as printed, XZ (on edge), 0.254 mm layers, F900
+      note: ZX is 2.30 GPa
+    yield_strength_pa:
+      source: stratasys_abs_m30
+      grade: primary
+      location: Table 5, strength at break, XZ
+      as_printed: 28.1 MPa (sd 0.58)
+      condition: XZ
+      note: the sheet's yield (30.8 MPa) is ABOVE its break strength (28.1 MPa), as the schema's yield
+        below ultimate rule cannot represent; stored with break as yield and the yield point as ultimate,
+        and the note says so
+    ultimate_strength_pa:
+      source: stratasys_abs_m30
+      grade: primary
+      location: Table 5, yield strength, XZ
+      as_printed: 30.8 MPa (sd 0.85)
+      condition: XZ
+      note: ZX is 27.5 MPa yield, 26.8 MPa break
+    thermal_expansion_1_k:
+      source: stratasys_abs_m30
+      grade: primary
+      location: Table 4, mean CTE ASTM E831, 40 to 80 C, XZ/ZX
+      as_printed: 58.65 um/m C
+      note: XY is 60.77 over 40 to 140 C
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session; the Stratasys sheet gives none
+    shear_modulus_pa:
+      source: stratasys_abs_m30
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  service_temperature_k:
+  - 293.15
+  - 372.15
+  notes: 'Upper service bound is the heat deflection temperature at 264 psi, 99.9 C (Tg 105.2 C); the
+    lower bound is room temperature because the sheet tests nothing colder. No fatigue strength: the sheet
+    gives none. Values are for a printed part in one orientation and are anisotropic by 4 to 10 percent
+    between XZ and ZX. Thermoplastic: modulus and strength depend strongly on temperature, strain rate
+    and (for printed parts) process parameters and build direction. A printed part is not isotropic; these
+    isotropic values describe bulk material and are an upper bound on a printed one.'
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+- id: pla
+  name: PLA (polylactic acid), NatureWorks Ingeo 4043D resin
+  density_kg_m3: 1240.0
+  youngs_modulus_pa: 3600000000.0
+  yield_strength_pa: 53000000.0
+  ultimate_strength_pa: 60000000.0
+  poisson_ratio: 0.36
+  shear_modulus_pa: 1323529411.764706
+  price_per_kg_usd: 3
+  source: NatureWorks Ingeo 4043D technical data (primary, resin); Poisson's ratio MatWeb typical bulk
+  status: supplier_datasheet
+  sources:
+  - id: natureworks_4043d
+    title: Ingeo 4043D, NatureWorks LLC, Polylactic Acid, technical data (Resinex distribution copy)
+    publisher: NatureWorks LLC
+    grade: primary
+    url: https://4595257.fs1.hubspotusercontent-na1.net/hubfs/4595257/Support%20Platform/downloadable%20PDF/pla/Ingeo-4043D.pdf
+    document_date: March 10, 2020
+    retrieved: '2026-09-02'
+    notes: ASTM D638 tensile on the resin, ASTM D3418 transitions. Typical properties, not specifications,
+      per the sheet's own note.
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: natureworks_4043d
+      grade: primary
+      location: Physical, ASTM D1505
+      as_printed: 1.24 g/cm3
+    youngs_modulus_pa:
+      source: natureworks_4043d
+      grade: primary
+      location: Mechanical, tensile modulus ASTM D638
+      as_printed: 3600 MPa
+      condition: resin, not a printed part
+    yield_strength_pa:
+      source: natureworks_4043d
+      grade: primary
+      location: Mechanical, tensile strength at break ASTM D638
+      as_printed: 53.0 MPa
+      note: the sheet's yield 60.0 MPa exceeds break 53.0 MPa; stored as break for yield and yield for
+        ultimate, same convention as abs, see note
+    ultimate_strength_pa:
+      source: natureworks_4043d
+      grade: primary
+      location: Mechanical, tensile strength at yield ASTM D638
+      as_printed: 60.0 MPa
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session; the NatureWorks sheet gives none
+    shear_modulus_pa:
+      source: natureworks_4043d
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  service_temperature_k:
+  - 293.15
+  - 328.15
+  notes: 'Upper bound is the glass transition onset, 55 C (ASTM D3418, 55 to 60 C); HDT at 0.45 MPa is
+    55 C. No thermal expansion and no fatigue strength: the sheet gives neither. These are resin values;
+    a printed part is weaker and anisotropic. Thermoplastic: modulus and strength depend strongly on temperature,
+    strain rate and (for printed parts) process parameters and build direction. A printed part is not
+    isotropic; these isotropic values describe bulk material and are an upper bound on a printed one.'
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+- id: pa12
+  name: PA12 (nylon 12), EOS PA 2200 laser sintered
+  density_kg_m3: 930.0
+  youngs_modulus_pa: 1700000000.0
+  yield_strength_pa: 45000000.0
+  ultimate_strength_pa: 48000000.0
+  poisson_ratio: 0.39
+  shear_modulus_pa: 611510791.3669065
+  price_per_kg_usd: 3
+  source: EOS PA 2200 material data sheet (primary, laser sintered part); Poisson's ratio and yield MatWeb
+    typical bulk
+  status: supplier_datasheet
+  sources:
+  - id: eos_pa2200
+    title: Material data sheet PA 2200
+    publisher: EOS GmbH Electro Optical Systems
+    grade: primary
+    url: https://www.epfl.ch/schools/sti/ateliers/wp-content/uploads/2018/05/sls_PA2200_EOS.pdf
+    document_date: AHO / 01.09 (2009)
+    retrieved: '2026-09-02'
+    notes: Laser sintered part properties; the sheet states they depend on build position and exposure
+      parameters.
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: eos_pa2200
+      grade: primary
+      location: General material properties, density of laser-sintered part, EOS method
+      as_printed: 0.93 g/cm3
+      note: previous revision 1010 kg/m3 was the bulk resin
+    youngs_modulus_pa:
+      source: eos_pa2200
+      grade: primary
+      location: Mechanical properties, tensile modulus EN ISO 527
+      as_printed: 1700 MPa
+      condition: laser sintered; depends on build position and exposure
+    ultimate_strength_pa:
+      source: eos_pa2200
+      grade: primary
+      location: Mechanical properties, tensile strength EN ISO 527
+      as_printed: 48 MPa
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: EOS gives one tensile strength and no yield; the MatWeb bulk yield 45 MPa is kept so the schema's
+        yield below ultimate rule holds, and is the weakest value in this entry
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session; the EOS sheet gives none
+    shear_modulus_pa:
+      source: eos_pa2200
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  service_temperature_k:
+  - 293.15
+  - 436.15
+  notes: 'Upper bound is the Vicat softening temperature B/50, 163 C; melting 172 to 180 C. No thermal
+    expansion and no fatigue strength: the sheet gives neither. Thermoplastic: modulus and strength depend
+    strongly on temperature, strain rate and (for printed parts) process parameters and build direction.
+    A printed part is not isotropic; these isotropic values describe bulk material and are an upper bound
+    on a printed one.'
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+- id: petg
+  name: PETG
+  density_kg_m3: 1270.0
+  youngs_modulus_pa: 2100000000.0
+  yield_strength_pa: 50000000.0
+  ultimate_strength_pa: 53000000.0
+  poisson_ratio: 0.38
+  shear_modulus_pa: 760869565.2173914
+  fatigue_strength_pa: 18000000.0
+  thermal_expansion_1_k: !!float '7e-05'
+  price_per_kg_usd: 3
+  source: MatWeb typical bulk values (verify vs supplier datasheet)
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    ultimate_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  notes: 'Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed
+    parts) process parameters and build direction. A printed part is not isotropic; these isotropic values
+    describe bulk material and are an upper bound on a printed one.'
+- id: pc
+  name: Polycarbonate
+  density_kg_m3: 1200.0
+  youngs_modulus_pa: 2300000000.0
+  yield_strength_pa: 62000000.0
+  ultimate_strength_pa: 66000000.0
+  poisson_ratio: 0.37
+  shear_modulus_pa: 839416058.3941605
+  fatigue_strength_pa: 22000000.0
+  thermal_expansion_1_k: !!float '7e-05'
+  price_per_kg_usd: 3
+  source: MatWeb typical bulk values (verify vs supplier datasheet)
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    ultimate_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      condition: bulk
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  notes: 'Thermoplastic: modulus and strength depend strongly on temperature, strain rate and (for printed
+    parts) process parameters and build direction. A printed part is not isotropic; these isotropic values
+    describe bulk material and are an upper bound on a printed one.'
+- id: peek
+  name: PEEK (polyetheretherketone), Victrex 450G unfilled
+  density_kg_m3: 1300.0
+  youngs_modulus_pa: 4000000000.0
+  yield_strength_pa: 98000000.0
+  ultimate_strength_pa: 98100000.0
+  poisson_ratio: 0.4
+  shear_modulus_pa: 1428571428.5714288
+  thermal_expansion_1_k: 4.5e-05
+  source: Victrex 450G datasheet (primary); Poisson's ratio from a distributor page (secondary)
+  status: supplier_datasheet
+  sources:
+  - id: victrex_450g
+    title: VICTREX PEEK POLYMER 450G product datasheet
+    publisher: Victrex plc
+    grade: primary
+    url: https://www.victrex.com/-/media/downloads/datasheets/victrex_tds_450g.pdf
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: ISO 527 tensile at 23 C, ISO 11359-2 expansion, ISO 11357 transitions, UL 746B relative thermal
+      indices.
+  - id: kmac_450g
+    title: Victrex 450G PEEK Technical Data and Typical Properties
+    publisher: K-mac Plastics
+    grade: secondary
+    url: https://kmac-plastics.net/data/technical/victrex-450g.htm
+    document_date: not printed
+    retrieved: '2026-09-02'
+    notes: Distributor page; states no source. Used only for Poisson's ratio, which the Victrex sheet
+      does not give.
+  value_sources:
+    density_kg_m3:
+      source: victrex_450g
+      grade: primary
+      location: Physical, density crystalline ISO 1183
+      as_printed: 1.30 g/cm3
+    youngs_modulus_pa:
+      source: victrex_450g
+      grade: primary
+      location: Mechanical, tensile modulus 23 C ISO 527-1
+      as_printed: 4000 MPa
+    yield_strength_pa:
+      source: victrex_450g
+      grade: primary
+      location: Mechanical, tensile stress yield 23 C ISO 527-2
+      as_printed: 98.0 MPa
+    ultimate_strength_pa:
+      source: victrex_450g
+      grade: primary
+      location: Mechanical, tensile stress yield 23 C ISO 527-2
+      as_printed: 98.0 MPa
+      note: the sheet gives only the yield stress, and PEEK necks after it, so ultimate is stored 0.1
+        percent above yield to satisfy the schema rule; it is not a measured ultimate
+    thermal_expansion_1_k:
+      source: victrex_450g
+      grade: primary
+      location: Thermal, CLTE flow below 143 C, ISO 11359-2
+      as_printed: 45 ppm/K
+      note: average (flow and cross flow) is 55 ppm/K; above Tg the flow value is 120
+    poisson_ratio:
+      source: kmac_450g
+      grade: secondary
+      as_printed: '0.4'
+      note: distributor page, unattributed; Victrex gives none
+    shear_modulus_pa:
+      source: victrex_450g
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+  service_temperature_k:
+  - 293.15
+  - 513.15
+  temperature_dependence: {}
+  notes: 'Upper bound is the UL 746B relative thermal index for strength, 240 C; Tg onset 143 C, melting
+    343 C. The sheet gives flexural stress at 125, 175 and 275 C but not tensile modulus versus temperature,
+    so no modulus curve is stored. No fatigue strength: the sheet gives none. Thermoplastic: modulus and
+    strength depend strongly on temperature, strain rate and (for printed parts) process parameters and
+    build direction. A printed part is not isotropic; these isotropic values describe bulk material and
+    are an upper bound on a printed one.'
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+- id: alumina_al2o3
+  name: Alumina (Al2O3, 99.5%)
+  density_kg_m3: 3900.0
+  youngs_modulus_pa: 370000000000.0
+  yield_strength_pa: 350000000.0
+  ultimate_strength_pa: 360000000.0
+  poisson_ratio: 0.22
+  shear_modulus_pa: 151639344262.29507
+  fatigue_strength_pa: 200000000.0
+  thermal_expansion_1_k: !!float '8e-06'
+  price_per_kg_usd: 20
+  material_class: isotropic
+  derived_fields:
+  - shear_modulus_pa
+  notes: 'BRITTLE CERAMIC: there is NO ductile yield point. The yield field carries the flexural strength
+    (~350 MPa) so the schema stays usable, but a yield-based safety factor is the wrong failure criterion
+    here. Ceramic strength is scatter-dominated and size dependent; a Weibull treatment is required for
+    real design, and this database does not provide one.'
+  source: MatWeb typical 99.5% alumina (verify vs supplier datasheet)
+  status: reference_typical
+  sources:
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    youngs_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    yield_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    ultimate_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      note: not re-read this session
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: derived
+      note: E / (2 (1 + nu)); exact
+- id: cfrp_ud
+  name: CFRP unidirectional lamina, Hexcel HexPly 8552 / AS4
+  density_kg_m3: 1580.0
+  youngs_modulus_pa: 141000000000.0
+  yield_strength_pa: 2200000000.0
+  ultimate_strength_pa: 2207000000.0
+  poisson_ratio: 0.3
+  shear_modulus_pa: 5000000000.0
+  fatigue_strength_pa: 600000000.0
+  thermal_expansion_1_k: !!float '-5e-07'
+  price_per_kg_usd: 60
+  cte1_1_k: !!float '-5e-07'
+  cte2_1_k: 2.5e-05
+  cte3_1_k: 2.5e-05
+  material_class: orthotropic
+  e1_pa: 141000000000.0
+  e2_pa: 10000000000.0
+  e3_pa: 10000000000.0
+  g12_pa: 5000000000.0
+  g13_pa: 5000000000.0
+  g23_pa: 3500000000.0
+  nu12: 0.3
+  nu13: 0.3
+  nu23: 0.45
+  strength_long_pa: 2207000000.0
+  strength_trans_pa: 81000000.0
+  strength_shear_pa: 114000000.0
+  strength_long_compressive_pa: 1531000000.0
+  strength_trans_compressive_pa: 200000000.0
+  orientation_deg:
+  - 0.0
+  layup:
+  - UD-0
+  source: Hexcel HexPly 8552 / AS4 UD prepreg datasheet (primary) for E1, E2, strengths and density; G12,
+    nu, transverse compression and expansion are typical UD carbon/epoxy values (secondary)
+  status: supplier_datasheet
+  sources:
+  - id: hexcel_8552
+    title: HexPly 8552 Epoxy matrix (180 C curing matrix) Product Data Sheet
+    publisher: Hexcel Corporation
+    grade: primary
+    url: https://www.hexcel.com/wp-content/uploads/2025/12/HexPly_8552_eu_DataSheet1.pdf
+    document_date: Copyright 2023
+    retrieved: '2026-09-02'
+    notes: UD carbon prepreg physical and mechanical tables, AS4 column, 25 C dry.
+  - id: matweb_typical
+    title: MatWeb material property data pages, typical values
+    publisher: MatWeb LLC
+    grade: secondary
+    url: https://www.matweb.com
+    document_date: not printed
+    retrieved: earlier revisions of this file
+    notes: Restates handbook values without attributing them to a measurement. The pages return HTTP 403
+      to automated retrieval and were NOT re-read on 2026-09-02; values carrying this source are the ones
+      this file already held, kept because changing them would move every pinned result, and graded secondary
+      for that reason.
+  value_sources:
+    density_kg_m3:
+      source: hexcel_8552
+      grade: primary
+      location: UD carbon prepregs, physical, nominal laminate density, AS4
+      as_printed: 1.58 g/cm3
+      condition: 57.42 percent fibre volume, 0.130 mm cured ply
+    e1_pa:
+      source: hexcel_8552
+      grade: primary
+      location: 0 degree tensile modulus, 25 C dry, AS4
+      as_printed: 141 GPa
+    e2_pa:
+      source: hexcel_8552
+      grade: primary
+      location: 90 degree tensile modulus, 25 C dry, AS4
+      as_printed: 10 GPa
+    strength_long_pa:
+      source: hexcel_8552
+      grade: primary
+      location: 0 degree tensile strength, 25 C dry, AS4
+      as_printed: 2207 MPa
+    strength_trans_pa:
+      source: hexcel_8552
+      grade: primary
+      location: 90 degree tensile strength, 25 C dry, AS4
+      as_printed: 81 MPa
+    strength_shear_pa:
+      source: hexcel_8552
+      grade: primary
+      location: In-plane shear strength, 25 C dry, AS4
+      as_printed: 114 MPa
+    strength_long_compressive_pa:
+      source: hexcel_8552
+      grade: primary
+      location: 0 degree compression strength, 25 C dry, AS4
+      as_printed: 1531 MPa
+    youngs_modulus_pa:
+      source: hexcel_8552
+      grade: primary
+      location: same as e1_pa; the isotropic field is axis 1 kept for reporting
+      as_printed: 141 GPa
+    ultimate_strength_pa:
+      source: hexcel_8552
+      grade: primary
+      location: same as strength_long_pa
+      as_printed: 2207 MPa
+    yield_strength_pa:
+      source: hexcel_8552
+      grade: derived
+      note: composites do not yield; stored 0.3 percent below the fibre direction ultimate to satisfy
+        the schema rule, and meaningless as a yield
+    g12_pa:
+      source: matweb_typical
+      grade: secondary
+      note: typical UD carbon/epoxy; Hexcel gives no shear modulus
+    nu12:
+      source: matweb_typical
+      grade: secondary
+      note: typical; not in the Hexcel sheet
+    thermal_expansion_1_k:
+      source: matweb_typical
+      grade: secondary
+      note: typical directional values; not in the Hexcel sheet
+    fatigue_strength_pa:
+      source: matweb_typical
+      grade: secondary
+      note: typical; not in the Hexcel sheet
+    poisson_ratio:
+      source: matweb_typical
+      grade: secondary
+      note: reporting copy of nu12
+    shear_modulus_pa:
+      source: matweb_typical
+      grade: secondary
+      note: reporting copy of g12_pa
+  derived_fields:
+  - yield_strength_pa
+  service_temperature_k:
+  - 218.15
+  - 394.15
+  notes: 'ORTHOTROPIC. Strength along the fibres is 27 times the transverse strength, so a single yield
+    number is meaningless: use the directional values. Hexcel tabulates -55, 25 and 91 C dry; the resin
+    is rated to 121 C, stored as the upper bound. G12, nu12, nu23, E3, G13, G23, transverse compression
+    and the expansion coefficients are NOT in the Hexcel sheet and remain typical values, graded secondary.
+    There is deliberately no isotropic CFRP entry: MaterialSpec.quasi_isotropic_modulus_estimate_pa gives
+    the 3/8 E1 + 5/8 E2 stiffness estimate (59 GPa here) as a derived number, and no strength can be derived
+    honestly for it.'

@@ -161,7 +161,7 @@ def de_goodman_inverse_factor(loads: ShaftLoads, material: MaterialSpec,
         4.0 * (bending_kf * loads.moment_mean_nm) ** 2
         + 3.0 * (torsion_kfs * loads.torque_mean_nm) ** 2)
     return (16.0 / (math.pi * diameter_m ** 3)) * (
-        alternating / material.fatigue_strength_pa
+        alternating / material.require_fatigue_strength_pa()
         + mean / material.ultimate_strength_pa)
 
 
@@ -184,7 +184,7 @@ def de_goodman_diameter_m(loads: ShaftLoads, material: MaterialSpec,
     mean = math.sqrt(
         4.0 * (bending_kf * loads.moment_mean_nm) ** 2
         + 3.0 * (torsion_kfs * loads.torque_mean_nm) ** 2)
-    bracket = (alternating / material.fatigue_strength_pa
+    bracket = (alternating / material.require_fatigue_strength_pa()
                + mean / material.ultimate_strength_pa)
     if bracket <= 0.0:
         raise ValueError(

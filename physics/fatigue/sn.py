@@ -142,7 +142,7 @@ def fatigue_safety_factor(
     """
     alternating = cycle.alternating_pa
     mean = cycle.mean_pa
-    endurance = material.fatigue_strength_pa
+    endurance = material.require_fatigue_strength_pa()
 
     if alternating <= 0.0 and mean <= 0.0:
         return FatigueResult(

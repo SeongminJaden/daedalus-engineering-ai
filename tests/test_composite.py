@@ -236,14 +236,17 @@ def test_a_single_centred_ply_has_no_coupling(cfrp):
 # --- failure -----------------------------------------------------------------
 
 def test_the_five_strengths_are_required_and_not_assumed(cfrp):
-    """Transverse compressive is four times transverse tensile here.
+    """Transverse compressive is about 2.5 times transverse tensile here.
 
-    Defaulting one to the other would overstate transverse tensile capacity
-    fourfold, so an incomplete material is refused.
+    It was four times when the transverse tensile strength was a 50 MPa
+    typical; the Hexcel 8552/AS4 sheet gives 81 MPa, and the compressive
+    value is still the unsourced typical 200 MPa. Defaulting one to the other
+    would still overstate transverse tensile capacity severalfold, so an
+    incomplete material is refused.
     """
     complete = LaminaStrength.from_material(cfrp)
     assert (complete.transverse_compression_pa
-            > 3.0 * complete.transverse_tension_pa)
+            > 2.0 * complete.transverse_tension_pa)
     assert (complete.longitudinal_compression_pa
             < complete.longitudinal_tension_pa)
 
@@ -335,7 +338,11 @@ def test_layup_changes_stiffness_strength_and_the_failing_ply(cfrp, strength):
     strength a factor of eleven, and the ply that fails first changes both its
     angle and its failure mode.
     """
-    load = np.array([2.0e5, 0.0, 0.0])
+    # 2.0e5 N/m failed the angle ply when the in-plane shear strength was a
+    # 70 MPa typical; with the Hexcel 8552/AS4 value of 114 MPa the same load
+    # gives a strength ratio of 1.08, so the load is raised to keep the case
+    # the docstring describes: one layup that fails and one that does not.
+    load = np.array([2.6e5, 0.0, 0.0])
     layups = {
         "unidirectional": [0] * 8,
         "cross_ply": [0, 90, 0, 90, 90, 0, 90, 0],

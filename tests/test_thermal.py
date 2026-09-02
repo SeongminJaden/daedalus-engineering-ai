@@ -156,11 +156,23 @@ def test_insulation_classes_are_ordered():
 
 # --- thermal expansion in the material database ------------------------------
 
-def test_every_material_carries_an_expansion_coefficient():
+def test_every_material_with_a_sourced_coefficient_carries_it():
     for material_id in ("al_7075_t6", "steel_scm440", "ti_6al_4v", "ss_316",
-                        "mg_az31b", "alumina_al2o3", "abs", "pla", "pc",
-                        "pa12", "petg", "cfrp_ud"):
+                        "mg_az31b", "alumina_al2o3", "abs", "pc", "petg",
+                        "cfrp_ud", "inconel_718", "ss_304", "peek"):
         assert get_material(material_id).thermal_expansion_1_k is not None
+
+
+def test_a_material_whose_sheet_gives_no_coefficient_is_refused_not_guessed():
+    """NatureWorks 4043D and EOS PA 2200 state no expansion coefficient, so
+    the database stores none and the thermal stress check refuses them."""
+    from physics.thermal.stress import check_thermal_stress
+
+    for material_id in ("pla", "pa12"):
+        material = get_material(material_id)
+        assert material.thermal_expansion_1_k is None
+        with pytest.raises(ValueError, match="no thermal expansion"):
+            check_thermal_stress(material, delta_t_k=50.0)
 
 
 def test_carbon_fibre_contracts_along_its_length():
