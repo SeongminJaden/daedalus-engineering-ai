@@ -30,6 +30,7 @@ from agent.experiment_manager import ComputeBudget, Episode, EpisodeLog
 from agent.planner import plan_experiment
 from agent.reasoner import Action, ActionKind, HeuristicReasoner, Reasoner, ReasonerState
 from agent.execution import OutcomeVerdict, execute, executable_methods
+from agent.execution.cad import METHOD as CAD_METHOD
 from agent.execution.parametric import METHOD as PARAMETRIC_METHOD
 from optimization.constraints import OptimizationProblem
 from optimization.gradient import default_start
@@ -92,6 +93,12 @@ class LoopConfig:
     # the registry rates those methods HEAVY.
     topology_options: dict = field(default_factory=lambda: {
         "iterations": 25, "bisection_steps": 3})
+    # Settings for the generative CAD strategy: how many parts to build and
+    # rank, how many the solver labels, and where the STEP files go. Small
+    # for the same reason as the topology defaults: every verified candidate
+    # is a mesh and a solve.
+    cad_options: dict = field(default_factory=lambda: {
+        "candidates": 8, "top_k": 2})
     max_evaluations: int | None = None
     max_seconds: float | None = None
     profile: str | None = None
@@ -265,6 +272,9 @@ class DesignLoop:
         self._set_phase(LoopPhase.SIMULATE)
         if method == PARAMETRIC_METHOD:
             kwargs = {"start_x": start, "max_iter": plan.max_iter}
+        elif method == CAD_METHOD:
+            kwargs = dict(self.config.cad_options)
+            kwargs.setdefault("seed", self.config.seed + len(self.state.episodes))
         else:
             kwargs = dict(self.config.topology_options)
         outcome = execute(method, self.op, **kwargs)
@@ -386,6 +396,15 @@ class DesignLoop:
                     "outer_width_m": float(x[0]),
                     "outer_height_m": float(x[1]),
                     "wall_thickness_m": float(x[2])}
+        if outcome.cad_record is not None:
+            detail = outcome.detail
+            return {**common,
+                    "family": detail.get("family"),
+                    "part_id": detail.get("part_id"),
+                    "step_path": detail.get("step_path"),
+                    "parameters": {k: float(v) for k, v in
+                                   detail.get("parameters", {}).items()},
+                    "evidence": detail.get("evidence")}
         density = outcome.density_field
         return {**common,
                 "n_elements": int(density.size),

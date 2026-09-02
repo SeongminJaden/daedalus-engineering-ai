@@ -12,8 +12,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1610%20passing-brightgreen.svg)](#status)
-[![Capabilities](https://img.shields.io/badge/capabilities-55%20registered-orange.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen.svg)](#status)
+[![Capabilities](https://img.shields.io/badge/capabilities-56%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
 
@@ -33,14 +33,14 @@ Everything below has been built, tested against an independent reference, and
 run on the development machine. Nothing below has been physically tested, and
 the code grades its own output accordingly.
 
-**55 registered capabilities on 13 nodes.** A capability is a method plus the
+**56 registered capabilities on 13 nodes.** A capability is a method plus the
 node that runs it, and one rule routes all of them: a method is a candidate
 only when it applies to the problem and its node is available. Excluded
 methods report why.
 
 | where it runs | count | what is there |
 |---|---|---|
-| in-process engine, GPU | 42 | beam and Timoshenko theory, matrix-free 3D FEM, fatigue (S-N, Goodman, Miner), Euler buckling, shafts, bearings, bolts, threads, gears, keys, welds, press fits, ISO 286 fits, Hertz contact, thermal networks and transients, pipe flow, drag, fluid actuators, laminates (CLT), statics, rigid-body dynamics, motor and gearbox selection, SLSQP, differential evolution, NSGA-II, SIMP topology (compliance and stress), minimum sizing, multi-design review |
+| in-process engine, GPU | 43 | beam and Timoshenko theory, matrix-free 3D FEM, fatigue (S-N, Goodman, Miner), Euler buckling, shafts, bearings, bolts, threads, gears, keys, welds, press fits, ISO 286 fits, Hertz contact, thermal networks and transients, pipe flow, drag, fluid actuators, laminates (CLT), statics, rigid-body dynamics, motor and gearbox selection, SLSQP, differential evolution, NSGA-II, SIMP topology (compliance and stress), generative CAD over the synthetic part families, minimum sizing, multi-design review |
 | external solver nodes, stdio | 7 | CalculiX (FEA and general shapes), Code_Aster (plasticity), Elmer (magnetostatics), OpenFOAM (CFD), Gmsh (meshing), Pinocchio (multibody), MuJoCo (contact) |
 | CAD knowledge layer | 4 | STEP analyzer, rule-based feature recognition, shape descriptors with rule-based family classification (UNKNOWN for anything outside the five synthetic families), wall thickness and draft checks; build123d parametric shapes to STEP |
 | stubs, honestly unavailable | 2 | Fusion round trip (needs a Windows host and an entitlement), external LLM reasoner |
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1610 tests pass**, including independent verification of every critical
+**1616 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -429,7 +429,7 @@ so".
 | P6 | surface point clouds from the B-rep, a D2 distance histogram that needs no learning, and a 32-dimensional PointNet embedding graded `SURROGATE`; measured: nearest-neighbour family retrieval 1.00 for the descriptors, 0.88 for the embedding, 0.64 for the histogram | done |
 | P7 | a shape surrogate that predicts CalculiX deflection from descriptors plus a beam-theory proxy; held-out R² 0.94 on 40 parts, p95 error near 0.5, so it ranks candidates and the solver verifies the shortlist; every prediction grades `SURROGATE` and cannot become a verdict | done |
 | P8 | design intent as a claim with provenance, checked by ablation through CalculiX: supported, refuted, or inconclusive when the effect sits inside the mesh noise; recorded in the Brain as evidence or counterexample, never above `SIMULATED` | done |
-| P9 | generative design and an autonomous CAD loop that emits STEP | in progress |
+| P9 | the agent loop runs a `generative_cad` strategy: candidates from three part families with the problem's length imposed, ranked by the proxy or the shape surrogate, verified by CalculiX, and the winner's STEP path lands in the episode; not free-form, and the docs say so | done, as far as it goes |
 
 **Validation ladder (roadmap).** Simulation verification is where the project
 is. Hardware comes next: a part manufactured from an exported STEP file.

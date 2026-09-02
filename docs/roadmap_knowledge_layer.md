@@ -141,7 +141,12 @@ bound, physics is GPU bound, so they do not contend.
   SUPPORTED, REFUTED or INCONCLUSIVE against the mesh noise; the Brain
   records evidence or counterexamples and derives the level by the ladder.
 - **Phase 9** Generative design and an autonomous CAD loop, extending the
-  existing agent loop to emit CAD.
+  existing agent loop to emit CAD. DONE as far as it goes
+  (`agent/execution/cad.py`, registry method `generative_cad`): the loop
+  builds candidates from three part families, ranks them with the proxy or
+  the shape surrogate, has CalculiX label the shortlist, and records the
+  winner's STEP path in the episode. Not free-form; the families are the
+  design space.
 
 ## What this roadmap does not claim
 

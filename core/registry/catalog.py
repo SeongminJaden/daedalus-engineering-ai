@@ -48,6 +48,9 @@ _voxel = Condition(
 _assembly = Condition(
     "the problem can be posed as a jointed assembly",
     lambda c: c.supports("assembly"))
+_cad_family = Condition(
+    "the problem can be posed as a part from the synthetic CAD families",
+    lambda c: c.supports("cad_family"))
 _no_stress_field = Condition(
     "a full stress field is not required (a 1D model has no field to give)",
     lambda c: not c.require("needs_stress_field"))
@@ -82,6 +85,27 @@ def build_default_registry() -> MethodRegistry:
         evidence="SIMULATED",
         notes="Says nothing about stress. Adjoint sensitivity checked against "
               "finite differences to 2.6e-05."))
+
+    registry.register(Method(
+        name="generative_cad",
+        category=Category.DESIGN_GENERATION,
+        summary="Search the synthetic CAD part families for the lightest "
+                "solver-verified part inside the deflection limit, and emit "
+                "STEP.",
+        inputs=("engineering_ir", "part_families"),
+        outputs=("part_record", "step_file"),
+        fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
+        conditions=(_cad_family,),
+        implementation="agent.execution.cad.run",
+        evidence="SIMULATED",
+        notes="Three parametric families with the problem's length imposed: "
+              "box, hollow rectangle, plate with holes. Not free-form; "
+              "nothing learned proposes geometry. A ranker (beam-theory proxy "
+              "or a trained shape surrogate, both below SIMULATED) orders the "
+              "candidates and the CalculiX label decides. Deflection is the "
+              "constraint; the peak stress is reported and not judged, since "
+              "it sits on a clamped-edge singularity. Every part's volume is "
+              "checked against a closed form before it is labelled."))
 
     registry.register(Method(
         name="topology_stress",

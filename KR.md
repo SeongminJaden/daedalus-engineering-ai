@@ -12,8 +12,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1610%20passing-brightgreen.svg)](#현재-상태)
-[![Capabilities](https://img.shields.io/badge/capabilities-55%20registered-orange.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen.svg)](#현재-상태)
+[![Capabilities](https://img.shields.io/badge/capabilities-56%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
 
@@ -33,13 +33,13 @@
 것이다. 아래 어느 것도 물리시험은 거치지 않았고, 코드는 자기 출력을 그에 맞게
 등급 매긴다.
 
-**13개 노드 위에 등록된 능력 55개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
+**13개 노드 위에 등록된 능력 56개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
 라우팅 규칙은 하나뿐이다: 방법이 문제에 적용 가능하고 노드가 살아 있을 때만 후보가
 된다. 제외된 방법은 이유를 말한다.
 
 | 실행 위치 | 수 | 내용 |
 |---|---|---|
-| 프로세스 내 엔진, GPU | 42 | 보·Timoshenko 이론, matrix-free 3D FEM, 피로(S-N, Goodman, Miner), 오일러 좌굴, 샤프트, 베어링, 볼트, 나사, 기어, 키, 용접, 압입, ISO 286 끼워맞춤, Hertz 접촉, 열저항망과 과도열, 관유동, 항력, 유체 액추에이터, 적층판(CLT), 정역학, 강체 동역학, 모터·감속기 선정, SLSQP, 차분진화, NSGA-II, SIMP 토폴로지(컴플라이언스·응력), 최소치수, 다중설계검토 |
+| 프로세스 내 엔진, GPU | 43 | 보·Timoshenko 이론, matrix-free 3D FEM, 피로(S-N, Goodman, Miner), 오일러 좌굴, 샤프트, 베어링, 볼트, 나사, 기어, 키, 용접, 압입, ISO 286 끼워맞춤, Hertz 접촉, 열저항망과 과도열, 관유동, 항력, 유체 액추에이터, 적층판(CLT), 정역학, 강체 동역학, 모터·감속기 선정, SLSQP, 차분진화, NSGA-II, SIMP 토폴로지(컴플라이언스·응력), 합성 부품 패밀리 위 생성 CAD, 최소치수, 다중설계검토 |
 | 외부 솔버 노드, stdio | 7 | CalculiX(FEA, 일반 형상), Code_Aster(소성), Elmer(정자기), OpenFOAM(CFD), Gmsh(메싱), Pinocchio(다물체), MuJoCo(접촉) |
 | CAD 지식 계층 | 4 | STEP 분석기, 규칙기반 피처 인식, 형상 기술자와 규칙기반 패밀리 분류(합성 패밀리 다섯 밖은 UNKNOWN), 벽두께·구배 검사; build123d 파라메트릭 형상의 STEP 출력 |
 | 스텁, 정직하게 미가용 | 2 | Fusion 라운드트립(Windows 호스트와 엔타이틀먼트 필요), 외부 LLM reasoner |
@@ -79,7 +79,7 @@ UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPE
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 1610개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+**테스트 1616개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
 검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
 확인한다.
 
@@ -406,7 +406,7 @@ python -m interfaces.cli.main brain --generalize
 | P6 | B-rep 표면 점군, 무학습 D2 거리 히스토그램, `SURROGATE` 등급 32차원 PointNet 임베딩; 측정: 최근접 이웃 패밀리 검색 기술자 1.00, 임베딩 0.88, 히스토그램 0.64 | 완료 |
 | P7 | 기술자와 보 이론 프록시로 CalculiX 처짐을 예측하는 형상 서로게이트; 40개 부품 홀드아웃 R² 0.94, p95 오차 0.5 근처라서 후보를 순위 매기고 솔버가 상위 후보를 검증; 모든 예측은 `SURROGATE` 등급이고 판정이 될 수 없음 | 완료 |
 | P8 | 출처가 붙은 주장으로서의 설계의도, CalculiX 절제 실험으로 검증: 지지·반박·(효과가 메시 잡음 안이면) 결론 불가; Brain 에 근거 또는 반례로 기록, `SIMULATED` 위로는 절대 못 감 | 완료 |
-| P9 | 생성설계와 STEP 을 내보내는 자율 CAD 루프 | 진행중 |
+| P9 | 에이전트 루프가 `generative_cad` 전략을 실행: 문제 길이를 고정한 세 패밀리 후보를 프록시 또는 형상 서로게이트가 순위 매기고 CalculiX 가 검증, 승자의 STEP 경로가 에피소드에 기록; 자유형 아님을 문서에 명시 | 완료(이 범위까지) |
 
 **검증 사다리(로드맵).** 시뮬레이션 검증이 지금 프로젝트가 있는 자리다. 다음은
 하드웨어: 출력된 STEP 파일로 제조한 부품. 마지막은 실측: 진술을

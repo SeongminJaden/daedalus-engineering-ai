@@ -6,10 +6,13 @@ behind that verdict. What they must NOT lose in the process is where they came
 from, which is why the payload is representation-specific and required.
 
 A parametric outcome carries a design vector. A topology outcome carries a
-density field. Exactly one, always: that invariant is what makes an episode's
-`strategy_used` checkable rather than merely asserted. A record claiming a
-topology method produced a design has to be holding a density field, and it
-cannot be holding one unless a topology optimiser ran.
+density field. A generative CAD outcome carries a part record, which is a
+B-rep the analyzer read back and the solver labelled. Exactly one, always:
+that invariant is what makes an episode's `strategy_used` checkable rather
+than merely asserted. A record claiming a topology method produced a design
+has to be holding a density field, and it cannot be holding one unless a
+topology optimiser ran; one claiming a CAD method has to be holding a part
+record with solver labels on it.
 """
 
 from __future__ import annotations
@@ -32,26 +35,38 @@ class DesignOutcome:
     converged: bool = True
     design_vector: np.ndarray | None = None
     density_field: np.ndarray | None = None
+    cad_record: object | None = None          # a core.part_dataset PartRecord
     detail: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        has_vector = self.design_vector is not None
-        has_field = self.density_field is not None
-        if has_vector == has_field:
+        present = [self.design_vector is not None, self.density_field is not None,
+                   self.cad_record is not None]
+        if sum(present) != 1:
             raise ValueError(
                 "a design outcome carries exactly one representation: a design "
-                "vector from a parametric method or a density field from a "
-                "topology method. Carrying neither means nothing was produced; "
-                "carrying both means the provenance is ambiguous, and the "
-                "episode log would not be checkable.")
-        if has_vector:
+                "vector from a parametric method, a density field from a "
+                "topology method, or a part record from a CAD method. Carrying "
+                "none means nothing was produced; carrying more than one means "
+                "the provenance is ambiguous, and the episode log would not be "
+                "checkable.")
+        if self.design_vector is not None:
             self.design_vector = np.asarray(self.design_vector, dtype=float)
-        else:
+        elif self.density_field is not None:
             self.density_field = np.asarray(self.density_field, dtype=float)
+        else:
+            labels = getattr(self.cad_record, "labels", None)
+            if not labels or "tip_deflection_m" not in labels:
+                raise ValueError(
+                    "a CAD outcome must carry a part record the solver has "
+                    "labelled; an unlabelled record is a shape, not a design")
 
     @property
     def representation(self) -> str:
-        return "design_vector" if self.design_vector is not None else "density_field"
+        if self.design_vector is not None:
+            return "design_vector"
+        if self.density_field is not None:
+            return "density_field"
+        return "cad_record"
 
 
 

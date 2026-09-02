@@ -8,8 +8,8 @@ repository is SIMULATED or below; nothing has been physically tested.
 
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
-- Capabilities registered: 55 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1611, 1610 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7, 8 for P8).
+- Capabilities registered: 56 (`nodes.roster.build_roster`, `len`). Nodes: 13.
+- Tests collected: 1617, 1616 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7, 8 for P8, 6 for P9).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -22,11 +22,27 @@ repository is SIMULATED or below; nothing has been physically tested.
 | P6 | embeddings: `core/part_dataset/{pointcloud,embedding}.py`, D2 baseline and PointNet (SURROGATE) | DONE |
 | P7 | shape surrogate: `core/part_dataset/shape_surrogate.py`, beam proxy feature, screen_and_verify_parts | DONE |
 | P8 | design intent by ablation: `core/part_dataset/intent.py` | DONE |
-| P9 | generative CAD loop: `agent/execution/cad.py`, method `generative_cad` | code and tests done, commit pending |
+| P9 | generative CAD loop: `agent/execution/cad.py`, method `generative_cad` | DONE, first pass |
 
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P9 generative CAD loop, as built
+
+- `agent/execution/cad.py`: `run(op, candidates, top_k, seed, families,
+  ranker, step_dir)`; `proxy_ranker` default, `surrogate_ranker(surrogate,
+  step_dir)` optional; three families with length imposed and the section
+  inside the problem envelope; winner is the lightest solver-verified part
+  within the deflection limit, else the closest marked infeasible.
+- `DesignOutcome.cad_record` is the third representation; a CAD outcome must
+  carry a labelled record. `LoopConfig.cad_options` (candidates 8, top_k 2).
+  `_genome_of` writes family, part_id, step_path, parameters, evidence.
+- Registry: `generative_cad` (56th capability), condition `supports("cad_family")`.
+- Tests: `tests/test_cad_loop.py` (6, slow, about 10 s);
+  `test_loop_execution` now expects four executables.
+- Next after this track: more families and load cases, then hardware, then
+  measurement. Neither hardware nor measurement is software work here.
 
 ## P8 design intent, as built
 

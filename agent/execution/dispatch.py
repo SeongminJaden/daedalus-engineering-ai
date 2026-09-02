@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from . import parametric, topology
+from . import cad, parametric, topology
 from .outcome import DesignOutcome
 
 
@@ -28,6 +28,7 @@ EXECUTORS: dict[str, Callable[..., DesignOutcome]] = {
         lambda op, **kw: topology.run(op, method=topology.COMPLIANCE_METHOD, **kw),
     topology.STRESS_METHOD:
         lambda op, **kw: topology.run(op, method=topology.STRESS_METHOD, **kw),
+    cad.METHOD: cad.run,
 }
 
 
