@@ -6,7 +6,7 @@
   </defs>
   <rect x="1" y="1" width="958" height="978" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
   <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">Daedalus: Autonomous Engineering Loop</text>
-  <text x="480" y="58" text-anchor="middle" font-size="11.5" fill="#6b7280">56 registered capabilities on 13 nodes, one conjunctive verdict, one evidence ladder</text>
+  <text x="480" y="58" text-anchor="middle" font-size="11.5" fill="#6b7280">57 registered capabilities on 13 nodes, one conjunctive verdict, one evidence ladder</text>
 
   <!-- goal -->
   <rect x="280" y="78" width="400" height="46" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
@@ -45,10 +45,10 @@
   <text x="209" y="456" text-anchor="middle" font-size="10.5" fill="#6b7280">dynamics, statics, motor and gearbox selection</text>
 
   <rect x="350" y="334" width="262" height="136" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text x="481" y="354" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">External solver nodes (7)</text>
+  <text x="481" y="354" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">External solver nodes (8)</text>
   <text x="481" y="372" text-anchor="middle" font-size="10.5" fill="#6b7280">independent codes over stdio, for cross-checks</text>
   <text x="481" y="390" text-anchor="middle" font-size="10.5" fill="#374151">CalculiX (FEA, general shapes)</text>
-  <text x="481" y="406" text-anchor="middle" font-size="10.5" fill="#374151">Code_Aster (plasticity), Elmer (magnetostatics)</text>
+  <text x="481" y="406" text-anchor="middle" font-size="10.5" fill="#374151">Code_Aster (plasticity, contact), Elmer (magnetostatics)</text>
   <text x="481" y="422" text-anchor="middle" font-size="10.5" fill="#374151">OpenFOAM (CFD), Gmsh (meshing)</text>
   <text x="481" y="438" text-anchor="middle" font-size="10.5" fill="#374151">Pinocchio, MuJoCo (multibody, contact)</text>
   <text x="481" y="456" text-anchor="middle" font-size="10.5" fill="#6b7280">overlap is cross-validation, not a new capability</text>

@@ -653,6 +653,7 @@ CA.close()
 
 ASTER_NODE_NAME = "code_aster"
 ASTER_PLASTICITY_CAPABILITY = "analysis.fea.plasticity"
+ASTER_CONTACT_CAPABILITY = "analysis.contact.code_aster"
 
 
 def code_aster_descriptor(available: bool | None = None):
@@ -667,14 +668,55 @@ def code_aster_descriptor(available: bool | None = None):
         f"unavailable: run_aster was not found under {ASTER_HOME}")
 
 
+def code_aster_contact_capability_method():
+    """Frictionless unilateral contact against a rigid plane, verified.
+
+    Registered only once the Hertz case passed: contact radius within 2.0
+    percent and peak pressure within 1.3 percent of the closed form. The
+    in-process `hertz_contact` method is arithmetic on the same closed form,
+    so this is its first solve-based cross-check, and it is the only contact
+    solve in the system.
+    """
+    from core.registry import Category, Condition, Cost, Fidelity, Method
+
+    return Method(
+        name=ASTER_CONTACT_CAPABILITY,
+        category=Category.ANALYSIS,
+        summary="Unilateral contact solve in Code_Aster: a deformable body "
+                "pressed against a rigid plane, contact patch and pressure "
+                "from the deformed geometry.",
+        inputs=("geometry", "material", "rigid_plane", "load"),
+        outputs=("contact_radius", "peak_pressure", "displacement"),
+        fidelity=Fidelity.FEM3D,
+        cost=Cost.HEAVY,
+        conditions=(
+            Condition("the problem has a concentrated contact",
+                      lambda c: c.require("has_concentrated_contact")),
+            Condition("strains remain small, since the solve integrates on "
+                      "the undeformed shape",
+                      lambda c: c.require("strains_remain_small")),
+        ),
+        implementation="nodes.code_aster.hertz_contact",
+        evidence="SIMULATED",
+        notes="Axisymmetric, frictionless, rigid plane, displacement driven. "
+              "Verified against Hertz: contact radius 2.0 percent, peak "
+              "pressure 1.3 percent, on a mesh with twelve elements across "
+              "the expected patch. The condition is LIAISON_UNIL with "
+              "COEF_MULT = -1 and COEF_IMPO = Y, because Code_Aster imposes "
+              "sum(coef * ddl) < COEF_IMPO and the first version had the "
+              "half space reversed. Not verified: friction, two deformable "
+              "bodies, large sliding, non-axisymmetric geometry.")
+
+
 def code_aster_capability_method():
-    """Plasticity only.
+    """Plasticity.
 
     The linear elastic cases in this module are verified and are deliberately
     NOT registered. CalculiX already covers linear elasticity and is verified
     here, so a second implementation of the same equations is a cross-check
     rather than a capability the engine gains. Passing cases and a capability
-    worth claiming are different things.
+    worth claiming are different things. Contact is registered separately,
+    since nothing else in the system solves it.
     """
     from core.registry import Category, Condition, Cost, Fidelity, Method
 
@@ -724,54 +766,35 @@ def code_aster_capability_method():
 class HertzContact:
     """A sphere pressed onto a rigid plane, checked against Hertz.
 
-    NOT VERIFIED. The closed forms below are correct and are tested as
-    arithmetic. The SOLVE is not: the unilateral contact condition never
-    carries load, and why is not established.
+    VERIFIED, after a long time not being. Measured with twelve elements
+    across the expected patch: contact radius within 2.0 percent of the
+    closed form, peak pressure within 1.3 percent.
 
-    What was measured, across every variant tried:
+    What was wrong, and how it was found. For a long while the unilateral
+    condition never carried load. The peak stress was 385.768 GPa against an
+    expected 2.176, identical in every run, which was the point load
+    singularity at a pinned apex rather than a contact pressure; the contact
+    radius came out zero. Force control without a pin gave a singular matrix,
+    force control with a pin put the load through the pin, displacement
+    control returned the zone radius exactly. Correcting the gap condition
+    from DY >= 0 to DY >= -Y changed NOTHING to twelve figures, which said the
+    condition was not entering the system. Printing the deformed height of
+    the contact zone showed it 9.6 micrometres BELOW the plane under a 2.2
+    micrometre approach: the bodies interpenetrated freely.
 
-        the peak stress is 385.768 GPa against an expected 2.176, and it is
-        the SAME number in every run, which is the point load singularity at
-        the pinned apex rather than a contact pressure
-        the contact radius comes out zero, so no node other than the pinned
-        one is ever found on the plane
+    The cause was the sign, not the formulation. LIAISON_UNIL imposes
+    sum(COEF_MULT * ddl) < COEF_IMPO (U4.44.11), and the study had written
+    COEF_MULT = +1 with COEF_IMPO = -Y. That is DY < -Y: the nodes were
+    REQUIRED to pass below the plane, which is why "fixing" the gap without
+    touching the sign changed nothing and why the zone sat below the plane by
+    a consistent amount. Y + DY >= 0 is -DY < Y: COEF_MULT = -1, COEF_IMPO =
+    Y. `reverse_half_space` reproduces the old condition so the failure stays
+    measurable rather than remembered.
 
-    What was tried and what each showed:
-
-        force control with no pin        singular matrix, since the vertical
-                                        rigid body motion is unconstrained
-                                        until contact activates
-        force control with the apex
-        pinned                          the pin carries the whole load
-        displacement control            the contact radius came back equal to
-                                        the zone radius exactly, which is not
-                                        a contact patch
-        correcting the gap condition
-        from DY >= 0 to DY >= -Y        changed NOTHING, and that is the
-                                        clearest evidence: a constraint whose
-                                        definition can be changed without
-                                        changing any result is not active
-
-    The last point is the useful one. The gap condition was genuinely wrong
-    at first, because nodes on the arc start above the plane and must travel
-    down to reach it, so forbidding downward motion forbids contact from
-    forming. Fixing it produced identical numbers to twelve significant
-    figures, which means the condition is not entering the system at all.
-
-    That was then confirmed directly rather than inferred. Printing the
-    deformed height of every node in the contact zone shows the whole zone
-    sitting about 9.6 micrometres BELOW the plane, under an imposed approach
-    of 2.2 micrometres. The bodies interpenetrate freely, which is what a
-    unilateral condition exists to prevent, so the constraint is inert.
-
-    Two explanations were ruled out by reading the generated command file
-    rather than by guessing: the contact IS passed to the solve, appearing as
-    CONTACT=contact and echoed back by the solver, and the solve IS
-    STAT_NON_LINE rather than a linear one, so it is not that an inequality
-    was handed to a linear solver.
-
-    Nothing here is tuned to agree. The capability is not registered, and
-    contact is set aside rather than pursued further.
+    Validity: Hertz assumes each body is a half space near the contact, which
+    holds while the contact radius is small against the sphere radius; that
+    ratio is reported and is one to two percent here. Frictionless,
+    axisymmetric, rigid plane, displacement driven. Everything SIMULATED.
     """
 
     sphere_radius_m: float
@@ -781,6 +804,10 @@ class HertzContact:
     contact_radius_m: float
     peak_pressure_pa: float
     zone_radius_m: float
+    #: Lowest deformed height of any node in the contact zone. Zero to
+    #: round-off when the condition holds; negative when the bodies have
+    #: interpenetrated, which is the symptom the reversed sign produced.
+    lowest_point_m: float = 0.0
 
     @property
     def effective_modulus_pa(self) -> float:
@@ -889,7 +916,8 @@ def hertz_contact(directory, sphere_radius_m: float = 0.01,
                   youngs_modulus_pa: float = 210.0e9,
                   poisson_ratio: float = 0.3,
                   elements_across_contact: int = 12,
-                  steps: int = 10) -> HertzContact:
+                  steps: int = 10,
+                  reverse_half_space: bool = False) -> HertzContact:
     """Press a sphere onto a rigid plane and measure the contact patch.
 
     The plane is imposed as a unilateral condition rather than meshed, so
@@ -919,6 +947,9 @@ def hertz_contact(directory, sphere_radius_m: float = 0.01,
     # The force that results is measured, not assumed, and the closed form is
     # then evaluated at THAT force.
     pressure = force_n / (np.pi * sphere_radius_m ** 2)
+    # The reversed pair is the one the study shipped with for a long time and
+    # is kept selectable so the failure is a measurement, not a memory.
+    gap_expr, mult_value = ("-Y", 1.0) if reverse_half_space else ("Y", -1.0)
 
     study = f"""
 from code_aster.Commands import *
@@ -956,16 +987,25 @@ bcs = AFFE_CHAR_MECA(MODELE=model,
 load = AFFE_CHAR_MECA(MODELE=model, PRES_REP=_F(GROUP_MA="TOP", PRES=P))
 
 # The rigid plane is a unilateral condition: the contact surface may lift
-# away but may not pass below z = 0.
-# The condition is Y + DY >= 0, not DY >= 0. Nodes on the arc start ABOVE
-# the plane and must travel DOWN to reach it, so forbidding downward motion
-# forbids contact from forming at all. That is why COEF_IMPO takes a
-# function: the allowed travel is each node's own height above the plane.
-gap = FORMULE(VALE="-Y", NOM_PARA="Y")
-one = DEFI_CONSTANTE(VALE=1.0)
+# away but may not pass below y = 0, so the physical condition is
+# Y + DY >= 0. Nodes on the arc start ABOVE the plane and must travel DOWN
+# to reach it, so forbidding downward motion (DY >= 0) would forbid contact
+# from forming at all; that is why COEF_IMPO is a function of Y.
+#
+# LIAISON_UNIL imposes  sum(COEF_MULT * ddl) < COEF_IMPO  (U4.44.11), and a
+# negative COEF_MULT is how the direction is reversed. Y + DY >= 0 is
+# therefore written as  -DY < Y :  COEF_MULT = -1, COEF_IMPO = Y.
+#
+# The first version wrote COEF_MULT = +1 with COEF_IMPO = -Y, which imposes
+# DY < -Y, the OPPOSITE half space: nodes were required to pass below the
+# plane, and the contact zone sat 9.6 micrometres under it with the bodies
+# interpenetrating freely. With the sign put right the contact radius agrees
+# with Hertz to 2.0 percent and the peak pressure to 1.3 percent.
+gap = FORMULE(VALE={gap_expr!r}, NOM_PARA="Y")
+mult = DEFI_CONSTANTE(VALE={mult_value!r})
 contact = DEFI_CONTACT(MODELE=model, FORMULATION="LIAISON_UNIL",
                        ZONE=_F(GROUP_NO="CONTACT", NOM_CMP="DY",
-                               COEF_IMPO=gap, COEF_MULT=one))
+                               COEF_IMPO=gap, COEF_MULT=mult))
 
 times = DEFI_LIST_REEL(DEBUT=0.0,
                        INTERVALLE=_F(JUSQU_A=1.0, NOMBRE={steps}))
@@ -1008,6 +1048,7 @@ peak = float(-syy[here].min()) if here.any() else 0.0
 print("{RESULT}", "contact_radius", repr(radius))
 print("{RESULT}", "peak_pressure", repr(peak))
 print("{RESULT}", "n_pressed", repr(float(on_plane.sum())))
+print("{RESULT}", "lowest_point", repr(float(height.min())))
 print("{RESULT}", "max_settle", repr(float(np.abs(height).min())))
 CA.close()
 """
@@ -1016,4 +1057,5 @@ CA.close()
         sphere_radius_m=sphere_radius_m, force_n=force_n,
         youngs_modulus_pa=youngs_modulus_pa, poisson_ratio=poisson_ratio,
         contact_radius_m=values["contact_radius"],
-        peak_pressure_pa=values["peak_pressure"], zone_radius_m=zone)
+        peak_pressure_pa=values["peak_pressure"], zone_radius_m=zone,
+        lowest_point_m=values.get("lowest_point", 0.0))

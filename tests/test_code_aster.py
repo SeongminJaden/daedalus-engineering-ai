@@ -295,30 +295,48 @@ def test_the_half_space_assumption_is_reported():
 
 
 @requires_aster
-@pytest.mark.xfail(strict=True,
-                   reason="the unilateral condition is inert: the contact "
-                          "zone sits 9.6 micrometres BELOW the plane under a "
-                          "2.2 micrometre imposed approach, so the bodies "
-                          "interpenetrate freely. The contact is passed to "
-                          "STAT_NON_LINE and the solve is nonlinear, both "
-                          "checked in the generated command file, so neither "
-                          "of those is the cause")
 def test_hertz_contact_matches_the_closed_form(tmp_path):
-    """Marked as a known failure rather than deleted or loosened.
+    """Formerly a strict xfail: the contact zone sat 9.6 micrometres BELOW
+    the plane and the bodies interpenetrated freely.
 
-    strict=True means this fails if it ever starts passing, so a fix cannot
-    land silently.
+    The cause was the sign of the unilateral condition. LIAISON_UNIL imposes
+    sum(COEF_MULT * ddl) < COEF_IMPO, and the study wrote COEF_MULT = +1 with
+    COEF_IMPO = -Y, which is DY < -Y: the nodes were REQUIRED to pass below
+    the plane. Written as -DY < Y the measured errors are 2.0 percent on the
+    contact radius and 1.3 percent on the peak pressure. The floors below are
+    the ones the xfail carried, so the fix is judged by the bar it failed.
     """
     result = code_aster.hertz_contact(tmp_path, force_n=100.0)
-    assert result.contact_radius_error < 0.10
-    assert result.peak_pressure_error < 0.15
+    assert result.contact_radius_error < 0.10, result.contact_radius_error
+    assert result.peak_pressure_error < 0.15, result.peak_pressure_error
+    assert result.contact_radius_m > 0.0
 
 
-def test_no_contact_capability_is_registered():
-    """Plasticity is registered because it is verified. Contact is not."""
+@requires_aster
+def test_the_reversed_half_space_is_what_the_old_study_imposed(tmp_path):
+    """The failure, reproduced on purpose so the explanation is a measurement.
+
+    Running the same study with the original sign, the deformed contact zone
+    must lie below the plane and the reported radius must be zero, which is
+    exactly the symptom the xfail recorded.
+    """
+    result = code_aster.hertz_contact(tmp_path, force_n=100.0,
+                                      reverse_half_space=True)
+    assert result.contact_radius_m == 0.0
+    assert result.lowest_point_m < 0.0
+
+
+def test_contact_is_registered_now_that_it_is_verified():
+    """Plasticity was registered because it was verified; contact was not,
+    for the same reason. It is now, and its notes carry the measured errors
+    and the sign convention that had it wrong."""
     from nodes.roster import build_roster
 
-    names = {c.name for c in build_roster().all()}
+    registry = build_roster()
+    names = {c.name for c in registry.all()}
     assert code_aster.ASTER_PLASTICITY_CAPABILITY in names
-    assert not any("contact" in n for n in names
-                   if n.startswith("analysis.fea"))
+    assert code_aster.ASTER_CONTACT_CAPABILITY in names
+    notes = registry.get(code_aster.ASTER_CONTACT_CAPABILITY).method.notes
+    assert "COEF_MULT = -1" in notes and "Not verified" in notes
+    # the linear elastic cases stay unregistered: CalculiX covers them
+    assert not any(n.startswith("analysis.fea.code_aster") for n in names)

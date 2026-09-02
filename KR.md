@@ -13,7 +13,7 @@
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
 [![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen.svg)](#현재-상태)
-[![Capabilities](https://img.shields.io/badge/capabilities-56%20registered-orange.svg)](#현재-상태)
+[![Capabilities](https://img.shields.io/badge/capabilities-57%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
 
@@ -33,14 +33,14 @@
 것이다. 아래 어느 것도 물리시험은 거치지 않았고, 코드는 자기 출력을 그에 맞게
 등급 매긴다.
 
-**13개 노드 위에 등록된 능력 56개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
+**13개 노드 위에 등록된 능력 57개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
 라우팅 규칙은 하나뿐이다: 방법이 문제에 적용 가능하고 노드가 살아 있을 때만 후보가
 된다. 제외된 방법은 이유를 말한다.
 
 | 실행 위치 | 수 | 내용 |
 |---|---|---|
 | 프로세스 내 엔진, GPU | 43 | 보·Timoshenko 이론, matrix-free 3D FEM, 피로(S-N, Goodman, Miner), 오일러 좌굴, 샤프트, 베어링, 볼트, 나사, 기어, 키, 용접, 압입, ISO 286 끼워맞춤, Hertz 접촉, 열저항망과 과도열, 관유동, 항력, 유체 액추에이터, 적층판(CLT), 정역학, 강체 동역학, 모터·감속기 선정, SLSQP, 차분진화, NSGA-II, SIMP 토폴로지(컴플라이언스·응력), 합성 부품 패밀리 위 생성 CAD, 최소치수, 다중설계검토 |
-| 외부 솔버 노드, stdio | 7 | CalculiX(FEA, 일반 형상), Code_Aster(소성), Elmer(정자기), OpenFOAM(CFD), Gmsh(메싱), Pinocchio(다물체), MuJoCo(접촉) |
+| 외부 솔버 노드, stdio | 8 | CalculiX(FEA, 일반 형상), Code_Aster(소성, 그리고 Hertz 로 검증한 단측 접촉), Elmer(정자기), OpenFOAM(CFD), Gmsh(메싱), Pinocchio(다물체), MuJoCo(접촉) |
 | CAD 지식 계층 | 4 | STEP 분석기, 규칙기반 피처 인식, 형상 기술자와 규칙기반 패밀리 분류(합성 패밀리 다섯 밖은 UNKNOWN), 벽두께·구배 검사; build123d 파라메트릭 형상의 STEP 출력 |
 | 스텁, 정직하게 미가용 | 2 | Fusion 라운드트립(Windows 호스트와 엔타이틀먼트 필요), 외부 LLM reasoner |
 
