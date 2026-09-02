@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1547%20passing-brightgreen.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1574%20passing-brightgreen.svg)](#현재-상태)
 [![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
@@ -79,7 +79,7 @@ UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPE
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 1547개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+**테스트 1574개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
 검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
 확인한다.
 
@@ -401,8 +401,8 @@ python -m interfaces.cli.main brain --generalize
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 게이트 | `SIMULATED` 아래의 `SURROGATE` 근거등급; 서로게이트는 스크리닝만 하고 판정은 못 한다, 코드와 테스트로 강제 | 완료 |
-| P5 | 합성데이터 엔진: build123d 파라메트릭 형상을 STEP 분석기에 통과시키고 기존 검증된 솔버(CalculiX 등)로 라벨링; 라벨은 `SIMULATED` 로 기록 | 진행중 |
-| P3 | 형상 기술자와 분류 | 계획 |
+| P5 | 합성데이터 엔진: 닫힌 형태 부피를 가진 build123d 패밀리 다섯, 모든 레코드를 자기 파라미터와 대조, Gmsh 와 CalculiX 로 라벨링하며 모든 솔버 라벨에 메시 민감도 기록; 라벨은 구조적으로 `SIMULATED` | 완료 |
+| P3 | 형상 기술자와 분류 | 진행중 |
 | P6 | CAD 임베딩 | 계획 |
 | P7 | CAD 형상 서로게이트 예측, 탐색 가속 전용, 게이트 뒤에서 | 계획 |
 | P8 | 설계의도, 주장이 아니라 실제 솔버 대비 절제 실험으로 측정 | 계획 |

@@ -44,6 +44,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from brain.semantic.evidence import EvidenceKind, EvidenceLevel
+
 #: Bumped whenever a stored record's meaning changes. A reader that finds a
 #: version it does not know must refuse rather than guess, because a silently
 #: misread dataset is worse than an absent one.
@@ -139,6 +141,35 @@ class TopologySummary(BaseModel):
     vertices: int = Field(ge=0)
 
 
+#: The most any computed label may claim. A physical-test label is the one
+#: exception, and it has to say so in its own `kind` field.
+LABEL_CEILING = EvidenceLevel.SIMULATED
+
+
+def label(value: float, unit: str, kind: EvidenceKind, method: str,
+          note: str = "", **extra: Any) -> dict[str, Any]:
+    """One label, graded by what made it rather than by the caller.
+
+    The evidence level is not a parameter. Every label a solver, a derivation
+    or a model produces here is SIMULATED at most, and a SURROGATE kind grades
+    itself SURROGATE. A caller who wants a higher grade has to have a physical
+    test, and then has to say so.
+    """
+    if kind is EvidenceKind.PHYSICAL_TEST:
+        level = EvidenceLevel.EXPERIMENTALLY_VALIDATED
+    elif kind is EvidenceKind.SURROGATE:
+        level = EvidenceLevel.SURROGATE
+    else:
+        level = LABEL_CEILING
+    item: dict[str, Any] = {"value": float(value), "unit": unit,
+                            "evidence": level.value, "kind": kind.value,
+                            "method": method}
+    if note:
+        item["note"] = note
+    item.update(extra)
+    return item
+
+
 class PartRecord(BaseModel):
     """One part, as stored.
 
@@ -166,6 +197,37 @@ class PartRecord(BaseModel):
                 f"record is schema {self.schema_version} and this code writes "
                 f"{SCHEMA_VERSION}; refusing rather than guessing what the "
                 f"fields meant then")
+        return self
+
+    @model_validator(mode="after")
+    def _labels_stay_within_what_produced_them(self) -> "PartRecord":
+        """A label's evidence is bounded by how it was made.
+
+        One solve, one derivation or one model run is at most SIMULATED; the
+        levels above it belong to statements supported by independent runs,
+        which a single label is not. EXPERIMENTALLY_VALIDATED needs the label
+        to say it came from a physical test, and nothing in this project
+        produces such a label. A record that claims otherwise is refused
+        rather than stored, because a dataset is exactly where such a claim
+        would be read back later as if it had been earned.
+        """
+        for name, item in self.labels.items():
+            if not isinstance(item, dict) or "evidence" not in item:
+                continue
+            try:
+                level = EvidenceLevel(item["evidence"])
+            except ValueError:
+                raise ValueError(
+                    f"label {name!r} claims evidence {item['evidence']!r}, "
+                    f"which is not a level on the ladder") from None
+            kind = item.get("kind")
+            physical = kind == EvidenceKind.PHYSICAL_TEST.value
+            if level.rank > LABEL_CEILING.rank and not physical:
+                raise ValueError(
+                    f"label {name!r} claims {level.value}, above the "
+                    f"{LABEL_CEILING.value} ceiling for a computed label; "
+                    f"only a label whose kind is "
+                    f"{EvidenceKind.PHYSICAL_TEST.value} may go higher")
         return self
 
     @property

@@ -112,8 +112,11 @@ bound, physics is GPU bound, so they do not contend.
 - **Phase 3** Shape descriptors and classification.
 - **Phase 4** Physical labelling through the EXISTING solvers, including
   boundary condition tagging.
-- **Phase 5** Synthetic data engine. Runs early and in parallel, because it is
-  what makes the later phases possible without scraped CAD.
+- **Phase 5** Synthetic data engine. DONE (`core/part_dataset/engine.py`):
+  five families with closed-form volumes, every record checked against the
+  parameters that made it, labelled through Gmsh and CalculiX with
+  `mesh_sensitivity` on every solver label, all labels graded SIMULATED by
+  construction. Dataset scale is decided by what Phase 3 needs.
 - **Phase 6** CAD embeddings.
 - **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard. The
   guard itself is in place; the prediction models for CAD shapes are not.

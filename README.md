@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1547%20passing-brightgreen.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1574%20passing-brightgreen.svg)](#status)
 [![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1547 tests pass**, including independent verification of every critical
+**1574 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -424,8 +424,8 @@ so".
 | step | what | state |
 |---|---|---|
 | gate | `SURROGATE` evidence level below `SIMULATED`; a surrogate may screen and never decide, enforced in code and tests | done |
-| P5 | synthetic data engine: build123d parametric shapes, through the STEP analyzer, labelled by the existing verified solvers (CalculiX and the rest); labels recorded `SIMULATED` | in progress |
-| P3 | shape descriptors and classification | planned |
+| P5 | synthetic data engine: five build123d families with closed-form volumes, every record checked against its own parameters, labelled through Gmsh and CalculiX with mesh sensitivity on every solver label; labels graded `SIMULATED` by construction | done |
+| P3 | shape descriptors and classification | in progress |
 | P6 | CAD embeddings | planned |
 | P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | planned |
 | P8 | design intent, measured by ablation against real solvers rather than asserted | planned |

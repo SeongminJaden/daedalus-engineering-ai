@@ -9,7 +9,7 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 54 (`nodes.roster.build_roster`, `len`). Nodes: 12.
-- Tests collected: 1527 before the SURROGATE gate, 1548 after (21 new).
+- Tests collected: 1575, 1574 passing and 1 xfail (1548 after the SURROGATE gate, 27 more for P5).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -17,8 +17,8 @@ repository is SIMULATED or below; nothing has been physically tested.
 | step | what | state |
 |---|---|---|
 | gate | SURROGATE evidence level below SIMULATED, verdict guard in code and tests | DONE |
-| P5 | synthetic data engine: build123d parametric shapes, Analyzer, labels from external solvers (CalculiX and the rest), labels recorded SIMULATED | next |
-| P3 | shape classification | not started |
+| P5 | synthetic data engine: `core/part_dataset/{families,labeller,store,engine}.py`, five families, ground truth checked per record, CalculiX labels with mesh sensitivity | DONE |
+| P3 | shape descriptors and classification | next |
 | P6 | CAD embeddings | not started |
 | P7 | surrogate prediction, search acceleration only, behind the gate | not started |
 | P8 | design intent, measured by ablation against real solvers | not started |
@@ -27,6 +27,29 @@ repository is SIMULATED or below; nothing has been physically tested.
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P5 synthetic engine, as built
+
+- `core/part_dataset/families.py`: box, hollow_rect, l_bracket,
+  plate_with_holes, stepped_shaft. Each has bounds, an admissibility rule, a
+  build123d builder, a closed-form volume and expected features. Sampler is
+  rejection sampling on a seeded generator; part ids are sha1 of rounded
+  parameters.
+- `core/part_dataset/labeller.py`: one cantilever case (x-min clamped, x-max
+  loaded, -100 N), two mesh sizes (longest side / 15 and / 22), CalculiX
+  C3D10. Labels: mass_kg (analytical), tip_deflection_m, max_displacement_m,
+  max_von_mises_pa (each with mesh_sensitivity), load_case. All SIMULATED.
+- `core/part_dataset/schema.py`: `label()` grades by kind; `LABEL_CEILING` is
+  SIMULATED; a record with a computed label above it is refused.
+- `core/part_dataset/store.py`: JSONL, validated both ways, refuses
+  unpublishable records on public files before writing anything.
+- `core/part_dataset/engine.py`: `make_part`, `generate_dataset`; refuses a
+  part whose analyzer volume or recognised features disagree with its
+  parameters; `GenerationReport` lists refusals.
+- Decisions taken by default: CalculiX only for labels, one load case,
+  al_7075_t6, dataset scale left to what P3 needs.
+- Cost measured: 0.2 to 5.7 s per part; five families in 13 s.
+- Tests: `tests/test_synthetic_engine.py` (27).
 
 ## The SURROGATE gate, as built
 
@@ -60,6 +83,7 @@ architecture diagram replaced). Not started.
 
 ## Last full suite run
 
-2026-09-02, after the SURROGATE gate: 1547 passed, 1 xfailed, 619 s with
-`-n 8 --dist loadfile`. The one failure on the first run was the ladder pin in
-`tests/test_aesthetics.py`, widened to admit SURROGATE and nothing else.
+2026-09-02, after P5: 1573 passed, 1 xfailed, 603 s with `-n 8 --dist
+loadfile`, plus `test_committed_tree_can_import_every_package`, which fails
+before a commit that adds modules and passes after it. After the SURROGATE
+gate: 1547 passed, 1 xfailed, 619 s.
