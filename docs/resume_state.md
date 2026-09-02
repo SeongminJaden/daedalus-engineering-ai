@@ -36,7 +36,7 @@ architecture diagram replaced). Not started.
 | 2 | dataset spec (`docs/dataset_spec.md`), 5 load cases, 13 families, material scaling, resumable batch | DONE; generation at scale not run, user's call (about 45 min at 8 workers, mount family retries a quarter of its parts) |
 | 3 | form score (B) and per-process DFM rules (C), grade rule_based_dfm_guideline | DONE |
 | 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
-| 5 | catalogue part shapes with material links | pending |
+| 5 | standard parts: ISO 4762, ISO 4032, GT2, heat-set inserts, with material links | DONE |
 | 6 | Gazebo and Isaac Sim verification pipeline; machine has Gazebo Fortress 6.18 and ros_gz Humble, no Isaac Sim | pending |
 | 7 | measurement and evaluation guideline document | pending |
 
