@@ -122,7 +122,12 @@ bound, physics is GPU bound, so they do not contend.
   parameters that made it, labelled through Gmsh and CalculiX with
   `mesh_sensitivity` on every solver label, all labels graded SIMULATED by
   construction. Dataset scale is decided by what Phase 3 needs.
-- **Phase 6** CAD embeddings.
+- **Phase 6** CAD embeddings. DONE (`core/part_dataset/pointcloud.py`,
+  `embedding.py`): area-weighted surface points in a canonical frame, the D2
+  histogram as the no-learning baseline, a PointNet embedding graded
+  SURROGATE. Measured nearest-neighbour retrieval: descriptors 1.00,
+  embedding 0.88, D2 0.64. The embedding has not beaten the topology on
+  five prismatic families and the docs say so.
 - **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard. The
   guard itself is in place; the prediction models for CAD shapes are not.
 - **Phase 8** Design intent, measured by ablation against real solvers rather

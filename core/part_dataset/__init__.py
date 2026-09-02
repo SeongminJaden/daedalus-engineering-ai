@@ -14,8 +14,17 @@ from .engine import (SYNTHETIC_PROVENANCE, GenerationReport, generate_dataset,
 from .descriptors import DESCRIPTOR_NAMES, ShapeDescriptor, describe_step
 from .classify import (UNKNOWN, Classification, NearestNeighbourClassifier,
                        classification_label, evaluate, rule_classify)
+from .pointcloud import (canonical_frame, d2_signature, normalise,
+                         point_cloud_of, sample_surface, tessellate)
+from .embedding import (EMBEDDING_DIM, POINTS_PER_PART, EmbeddingBundle,
+                        embedding_label, nearest_neighbour_precision,
+                        train_embedding)
 
-__all__ = ["DESCRIPTOR_NAMES", "Classification", "FAMILIES", "Family",
+__all__ = ["DESCRIPTOR_NAMES", "Classification", "EMBEDDING_DIM",
+           "EmbeddingBundle", "FAMILIES", "Family", "POINTS_PER_PART",
+           "canonical_frame", "d2_signature", "embedding_label",
+           "nearest_neighbour_precision", "normalise", "point_cloud_of",
+           "sample_surface", "tessellate", "train_embedding",
            "GenerationReport", "GeometrySummary", "NearestNeighbourClassifier",
            "ShapeDescriptor", "UNKNOWN", "classification_label",
            "describe_step", "evaluate", "rule_classify",

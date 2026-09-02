@@ -9,7 +9,7 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 55 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1586, 1585 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3).
+- Tests collected: 1596, 1595 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -19,14 +19,28 @@ repository is SIMULATED or below; nothing has been physically tested.
 | gate | SURROGATE evidence level below SIMULATED, verdict guard in code and tests | DONE |
 | P5 | synthetic data engine: `core/part_dataset/{families,labeller,store,engine}.py`, five families, ground truth checked per record, CalculiX labels with mesh sensitivity | DONE |
 | P3 | descriptors and classification: `core/part_dataset/{descriptors,classify}.py`, `nodes/shape_classifier.py`, capability `analysis.cad.classify` | DONE |
-| P6 | CAD embeddings | next |
-| P7 | surrogate prediction, search acceleration only, behind the gate | not started |
+| P6 | embeddings: `core/part_dataset/{pointcloud,embedding}.py`, D2 baseline and PointNet (SURROGATE) | DONE |
+| P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | next |
 | P8 | design intent, measured by ablation against real solvers | not started |
 | P9 | generative design and the autonomous CAD loop | not started |
 
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P6 embeddings, as built
+
+- `pointcloud.py`: `tessellate` (OCP, 0.1 mm deflection), `sample_surface`
+  (area weighted), `normalise`, `canonical_frame` (PCA, third-moment signs),
+  `d2_signature` (64 bins), `point_cloud_of`.
+- `embedding.py`: `PointNetEncoder` (32-d unit vector), `train_embedding`
+  (family head, sign-flip augmentation, 150 epochs, 4 s on GPU),
+  `EmbeddingBundle` save/load, `nearest_neighbour_precision`,
+  `embedding_label` (SURROGATE; D2 as ANALYTICAL).
+- Measured: retrieval descriptors 1.00, PointNet 0.88, D2 0.64; rotation
+  cosine 1.00 after alignment; Fusion plates land nearest box in the learned
+  space while the rules say plate.
+- Tests: `tests/test_cad_embeddings.py` (10).
 
 ## P3 descriptors and classification, as built
 
