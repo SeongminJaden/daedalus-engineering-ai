@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1674%20passing-brightgreen.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1757%20passing-brightgreen.svg)](#status)
 [![Capabilities](https://img.shields.io/badge/capabilities-57%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1674 tests pass**, including independent verification of every critical
+**1757 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -430,6 +430,18 @@ so".
 | P7 | a shape surrogate that predicts CalculiX deflection from descriptors plus a beam-theory proxy; held-out R² 0.94 on 40 parts, p95 error near 0.5, so it ranks candidates and the solver verifies the shortlist; every prediction grades `SURROGATE` and cannot become a verdict | done |
 | P8 | design intent as a claim with provenance, checked by ablation through CalculiX: supported, refuted, or inconclusive when the effect sits inside the mesh noise; recorded in the Brain as evidence or counterexample, never above `SIMULATED` | done |
 | P9 | the agent loop runs a `generative_cad` strategy: candidates from three part families with the problem's length imposed, ranked by the proxy or the shape surrogate, verified by CalculiX, and the winner's STEP path lands in the episode; not free-form, and the docs say so | done, as far as it goes |
+
+**Second work list (2026-09-02 to 03), all first passes and all SIMULATED or lower:**
+
+| item | what | state |
+|---|---|---|
+| materials | 19 sourced materials, per-value citations, temperature curve for INCONEL 718, fatigue absent where no sheet gives it | done |
+| dataset | 13 part families, 5 load cases each checked against a closed form, exact material scaling with a measured Poisson residual per case, resumable batch generation; spec and cost in `docs/dataset_spec.md` | done, generation at scale left to the user |
+| form and manufacturability | form targets consumed into a preference score off the ladder; per-process DFM rules (CNC, sheet, FDM, SLS, SLM, die casting, injection) from cited design guides, measured on the tessellated part, graded rule-based and never evidence | done |
+| Code_Aster contact | the xfail was a reversed inequality; fixed, verified to 2 percent, registered | done |
+| catalogue parts | ISO 4762 screws, ISO 4032 nuts, GT2 pulleys and belts, heat-set inserts as solids with cited dimensions and material links; pulleys are envelopes without teeth | done |
+| Gazebo cross-check | Gazebo Fortress holds the assembly with preloaded joint springs and its equilibrium agrees with this project's statics to 0.03 percent; envelope interference by kinematics; Isaac Sim not installed, machine below its requirements | done |
+| measurement guideline | `docs/measurement_guideline.md`: what to measure, with what, to what tolerance, and the record format that alone can raise a grade | written |
 
 **Validation ladder (roadmap).** Simulation verification is where the project
 is. Hardware comes next: a part manufactured from an exported STEP file.

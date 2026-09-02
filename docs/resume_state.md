@@ -9,7 +9,7 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 57 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1674, all passing, no xfail left (the Code_Aster contact one was fixed on 2026-09-02).
+- Tests collected: 1757, all passing, no xfail (Code_Aster contact fixed 2026-09-02).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -38,7 +38,29 @@ architecture diagram replaced). Not started.
 | 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
 | 5 | standard parts: ISO 4762, ISO 4032, GT2, heat-set inserts, with material links | DONE |
 | 6 | Gazebo spring-hold statics cross-check (0.03 percent) and envelope interference; Isaac Sim not installed, machine below its requirements | DONE |
-| 7 | measurement and evaluation guideline document | pending |
+| 7 | `docs/measurement_guideline.md` | DONE |
+
+## Second work list, as built (2026-09-03)
+
+- Load cases: `core/part_dataset/labeller.py` LoadKind (bending, axial,
+  torsion, combined, thermal_gradient); `nodes/calculix.py` takes
+  `nodal_forces` and `ThermalLoad`. Closed-form checks in
+  `tests/test_load_cases.py`.
+- Scaling: `core/part_dataset/scaling.py`, tags on every label,
+  `POISSON_RESIDUAL_BOUND` per case from measurement.
+- Batch: `core/part_dataset/batch.py` (cells, done files, refused.jsonl,
+  `expand_materials`, `plan`).
+- Families: 13 in `families.py`; `ORIGINAL_FAMILIES` names the five the
+  classifier and CAD executor were measured on.
+- Form score: `geometry/aesthetics/form.py`. DFM: `geometry/manufacturability/`
+  (measures.py, processes.py), grade `rule_based_dfm_guideline`.
+- Tessellation now flips reversed faces (`core/part_dataset/pointcloud.py`).
+- Standard parts: `geometry/cad_export/standard_parts.py`.
+- Gazebo: `integration/simulation/gazebo.py` (spring hold, envelope
+  interference). Runs need `ign` and real time; about 15 s per test file.
+- Guideline: `docs/measurement_guideline.md`. Dataset spec: `docs/dataset_spec.md`.
+- Not done: large-scale generation run; classifier rules for the eight new
+  families; Isaac Sim (hardware below requirements); anything physical.
 
 ## P9 generative CAD loop, as built
 

@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1674%20passing-brightgreen.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1757%20passing-brightgreen.svg)](#현재-상태)
 [![Capabilities](https://img.shields.io/badge/capabilities-57%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
@@ -79,7 +79,7 @@ UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPE
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 1674개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+**테스트 1757개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
 검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
 확인한다.
 
@@ -407,6 +407,18 @@ python -m interfaces.cli.main brain --generalize
 | P7 | 기술자와 보 이론 프록시로 CalculiX 처짐을 예측하는 형상 서로게이트; 40개 부품 홀드아웃 R² 0.94, p95 오차 0.5 근처라서 후보를 순위 매기고 솔버가 상위 후보를 검증; 모든 예측은 `SURROGATE` 등급이고 판정이 될 수 없음 | 완료 |
 | P8 | 출처가 붙은 주장으로서의 설계의도, CalculiX 절제 실험으로 검증: 지지·반박·(효과가 메시 잡음 안이면) 결론 불가; Brain 에 근거 또는 반례로 기록, `SIMULATED` 위로는 절대 못 감 | 완료 |
 | P9 | 에이전트 루프가 `generative_cad` 전략을 실행: 문제 길이를 고정한 세 패밀리 후보를 프록시 또는 형상 서로게이트가 순위 매기고 CalculiX 가 검증, 승자의 STEP 경로가 에피소드에 기록; 자유형 아님을 문서에 명시 | 완료(이 범위까지) |
+
+**2차 작업 목록(2026-09-02~03), 전부 첫 패스이고 전부 SIMULATED 이하:**
+
+| 항목 | 내용 | 상태 |
+|---|---|---|
+| 물성표 | 19종, 값마다 출처, INCONEL 718 온도 곡선, 시트가 주지 않는 피로강도는 비움 | 완료 |
+| 데이터셋 | 패밀리 13, 하중 케이스 5(각각 닫힌 형태 검증), 케이스별 측정한 Poisson 잔차를 단 정확한 재료 스케일링, 재개 가능한 배치 생성; 사양과 비용은 `docs/dataset_spec.md` | 완료, 대량 생성은 사용자에게 |
+| 형상미학·제조성 | 형태 목표를 사다리 밖 선호 점수로 소비; 공정별 DFM 규칙(CNC, 판금, FDM, SLS, SLM, 다이캐스팅, 사출)을 인용한 설계 가이드에서, 삼각화된 부품에서 측정, 규칙 기반 등급이며 근거 아님 | 완료 |
+| Code_Aster 접촉 | xfail 원인은 뒤집힌 부등식; 수정, 2 퍼센트로 검증, 등록 | 완료 |
+| 카탈로그 부품 | ISO 4762 볼트, ISO 4032 너트, GT2 풀리·벨트, 히트셋 인서트를 출처 있는 치수와 재료 연결로; 풀리는 이 없는 외피 | 완료 |
+| Gazebo 교차검증 | Gazebo Fortress 가 프리로드 스프링으로 어셈블리를 잡고 그 평형이 이 프로젝트의 정역학과 0.03 퍼센트로 일치; 외피 간섭은 기구학으로; Isaac Sim 은 미설치, 머신이 요구사양 미달 | 완료 |
+| 실측 가이드라인 | `docs/measurement_guideline.md`: 무엇을 무엇으로 어느 허용오차로 재는지, 등급을 올릴 수 있는 유일한 기록 형식 | 작성 |
 
 **검증 사다리(로드맵).** 시뮬레이션 검증이 지금 프로젝트가 있는 자리다. 다음은
 하드웨어: 출력된 STEP 파일로 제조한 부품. 마지막은 실측: 진술을
