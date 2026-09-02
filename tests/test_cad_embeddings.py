@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from brain.semantic.evidence import EvidenceKind
+from core.part_dataset.families import ORIGINAL_FAMILIES
 from core.part_dataset import FAMILIES, generate_dataset, make_part
 from core.part_dataset.descriptors import describe_step
 from core.part_dataset.embedding import (EMBEDDING_DIM, POINTS_PER_PART,
@@ -48,7 +49,7 @@ def corpus(tmp_path_factory):
     out = {}
     for name, n, seed in (("train", N_TRAIN, 1), ("test", N_TEST, 2)):
         records, report = generate_dataset(n, seed=seed, step_dir=root / name,
-                                           labelled=False, stop_on_mismatch=True)
+                                           labelled=False, stop_on_mismatch=True, families=ORIGINAL_FAMILIES)
         assert report.refused == []
         clouds, d2, desc, fams = [], [], [], []
         for r in records:

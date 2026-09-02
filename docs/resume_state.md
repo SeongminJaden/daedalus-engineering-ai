@@ -33,7 +33,7 @@ architecture diagram replaced). Not started.
 | item | what | state |
 |---|---|---|
 | 1 | sourced materials table with per-value citations, temperature ranges, optional fatigue | DONE: 19 materials, `sources` and `value_sources` on MaterialSpec, MatWeb values kept but graded secondary, 718 modulus curve |
-| 2 | industrial-scale dataset spec and generation (families, load cases, materials, cost table, resumable batches) | after 1 |
+| 2 | dataset spec (`docs/dataset_spec.md`), 5 load cases, 13 families, material scaling, resumable batch | DONE; generation at scale not run, user's call (about 45 min at 8 workers, mount family retries a quarter of its parts) |
 | 3 | aesthetics B and C plus per-process manufacturability rules | pending |
 | 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
 | 5 | catalogue part shapes with material links | pending |

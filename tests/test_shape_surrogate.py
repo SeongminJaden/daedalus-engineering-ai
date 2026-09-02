@@ -14,6 +14,7 @@ import pytest
 
 from brain.semantic.evidence import EvidenceKind, EvidenceLevel, derive_level
 from core.materials.db import get_material
+from core.part_dataset.families import ORIGINAL_FAMILIES
 from core.part_dataset import FAMILIES, generate_dataset, sample_parameters
 from core.part_dataset.labeller import LoadCase, labelling_available
 from core.part_dataset.shape_surrogate import (FEATURE_NAMES, TARGET_NAMES,
@@ -43,7 +44,7 @@ def corpus(tmp_path_factory):
     sets = {}
     for name, n, seed in (("train", N_TRAIN, 1), ("test", N_TEST, 2)):
         records, report = generate_dataset(n, seed=seed, step_dir=root / name,
-                                           labelled=True)
+                                           labelled=True, families=ORIGINAL_FAMILIES)
         assert report.generated >= n - 1, report.summary()
         sets[name] = training_set_from(records, root / name, material)
     sets["root"] = root

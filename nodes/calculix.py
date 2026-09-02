@@ -204,7 +204,9 @@ def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
                poisson_ratio: float, fixed_nodes: np.ndarray,
                load_nodes: np.ndarray, total_load_n: float,
                load_direction: int = 1,
-               element_type: ElementType = ElementType.C3D8I) -> Path:
+               element_type: ElementType = ElementType.C3D8I,
+               nodal_forces: np.ndarray | None = None,
+               thermal: "ThermalLoad | None" = None) -> Path:
     """Write a CalculiX input deck for the same problem the Warp solver runs.
 
     Node numbering is one-based in the deck and zero-based in the mesh, and the
@@ -214,10 +216,26 @@ def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
     The load is divided equally over the loaded nodes, exactly as the Warp
     solver does, so any difference in the answer is not a difference in how the
     load was applied.
+
+    `nodal_forces`, when given, is an (n_loaded, 3) array of forces in newtons
+    for `load_nodes` in order and REPLACES the equal division: it is how a
+    torque or a combined load is applied, since a single direction and a total
+    cannot describe either. `thermal` adds an expansion coefficient to the
+    material and a nodal temperature field to the step; it may be the only
+    load, in which case `total_load_n` is ignored and may be zero.
     """
-    if total_load_n == 0.0:
-        raise ValueError("a zero load gives a zero answer and checks nothing")
-    if len(load_nodes) == 0:
+    if nodal_forces is not None:
+        nodal_forces = np.asarray(nodal_forces, dtype=float)
+        if nodal_forces.shape != (len(load_nodes), 3):
+            raise ValueError(
+                f"nodal_forces must be ({len(load_nodes)}, 3) to match "
+                f"load_nodes, got {nodal_forces.shape}")
+        if not np.any(nodal_forces):
+            raise ValueError("nodal_forces are all zero and check nothing")
+    elif thermal is None:
+        if total_load_n == 0.0:
+            raise ValueError("a zero load gives a zero answer and checks nothing")
+    if len(load_nodes) == 0 and thermal is None:
         raise ValueError("no loaded nodes")
     if len(fixed_nodes) == 0:
         raise ValueError(
@@ -231,7 +249,7 @@ def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
             f"element but the mesh supplies {actual}; a mismatched deck "
             f"either fails to read or silently describes a different solid")
 
-    per_node = total_load_n / len(load_nodes)
+    per_node = total_load_n / len(load_nodes) if len(load_nodes) else 0.0
     lines: list[str] = ["*HEADING", "cross-validation deck", "*NODE, NSET=Nall"]
     for index, (x, y, z) in enumerate(mesh.node_coords, start=1):
         lines.append(f"{index}, {x:.10e}, {y:.10e}, {z:.10e}")
@@ -245,15 +263,35 @@ def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
         "*MATERIAL, NAME=MAT",
         "*ELASTIC",
         f"{youngs_modulus_pa:.10e}, {poisson_ratio:.10f}",
-        "*SOLID SECTION, ELSET=Eall, MATERIAL=MAT",
-        "*BOUNDARY",
     ]
+    if thermal is not None:
+        lines += ["*EXPANSION", f"{thermal.expansion_1_k:.10e}"]
+    lines += ["*SOLID SECTION, ELSET=Eall, MATERIAL=MAT"]
+    if thermal is not None:
+        lines += ["*INITIAL CONDITIONS, TYPE=TEMPERATURE",
+                  f"Nall, {thermal.reference_k:.10e}"]
+    lines += ["*BOUNDARY"]
     for node in fixed_nodes:
         lines.append(f"{int(node) + 1}, 1, 3, 0.0")
 
-    lines += ["*STEP", "*STATIC", "*CLOAD"]
-    for node in load_nodes:
-        lines.append(f"{int(node) + 1}, {load_direction + 1}, {per_node:.10e}")
+    lines += ["*STEP", "*STATIC"]
+    if nodal_forces is not None:
+        lines.append("*CLOAD")
+        for node, force in zip(load_nodes, nodal_forces):
+            for axis in range(3):
+                if force[axis] != 0.0:
+                    lines.append(f"{int(node) + 1}, {axis + 1}, "
+                                 f"{force[axis]:.10e}")
+    elif len(load_nodes) and total_load_n != 0.0:
+        lines.append("*CLOAD")
+        for node in load_nodes:
+            lines.append(f"{int(node) + 1}, {load_direction + 1}, "
+                         f"{per_node:.10e}")
+    if thermal is not None:
+        lines.append("*TEMPERATURE")
+        for index, temperature in enumerate(thermal.node_temperatures_k(mesh),
+                                            start=1):
+            lines.append(f"{index}, {temperature:.10e}")
     lines += [
         "*NODE PRINT, NSET=Nall",
         "U",
@@ -264,6 +302,30 @@ def write_deck(path: Path, mesh: "Mesh | TetMesh", youngs_modulus_pa: float,
     ]
     path.write_text("\n".join(lines))
     return path
+
+
+@dataclass(frozen=True)
+class ThermalLoad:
+    """A temperature field for a static step, with the material's expansion.
+
+    `gradient_k_per_m` is along `gradient_axis`, measured from the mesh's
+    minimum on that axis, on top of a uniform rise `delta_k` above the
+    reference. Uniform with a free end is free expansion and zero stress;
+    a through-thickness gradient on a clamped cantilever bends it, and both
+    have closed forms the tests use.
+    """
+
+    expansion_1_k: float
+    delta_k: float = 0.0
+    gradient_k_per_m: float = 0.0
+    gradient_axis: int = 1
+    reference_k: float = 293.15
+
+    def node_temperatures_k(self, mesh) -> np.ndarray:
+        coords = np.asarray(mesh.node_coords)
+        along = coords[:, self.gradient_axis]
+        return (self.reference_k + self.delta_k
+                + self.gradient_k_per_m * (along - along.min()))
 
 
 @dataclass(frozen=True)
@@ -349,7 +411,9 @@ def solve(mesh: "Mesh | TetMesh", youngs_modulus_pa: float, poisson_ratio: float
           total_load_n: float, load_direction: int = 1,
           element_type: ElementType = ElementType.C3D8I,
           timeout_s: float = 600.0,
-          keep_directory: Path | None = None) -> CalculixResult:
+          keep_directory: Path | None = None,
+          nodal_forces: np.ndarray | None = None,
+          thermal: ThermalLoad | None = None) -> CalculixResult:
     """Run the same problem through CalculiX and return its answer.
 
     Raises `CapabilityUnavailable` when ccx is absent, matching how the Fusion
@@ -369,7 +433,8 @@ def solve(mesh: "Mesh | TetMesh", youngs_modulus_pa: float, poisson_ratio: float
         job = directory / "job"
         write_deck(job.with_suffix(".inp"), mesh, youngs_modulus_pa,
                    poisson_ratio, fixed_nodes, load_nodes, total_load_n,
-                   load_direction, element_type)
+                   load_direction, element_type, nodal_forces=nodal_forces,
+                   thermal=thermal)
         completed = subprocess.run([binary, str(job)], capture_output=True,
                                    text=True, timeout=timeout_s,
                                    cwd=str(directory))

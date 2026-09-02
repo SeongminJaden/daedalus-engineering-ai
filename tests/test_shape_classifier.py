@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from brain.semantic.evidence import EvidenceLevel
+from core.part_dataset.families import ORIGINAL_FAMILIES
 from core.part_dataset import FAMILIES, generate_dataset
 from core.part_dataset.classify import (UNKNOWN, NearestNeighbourClassifier,
                                         classification_label, evaluate,
@@ -40,10 +41,10 @@ def corpus(tmp_path_factory):
         pytest.skip("build123d and OCP are required")
     root = tmp_path_factory.mktemp("corpus")
     out = {}
-    for name, n, seed in (("train", PER_FAMILY_TRAIN * len(FAMILIES), 1),
-                          ("test", PER_FAMILY_TEST * len(FAMILIES), 2)):
+    for name, n, seed in (("train", PER_FAMILY_TRAIN * len(ORIGINAL_FAMILIES), 1),
+                          ("test", PER_FAMILY_TEST * len(ORIGINAL_FAMILIES), 2)):
         records, report = generate_dataset(n, seed=seed, step_dir=root / name,
-                                           labelled=False, stop_on_mismatch=True)
+                                           labelled=False, stop_on_mismatch=True, families=ORIGINAL_FAMILIES)
         assert report.refused == []
         descriptors = [describe_step(root / name / f"{r.part_id}.step")[0]
                        for r in records]
