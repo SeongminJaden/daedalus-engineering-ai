@@ -59,6 +59,17 @@ class GroundTruthMismatch(ValueError):
     """The analyzer or the recogniser disagreed with the parameters."""
 
 
+class LabellingFailed(RuntimeError):
+    """The solver route did not return a result for this part.
+
+    Distinct from a mismatch: the geometry checked out and the mesher or the
+    solver still produced nothing. A part refused this way is listed in the
+    report with the solver's message, because a run that quietly drops the
+    parts its solver cannot handle is biased toward the easy ones and does
+    not know it.
+    """
+
+
 @dataclass
 class GenerationReport:
     requested: int
@@ -152,9 +163,12 @@ def make_part(fam: Family, params: dict[str, float], step_dir: Path,
     if labelled:
         material = material or get_material("al_7075_t6")
         case = load or LoadCase(direction=fam.load_direction)
-        label_report = cantilever_labels(
-            step_path, record.geometry.volume_m3, record.geometry.bounding_box_m,
-            material, case)
+        try:
+            label_report = cantilever_labels(
+                step_path, record.geometry.volume_m3,
+                record.geometry.bounding_box_m, material, case)
+        except RuntimeError as exc:
+            raise LabellingFailed(f"{part_id}: {exc}") from exc
         labels = label_report.labels
 
     record = record.model_copy(update={
@@ -181,9 +195,10 @@ def generate_dataset(n: int, seed: int, out_path: str | Path | None = None,
     """Make n parts, cycling through the families, and write them.
 
     Deterministic for a seed: the same call makes the same parts with the
-    same ids. A mismatch against ground truth is recorded in the report and
-    the part is dropped, unless `stop_on_mismatch`, in which case it raises,
-    which is the right setting for a test and the wrong one for a long run.
+    same ids. A mismatch against ground truth, or a solver that returns
+    nothing, is recorded in the report and the part is dropped, unless
+    `stop_on_mismatch`, in which case it raises, which is the right setting
+    for a test and the wrong one for a long run.
     """
     names = list(families or FAMILIES)
     fams = [FAMILIES[name] for name in names]
@@ -207,7 +222,7 @@ def generate_dataset(n: int, seed: int, out_path: str | Path | None = None,
                     LoadCase(total_load_n=total_load_n,
                              direction=fam.load_direction),
                     labelled=labelled)
-            except GroundTruthMismatch as exc:
+            except (GroundTruthMismatch, LabellingFailed) as exc:
                 if stop_on_mismatch:
                     raise
                 report.refused.append((part_id, str(exc)))

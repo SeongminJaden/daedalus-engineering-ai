@@ -35,6 +35,13 @@ profile-chunked solver path (batch size 4, so 5,000 launches) shows a ~5,000×
 "speedup". That number is launch overhead, not physics, and it is meaningless.
 The fair comparison is against a single batched launch.
 
+The condition stated above has since been met once, elsewhere: the shape
+surrogate in `core/part_dataset/shape_surrogate.py` approximates a Gmsh mesh
+and a CalculiX solve that cost 0.2 to 6 seconds per part, against a forward
+pass in microseconds. There the ratio has inverted. Its accuracy (held-out
+deflection R2 0.94 on 40 labelled parts, p95 relative error near 0.5) makes
+it a ranker and not a verdict, and the SURROGATE evidence level keeps it one.
+
 ## The discipline: screen, then verify
 
 ```

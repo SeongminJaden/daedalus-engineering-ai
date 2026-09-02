@@ -9,7 +9,7 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 55 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1596, 1595 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6).
+- Tests collected: 1603, 1602 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -20,13 +20,29 @@ repository is SIMULATED or below; nothing has been physically tested.
 | P5 | synthetic data engine: `core/part_dataset/{families,labeller,store,engine}.py`, five families, ground truth checked per record, CalculiX labels with mesh sensitivity | DONE |
 | P3 | descriptors and classification: `core/part_dataset/{descriptors,classify}.py`, `nodes/shape_classifier.py`, capability `analysis.cad.classify` | DONE |
 | P6 | embeddings: `core/part_dataset/{pointcloud,embedding}.py`, D2 baseline and PointNet (SURROGATE) | DONE |
-| P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | next |
-| P8 | design intent, measured by ablation against real solvers | not started |
+| P7 | shape surrogate: `core/part_dataset/shape_surrogate.py`, beam proxy feature, screen_and_verify_parts | DONE |
+| P8 | design intent, measured by ablation against real solvers | next |
 | P9 | generative design and the autonomous CAD loop | not started |
 
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P7 shape surrogate, as built
+
+- Features: 22 descriptors + log volume, longest side, E, load, direction
+  indicators + log beam proxy (bounding box cantilever scaled by fill).
+- `train_shape_surrogate` (MLP 32, wd 1e-3, 2000 epochs, seconds on GPU),
+  `ShapeSurrogate` save/load, `ShapePrediction` (SURROGATE, as_evidence,
+  screened_check), `screen_and_verify_parts` (solver-verified winner only).
+- Measured: on 40 parts raw R2 0.94, log R2 0.97, Spearman 0.99 with the
+  proxy, below zero without it; 20-part draws Spearman never below 0.79 and
+  log R2 never below 0.41, raw R2 down to 0.29 (the wrong metric to read).
+- Mesher: no high-order optimiser (it terminated the process once); the
+  labeller retries at 0.7 size up to twice and records the size used.
+- Labelled corpus for experiments is in the session scratchpad only; nothing
+  labelled is committed. Cost 2.5 to 7 s per part.
+- Tests: `tests/test_shape_surrogate.py` (7, marked slow, about 2 min).
 
 ## P6 embeddings, as built
 

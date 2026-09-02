@@ -12,7 +12,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1595%20passing-brightgreen.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1602%20passing-brightgreen.svg)](#status)
 [![Capabilities](https://img.shields.io/badge/capabilities-55%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1595 tests pass**, including independent verification of every critical
+**1602 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -427,8 +427,8 @@ so".
 | P5 | synthetic data engine: five build123d families with closed-form volumes, every record checked against its own parameters, labelled through Gmsh and CalculiX with mesh sensitivity on every solver label; labels graded `SIMULATED` by construction | done |
 | P3 | 22 scale-free descriptors from the B-rep; topology rules classify the five families and say UNKNOWN otherwise, a nearest-neighbour model graded `SURROGATE` checks them and rejects what it has not seen | done |
 | P6 | surface point clouds from the B-rep, a D2 distance histogram that needs no learning, and a 32-dimensional PointNet embedding graded `SURROGATE`; measured: nearest-neighbour family retrieval 1.00 for the descriptors, 0.88 for the embedding, 0.64 for the histogram | done |
-| P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | in progress |
-| P8 | design intent, measured by ablation against real solvers rather than asserted | planned |
+| P7 | a shape surrogate that predicts CalculiX deflection from descriptors plus a beam-theory proxy; held-out R² 0.94 on 40 parts, p95 error near 0.5, so it ranks candidates and the solver verifies the shortlist; every prediction grades `SURROGATE` and cannot become a verdict | done |
+| P8 | design intent, measured by ablation against real solvers rather than asserted | in progress |
 | P9 | generative design and an autonomous CAD loop that emits STEP | planned |
 
 **Validation ladder (roadmap).** Simulation verification is where the project

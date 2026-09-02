@@ -128,8 +128,12 @@ bound, physics is GPU bound, so they do not contend.
   SURROGATE. Measured nearest-neighbour retrieval: descriptors 1.00,
   embedding 0.88, D2 0.64. The embedding has not beaten the topology on
   five prismatic families and the docs say so.
-- **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard. The
-  guard itself is in place; the prediction models for CAD shapes are not.
+- **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard. DONE
+  (`core/part_dataset/shape_surrogate.py`): descriptors plus a beam-theory
+  proxy predict the labeller's CalculiX deflection, held-out R2 0.94 on 40
+  parts; `screen_and_verify_parts` ranks with it and returns only a
+  solver-verified winner. Without the proxy feature the same model had R2
+  below zero, which is recorded rather than hidden.
 - **Phase 8** Design intent, measured by ablation against real solvers rather
   than asserted.
 - **Phase 9** Generative design and an autonomous CAD loop, extending the

@@ -20,7 +20,19 @@ On a 200 by 40 by 30 mm hollow box, two mesh sizes:
 The displacement moved 0.06 percent between meshes. The peak stress moved 14
 percent, and it will keep moving, because a fully clamped face produces a
 stress singularity at its edge and the peak does not converge under
-refinement. So every solver label here carries `mesh_sensitivity`, the
+refinement.
+
+Two parts in the first fifty five refused to solve at all: a stepped shaft
+of radius 12.8 mm meshed at 9.9 mm, and a two hole plate, each with a
+quadratic tetrahedron on a curved face whose Jacobian went nonpositive, so
+CalculiX returned nothing. The shaft solved at 6.7 mm. Gmsh's high order
+optimiser fixed both and then terminated the Python process on a third
+part with a C++ exception nothing can catch, so it is not used. Instead the
+labeller RETRIES: when the solver returns nothing, the mesh is rebuilt at
+0.7 of the size, up to twice, and the size actually used is recorded in
+the label's note. A part that fails all three is refused with the solver's
+message. A solver that returns nothing is a refusal with the
+solver's message in the report, never a silent drop. So every solver label here carries `mesh_sensitivity`, the
 relative change between the coarse and the fine mesh, and the stress label
 says in its note that the peak is not a converged quantity. A consumer that
 ignores the note has been told.
@@ -95,23 +107,46 @@ def mesh_sizes_for(bounding_box_m: tuple[float, float, float]
     return longest / 15.0, longest / 22.0
 
 
+#: How much finer to mesh after the solver rejects a mesh, and how often.
+RETRY_FACTOR = 0.7
+MAX_RETRIES = 2
+
+
 def _solve(step_path: Path, size_m: float, material: MaterialSpec,
            case: LoadCase):
+    """Mesh and solve, retrying finer when the solver returns nothing.
+
+    Returns the mesh, the result, the tip displacement and the size that
+    was actually used, which the caller records because a label produced at
+    a different size than the one asked for has to say so.
+    """
     from nodes import calculix as ccx
     from nodes import gmsh_node as gm
 
-    mesh = gm.tetrahedral_mesh_from_step(str(step_path), size_m, order=2)
-    fixed = mesh.nodes_at_extreme(case.fixed_axis, case.fixed_side)
-    loaded = mesh.nodes_at_extreme(case.fixed_axis, case.loaded_side)
-    result = ccx.solve(mesh, material.youngs_modulus_pa,
-                       material.poisson_ratio, fixed, loaded,
-                       total_load_n=case.total_load_n,
-                       load_direction=case.direction,
-                       element_type=ccx.ElementType.C3D10)
-    if not result.converged:
-        raise RuntimeError(f"CalculiX reported an error on {step_path.name}")
-    tip = float(result.displacements[loaded, case.direction].mean())
-    return mesh, result, tip
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES + 1):
+        size = size_m * RETRY_FACTOR ** attempt
+        mesh = gm.tetrahedral_mesh_from_step(str(step_path), size, order=2)
+        fixed = mesh.nodes_at_extreme(case.fixed_axis, case.fixed_side)
+        loaded = mesh.nodes_at_extreme(case.fixed_axis, case.loaded_side)
+        try:
+            result = ccx.solve(mesh, material.youngs_modulus_pa,
+                               material.poisson_ratio, fixed, loaded,
+                               total_load_n=case.total_load_n,
+                               load_direction=case.direction,
+                               element_type=ccx.ElementType.C3D10)
+        except RuntimeError as exc:
+            last_error = exc
+            continue
+        if not result.converged:
+            last_error = RuntimeError(
+                f"CalculiX reported an error on {step_path.name}")
+            continue
+        tip = float(result.displacements[loaded, case.direction].mean())
+        return mesh, result, tip, size
+    raise RuntimeError(
+        f"{step_path.name}: the solver returned nothing at {MAX_RETRIES + 1} "
+        f"mesh sizes down to {size * 1e3:.2f} mm; last error: {last_error}")
 
 
 def _sensitivity(fine: float, coarse: float) -> float:
@@ -128,13 +163,17 @@ def cantilever_labels(step_path: str | Path, volume_m3: float,
     step_path = Path(step_path)
     started = time.perf_counter()
     coarse_size, fine_size = mesh_sizes_for(bounding_box_m)
-    coarse_mesh, coarse, coarse_tip = _solve(step_path, coarse_size, material,
-                                             case)
-    fine_mesh, fine, fine_tip = _solve(step_path, fine_size, material, case)
+    coarse_mesh, coarse, coarse_tip, coarse_used = _solve(
+        step_path, coarse_size, material, case)
+    fine_mesh, fine, fine_tip, fine_used = _solve(
+        step_path, fine_size, material, case)
     solver = f"calculix {ccx.version() or 'unknown'} C3D10"
-    mesh_note = (f"quadratic tetrahedra, target {fine_size * 1e3:.2f} mm, "
+    retried = coarse_used != coarse_size or fine_used != fine_size
+    mesh_note = (f"quadratic tetrahedra, target {fine_used * 1e3:.2f} mm, "
                  f"{fine_mesh.n_nodes} nodes; coarse control at "
-                 f"{coarse_size * 1e3:.2f} mm, {coarse_mesh.n_nodes} nodes")
+                 f"{coarse_used * 1e3:.2f} mm, {coarse_mesh.n_nodes} nodes"
+                 + ("; the solver rejected the first mesh and a finer one "
+                    "was used" if retried else ""))
 
     labels = {
         "mass_kg": label(

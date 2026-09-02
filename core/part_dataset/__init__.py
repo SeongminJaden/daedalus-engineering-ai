@@ -19,8 +19,15 @@ from .pointcloud import (canonical_frame, d2_signature, normalise,
 from .embedding import (EMBEDDING_DIM, POINTS_PER_PART, EmbeddingBundle,
                         embedding_label, nearest_neighbour_precision,
                         train_embedding)
+from .shape_surrogate import (ShapePrediction, ShapeScreeningResult,
+                              ShapeSurrogate, ShapeTrainingSet, beam_proxy_m,
+                              screen_and_verify_parts, train_shape_surrogate,
+                              training_set_from)
 
 __all__ = ["DESCRIPTOR_NAMES", "Classification", "EMBEDDING_DIM",
+           "ShapePrediction", "ShapeScreeningResult", "ShapeSurrogate",
+           "ShapeTrainingSet", "beam_proxy_m", "screen_and_verify_parts",
+           "train_shape_surrogate", "training_set_from",
            "EmbeddingBundle", "FAMILIES", "Family", "POINTS_PER_PART",
            "canonical_frame", "d2_signature", "embedding_label",
            "nearest_neighbour_precision", "normalise", "point_cloud_of",

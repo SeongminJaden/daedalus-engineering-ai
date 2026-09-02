@@ -363,8 +363,17 @@ class TetMesh:
                                       np.cross(a, b), c)).sum() / 6.0)
 
 
+#: Points Gmsh places around a full circle of curvature when curvature
+#: sizing is asked for. Twelve gives elements about half a radius long on a
+#: cylinder. Off by default: measured on a two hole plate it doubled the node
+#: count and moved the deflection by 0.6 percent, and on that same plate it
+#: produced an inverted element that the global size alone did not.
+DEFAULT_POINTS_PER_CIRCLE = 12
+
+
 def tetrahedral_mesh_from_step(step_path: str, target_size_m: float,
-                               order: int = 2) -> TetMesh:
+                               order: int = 2,
+                               points_per_circle: int | None = None) -> TetMesh:
     """Mesh a STEP solid with tetrahedra, for a shape this project cannot build.
 
     This is the entry point that makes CAD analysable here: Gmsh imports the
@@ -376,6 +385,21 @@ def tetrahedral_mesh_from_step(step_path: str, target_size_m: float,
     units, and STEP is conventionally millimetres. The mesh therefore comes
     back in the file's units and is scaled to metres here using the same
     declaration the analyzer reads, rather than a guess.
+
+    Second order tetrahedra on a curved face can INVERT: the mid-edge nodes
+    are pushed onto the surface and an element folds over, CalculiX reports
+    a nonpositive Jacobian and writes no result. Measured on a stepped shaft
+    of radius 12.8 mm at a 9.9 mm target, which solved at 6.7 mm. Two
+    remedies were measured and neither is in this function. Gmsh's high
+    order optimiser fixed both known cases and then, on another part,
+    threw a C++ exception that terminated the Python process, which no
+    caller can catch; a mesher that can kill its host is not a default.
+    Curvature sizing (`points_per_circle`) fixed the shaft, doubled a plate's
+    node count for a 0.6 percent change, and inverted an element on that
+    plate that the global size alone had not. So this function meshes at
+    the size it is given, the caller checks whether the solver accepted it,
+    and the labeller retries finer when it did not. The floor is a tenth of
+    the target so that curvature sizing, when asked for, can refine.
     """
     from .step_analyzer import read_length_unit_m
 
@@ -393,7 +417,10 @@ def tetrahedral_mesh_from_step(step_path: str, target_size_m: float,
             raise RuntimeError(f"Gmsh imported no shapes from {step_path}")
         gmsh.model.occ.synchronize()
         gmsh.option.setNumber("Mesh.MeshSizeMax", size_in_file_units)
-        gmsh.option.setNumber("Mesh.MeshSizeMin", size_in_file_units * 0.25)
+        gmsh.option.setNumber("Mesh.MeshSizeMin", size_in_file_units * 0.1)
+        if points_per_circle is not None:
+            gmsh.option.setNumber("Mesh.MeshSizeFromCurvature",
+                                  float(points_per_circle))
         gmsh.model.mesh.generate(3)
         if order == 2:
             gmsh.model.mesh.setOrder(2)
