@@ -9,7 +9,7 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 55 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1603, 1602 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7).
+- Tests collected: 1611, 1610 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3, 10 for P6, 7 for P7, 8 for P8).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -21,12 +21,27 @@ repository is SIMULATED or below; nothing has been physically tested.
 | P3 | descriptors and classification: `core/part_dataset/{descriptors,classify}.py`, `nodes/shape_classifier.py`, capability `analysis.cad.classify` | DONE |
 | P6 | embeddings: `core/part_dataset/{pointcloud,embedding}.py`, D2 baseline and PointNet (SURROGATE) | DONE |
 | P7 | shape surrogate: `core/part_dataset/shape_surrogate.py`, beam proxy feature, screen_and_verify_parts | DONE |
-| P8 | design intent, measured by ablation against real solvers | next |
-| P9 | generative design and the autonomous CAD loop | not started |
+| P8 | design intent by ablation: `core/part_dataset/intent.py` | DONE |
+| P9 | generative CAD loop: `agent/execution/cad.py`, method `generative_cad` | code and tests done, commit pending |
 
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P8 design intent, as built
+
+- `IntentClaim(ReferenceItem)`: family, parameter, role, quantity, direction
+  (UP, DOWN, NONE), factor, expected_ratio, tolerance; provenance-capped
+  confidence inherited.
+- `ablate` builds and labels base and ablated parts; `_judge` gives SUPPORTED,
+  REFUTED or INCONCLUSIVE against 2x the larger mesh sensitivity; directional
+  claims without a ratio must exceed `tolerance` to count.
+- `record_in_brain`: SUPPORTED adds SIMULATION evidence, REFUTED a
+  counterexample, INCONCLUSIVE nothing; consolidated by claim_key.
+- Measured: wall x2 gives deflection x0.625; length x2 gives 7.98 against 8;
+  holes 2 to 4 gives +1.8 percent (refutes structural, supports clearance);
+  height x1.001 is inconclusive.
+- Tests: `tests/test_design_intent.py` (8, slow, about 30 s).
 
 ## P7 shape surrogate, as built
 

@@ -23,8 +23,12 @@ from .shape_surrogate import (ShapePrediction, ShapeScreeningResult,
                               ShapeSurrogate, ShapeTrainingSet, beam_proxy_m,
                               screen_and_verify_parts, train_shape_surrogate,
                               training_set_from)
+from .intent import (AblationResult, Direction, IntentClaim, Outcome, ablate,
+                     ablated_parameters, intent_claims, record_in_brain)
 
-__all__ = ["DESCRIPTOR_NAMES", "Classification", "EMBEDDING_DIM",
+__all__ = ["AblationResult", "DESCRIPTOR_NAMES", "Classification",
+           "Direction", "EMBEDDING_DIM", "IntentClaim", "Outcome", "ablate",
+           "ablated_parameters", "intent_claims", "record_in_brain",
            "ShapePrediction", "ShapeScreeningResult", "ShapeSurrogate",
            "ShapeTrainingSet", "beam_proxy_m", "screen_and_verify_parts",
            "train_shape_surrogate", "training_set_from",

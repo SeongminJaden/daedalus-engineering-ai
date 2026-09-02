@@ -135,7 +135,11 @@ bound, physics is GPU bound, so they do not contend.
   solver-verified winner. Without the proxy feature the same model had R2
   below zero, which is recorded rather than hidden.
 - **Phase 8** Design intent, measured by ablation against real solvers rather
-  than asserted.
+  than asserted. DONE (`core/part_dataset/intent.py`): an IntentClaim is a
+  DesignReference item with mandatory provenance; `ablate` changes the one
+  parameter the claim is about, labels both parts through CalculiX, and says
+  SUPPORTED, REFUTED or INCONCLUSIVE against the mesh noise; the Brain
+  records evidence or counterexamples and derives the level by the ladder.
 - **Phase 9** Generative design and an autonomous CAD loop, extending the
   existing agent loop to emit CAD.
 
