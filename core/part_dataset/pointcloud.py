@@ -63,7 +63,7 @@ def tessellate(shape, unit_to_metres: float = 1.0,
     """
     from OCP.BRep import BRep_Tool
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
-    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopLoc import TopLoc_Location
     from OCP.TopoDS import TopoDS
@@ -84,8 +84,16 @@ def tessellate(shape, unit_to_metres: float = 1.0,
         for i in range(1, triangulation.NbNodes() + 1):
             p = triangulation.Node(i).Transformed(transform)
             vertices.append((p.X(), p.Y(), p.Z()))
+        # OpenCASCADE winds the triangles for the underlying surface, and a
+        # face whose orientation is REVERSED uses that surface inside out.
+        # Without the swap half the normals of a box point inward, which was
+        # measured (outward fraction 0.5) before the overhang and thickness
+        # measures gave nonsense; with it every normal points out.
+        reversed_face = face.Orientation() == TopAbs_REVERSED
         for i in range(1, triangulation.NbTriangles() + 1):
             a, b, c = triangulation.Triangle(i).Get()
+            if reversed_face:
+                b, c = c, b
             triangles.append((base + a - 1, base + b - 1, base + c - 1))
     if not triangles:
         raise ValueError("tessellation produced no triangles")
