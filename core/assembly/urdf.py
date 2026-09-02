@@ -111,12 +111,22 @@ def _inertial(parent: ET.Element, link, density_kg_m3: float) -> None:
 
 
 def assembly_to_urdf(assembly: Assembly, density_kg_m3: float,
-                     base_link_name: str = "base") -> str:
+                     base_link_name: str = "base",
+                     envelopes: bool = False) -> str:
     """Serialise the assembly as a URDF document.
 
     `density_kg_m3` is required rather than defaulted: the inertia written
     into the file is only meaningful for the material the links are made of,
     and a default would let the wrong one travel silently.
+
+    `envelopes` adds a visual and a collision BOX per link: the section's
+    outer width and height by the link length, along +x from the joint. It
+    is the bounding envelope of the hollow section and not the part; the
+    docstring above explains why the part's own geometry is not written
+    here. A simulator needs some collision shape to detect interference and
+    to draw, and an envelope is the honest one: every interference it
+    reports is at least an interference of the envelopes, and the generated
+    file says so in a comment on every such element.
     """
     _check_is_a_tree(assembly.joints)
     robot = ET.Element("robot", name=assembly.name)
@@ -126,10 +136,39 @@ def assembly_to_urdf(assembly: Assembly, density_kg_m3: float,
         "are NOT design limits. This model is y-up with gravity along -y, "
         "which URDF cannot record, so the consumer must set it. "))
 
-    ET.SubElement(robot, "link", name=base_link_name)
+    base = ET.SubElement(robot, "link", name=base_link_name)
+    if envelopes:
+        # sdformat's URDF reader turns a massless root link into a frame and
+        # then drops the joints hanging from it ("child joints ignored"),
+        # which was measured: the converted model kept two frames and no
+        # links. A simulator needs the base to be a body, so it gets a
+        # nominal inertia that is NOT a property of any part; the base is
+        # fixed to the world in every world this project writes, so the
+        # number never enters a result.
+        base.append(ET.Comment(" nominal inertia so the converter keeps the "
+                               "tree; the base is fixed to the world "))
+        inertial = ET.SubElement(base, "inertial")
+        ET.SubElement(inertial, "mass", value="1.0")
+        ET.SubElement(inertial, "inertia", ixx="1e-3", ixy="0", ixz="0",
+                      iyy="1e-3", iyz="0", izz="1e-3")
     for link in assembly.links:
         element = ET.SubElement(robot, "link", name=link.name)
         _inertial(element, link, density_kg_m3)
+        if envelopes:
+            section = link.genome.section
+            size = _triplet([link.length_m, section.outer_height_m,
+                             section.outer_width_m])
+            for tag in ("visual", "collision"):
+                shape = ET.SubElement(element, tag, name=f"{link.name}_envelope")
+                shape.append(ET.Comment(
+                    " ENVELOPE: the outer box of the hollow section, not the "
+                    "part. Interference against it is interference of "
+                    "envelopes. "))
+                ET.SubElement(shape, "origin",
+                              xyz=_triplet([link.length_m / 2.0, 0.0, 0.0]),
+                              rpy="0 0 0")
+                geometry = ET.SubElement(shape, "geometry")
+                ET.SubElement(geometry, "box", size=size)
 
     for joint in assembly.joints:
         origin = np.asarray(joint.origin_transform(), dtype=np.float64)

@@ -37,7 +37,7 @@ architecture diagram replaced). Not started.
 | 3 | form score (B) and per-process DFM rules (C), grade rule_based_dfm_guideline | DONE |
 | 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
 | 5 | standard parts: ISO 4762, ISO 4032, GT2, heat-set inserts, with material links | DONE |
-| 6 | Gazebo and Isaac Sim verification pipeline; machine has Gazebo Fortress 6.18 and ros_gz Humble, no Isaac Sim | pending |
+| 6 | Gazebo spring-hold statics cross-check (0.03 percent) and envelope interference; Isaac Sim not installed, machine below its requirements | DONE |
 | 7 | measurement and evaluation guideline document | pending |
 
 ## P9 generative CAD loop, as built
