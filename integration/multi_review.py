@@ -21,6 +21,12 @@ VALIDITY, before the implementation:
   failing. Sorting it into a list by margin would put it in a position
   implying it is merely worse, and it is not admissible at all.
 
+* **A shape preference is not evidence and cannot rescue a design.** Form
+  ranks admissible candidates against one another. Since a failing design is
+  never admissible, no preference value can lift it above a passing one; the
+  guard is structural rather than a comparison someone has to remember to
+  write.
+
 * **Dominance is a stronger statement than a ranking, and a weaker one than a
   choice.** A design no better than another on ANY axis and worse on some can
   be discarded without arguing about criteria. What survives is the set worth
@@ -47,6 +53,7 @@ class RankBy(str, Enum):
     MASS = "mass"                            # lightest first
     COST = "cost"                            # cheapest first
     FEWEST_GAPS = "fewest_gaps"              # best understood first
+    FORM = "form"                            # a stated shape preference
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,11 @@ class DesignEntry:
     verdict: AssemblyVerdict
     mass_kg: float = 0.0
     cost_usd: float = 0.0
+    #: A shape preference supplied by the caller, higher meaning more
+    #: preferred. It is NOT evidence and carries no confidence: it ranks
+    #: admissible designs against each other and nothing else. A design that
+    #: fails a check is never ranked at all, so no value here can rescue one.
+    form_score: float = 0.0
 
     @property
     def admissible(self) -> bool:
@@ -103,6 +115,7 @@ class MultiDesignReview:
             RankBy.MASS: lambda e: (e.mass_kg, e.name),
             RankBy.COST: lambda e: (e.cost_usd, e.name),
             RankBy.FEWEST_GAPS: lambda e: (e.gap_count, e.name),
+            RankBy.FORM: lambda e: (-e.form_score, e.name),
         }
         return sorted(self.admissible, key=keys[criterion])
 
@@ -136,7 +149,8 @@ class MultiDesignReview:
         correct: an axis carrying no information should not decide anything.
         """
         return np.array([[e.mass_kg, e.cost_usd, -e.governing_margin,
-                          float(e.gap_count)] for e in entries], dtype=float)
+                          float(e.gap_count), -e.form_score]
+                         for e in entries], dtype=float)
 
     def non_dominated(self) -> list[DesignEntry]:
         """Admissible designs that nothing else beats outright.
