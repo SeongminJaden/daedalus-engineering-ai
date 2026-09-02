@@ -15,6 +15,13 @@ winner is kept alongside purely so the two can be compared.
 The screening step can be wrong - it may drop a good candidate it mis-ranked.
 That is a recall risk, and it is the price of the speedup. What it cannot do is
 put an unverified design in front of a user as a result.
+
+The same rule is now written into the evidence ladder rather than only into
+this module's control flow. A result whose numbers came from the solver grades
+SIMULATED; one that never reached the solver grades SURROGATE, and the verdict
+layer refuses to build a pass or a fail on it. `screened_check` is the only
+shape a bare prediction can take in an assembly verdict, and that shape is a
+gap, not a verdict.
 """
 
 from __future__ import annotations
@@ -23,10 +30,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from brain.semantic.evidence import Evidence, EvidenceKind, EvidenceLevel
+from integration.checks import CheckResult, CheckStatus
 from optimization.constraints import OptimizationProblem, evaluate_batch
 from physics.structural import load_case_from_problem
 
-from .predict import SurrogatePredictor, build_inputs
+from .predict import Prediction, SurrogatePredictor, build_inputs
 
 
 @dataclass
@@ -46,6 +55,51 @@ class ScreeningResult:
     def is_feasible(self, tol: float = 1e-4) -> bool:
         return bool(self.best_constraints) and all(
             v >= -tol for v in self.best_constraints.values())
+
+    # --- where this sits on the evidence ladder --------------------------------
+
+    @property
+    def evidence_kind(self) -> EvidenceKind:
+        """SIMULATION when the reported design was solver-evaluated, SURROGATE
+        otherwise. `verified` is the only thing that decides this."""
+        return (EvidenceKind.SIMULATION if self.verified
+                else EvidenceKind.SURROGATE)
+
+    @property
+    def evidence_level(self) -> EvidenceLevel:
+        return (EvidenceLevel.SIMULATED if self.verified
+                else EvidenceLevel.SURROGATE)
+
+    def as_evidence(self, ref: str, run_id: str | None = None) -> Evidence:
+        """This screening pass as a Brain evidence item, graded by whether the
+        solver actually ran on the winner."""
+        if self.verified:
+            note = (f"solver-verified winner from {self.n_verified} of "
+                    f"{self.n_screened} screened")
+        else:
+            note = (f"screening only; nothing verified out of "
+                    f"{self.n_screened} screened")
+        return Evidence(kind=self.evidence_kind, ref=ref, run_id=run_id,
+                        note=note)
+
+
+def screened_check(component: str, failure_mode: str, prediction: Prediction,
+                   i: int, method: str = "surrogate_mlp") -> CheckResult:
+    """The only CheckResult a bare prediction may become: SCREENED, a gap.
+
+    The predicted safety factor and its expected error go into `detail` as
+    text. They are deliberately NOT placed in `safety_factor`, where the
+    review would read them back as a solved number and let them govern.
+    """
+    sf = float(prediction.values["safety_factor"][i])
+    err = prediction.expected_relative_error.get("safety_factor", 0.0)
+    return CheckResult(
+        component=component, failure_mode=failure_mode,
+        status=CheckStatus.SCREENED, method=method,
+        detail=(f"surrogate predicts safety factor {sf:.3f} with p95 held-out "
+                f"error {err:.1%}; not a verdict, run the solver"),
+        evidence_kind=prediction.evidence_kind,
+    )
 
 
 def screen_and_verify(

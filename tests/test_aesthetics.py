@@ -188,12 +188,19 @@ def test_the_evidence_ladder_has_no_rung_for_preference():
     If a preference level existed on the ladder, a shape could earn confidence
     by being round. There is deliberately no such rung, and this fails if one
     is ever added without the conversation that should accompany it.
+
+    SURROGATE is on the ladder and is not a preference: it grades a learned
+    model's approximation of a solver, sits below SIMULATED, and may not
+    decide. It was added with exactly that conversation, and the pin below
+    was widened to admit it and nothing else.
     """
     from brain.semantic.evidence import EvidenceLevel
 
     names = {level.name for level in EvidenceLevel}
-    assert names == {"UNVERIFIED", "SIMULATED", "REPEATED", "HIGH_CONFIDENCE",
-                     "EXPERIMENTALLY_VALIDATED"}
+    assert names == {"UNVERIFIED", "SURROGATE", "SIMULATED", "REPEATED",
+                     "HIGH_CONFIDENCE", "EXPERIMENTALLY_VALIDATED"}
+    assert not any(word in n for n in names
+                   for word in ("PREFER", "AESTHETIC", "BEAUTY", "SHAPE"))
 
 
 def test_no_aesthetic_capability_is_registered():

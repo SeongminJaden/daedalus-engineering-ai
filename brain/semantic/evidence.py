@@ -13,6 +13,15 @@ Independence is counted by distinct **run**, not by episode. Five episodes
 inside one optimizer run are five samples of one search, not five independent
 observations - counting them as independent is exactly how a Brain talks
 itself into false confidence.
+
+The second rule, added when learned models entered the loop: **a surrogate
+prediction is not a simulation.** It is a model of a model, and its error sits
+on top of the solver's own. Surrogate evidence earns the SURROGATE level, which
+sits BELOW SIMULATED, and nothing else: it does not count toward REPEATED or
+HIGH_CONFIDENCE however many runs it comes from, and a statement resting only
+on surrogate evidence may not decide anything. `may_decide` is the one place
+that rule is written down, and the verdict layer consults it rather than
+restating it.
 """
 
 from __future__ import annotations
@@ -25,6 +34,9 @@ class EvidenceLevel(str, Enum):
     """How far a statement has earned trust. Ordered."""
 
     UNVERIFIED = "unverified"
+    # A learned model said so and no solver has. Screening and ranking only;
+    # never a verdict. See may_decide.
+    SURROGATE = "surrogate"
     SIMULATED = "simulated"
     REPEATED = "repeated"
     HIGH_CONFIDENCE = "high_confidence"
@@ -47,6 +59,7 @@ class EvidenceLevel(str, Enum):
 
 LEVEL_ORDER = [
     EvidenceLevel.UNVERIFIED,
+    EvidenceLevel.SURROGATE,
     EvidenceLevel.SIMULATED,
     EvidenceLevel.REPEATED,
     EvidenceLevel.HIGH_CONFIDENCE,
@@ -54,8 +67,14 @@ LEVEL_ORDER = [
 ]
 
 # Confidence can never exceed the ceiling of the level that has been earned.
+# SURROGATE sits strictly between UNVERIFIED and SIMULATED: a prediction is
+# more than nothing and less than a solve. The number is a policy, not a
+# measurement, and it is deliberately far below the simulated ceiling so that a
+# surrogate-backed statement can never be mistaken for a solver-backed one by
+# its confidence alone.
 LEVEL_CONFIDENCE_CEILING = {
     EvidenceLevel.UNVERIFIED: 0.20,
+    EvidenceLevel.SURROGATE: 0.40,
     EvidenceLevel.SIMULATED: 0.60,
     EvidenceLevel.REPEATED: 0.80,
     EvidenceLevel.HIGH_CONFIDENCE: 0.95,
@@ -64,11 +83,34 @@ LEVEL_CONFIDENCE_CEILING = {
 
 
 class EvidenceKind(str, Enum):
+    SURROGATE = "surrogate"          # a learned model's prediction. Never a
+                                     # solve; caps the level at SURROGATE.
     SIMULATION = "simulation"        # a solver run - beam-theory fidelity
     TEST_SUITE = "test_suite"        # a passing verification test
     ANALYTICAL = "analytical"        # closed-form derivation
     PHYSICAL_TEST = "physical_test"  # a real part, measured. The only gate to
                                      # EXPERIMENTALLY_VALIDATED.
+
+
+#: The lowest level that may issue a verdict: a pass, a fail, an adoption.
+#: Everything below it may screen, rank and suggest, and nothing more.
+VERDICT_FLOOR = EvidenceLevel.SIMULATED
+
+
+def may_decide(level: EvidenceLevel) -> bool:
+    """Whether evidence at this level may produce a final verdict.
+
+    UNVERIFIED cannot, because nothing supports it. SURROGATE cannot, because a
+    model of the solver is not the solver: it may be wrong in exactly the
+    region the verdict is about, and it has no way of knowing. SIMULATED and
+    above can, subject to every caveat the simulation itself carries.
+    """
+    return level.rank >= VERDICT_FLOOR.rank
+
+
+def grounded(evidence: list[Evidence]) -> list[Evidence]:
+    """The evidence that came from something other than a surrogate."""
+    return [e for e in evidence if e.kind is not EvidenceKind.SURROGATE]
 
 
 @dataclass(frozen=True)
@@ -143,6 +185,7 @@ def derive_level(
 
     Rules, in order:
       * no evidence                                   -> UNVERIFIED
+      * only surrogate evidence, however much         -> SURROGATE
       * physical-test evidence (and nothing unresolved
         contradicting it)                             -> EXPERIMENTALLY_VALIDATED
       * enough evidence from enough independent runs,
@@ -150,22 +193,31 @@ def derive_level(
       * consistent across >= repeat_independent_runs  -> REPEATED
       * anything else with support                    -> SIMULATED
 
+    Surrogate evidence is set aside before any counting. A thousand predictions
+    from a thousand runs are a thousand readings of one model, and they promote
+    nothing: the runs, the item counts and the physical gate are all evaluated
+    on the grounded evidence alone.
+
     An unresolved counterexample caps the level at REPEATED: a statement with a
     standing contradiction is not high-confidence, whatever else supports it.
     """
     if not evidence:
         return EvidenceLevel.UNVERIFIED
 
+    solved = grounded(evidence)
+    if not solved:
+        return EvidenceLevel.SURROGATE
+
     open_counters = unresolved(counterexamples)
-    has_physical = any(e.kind is EvidenceKind.PHYSICAL_TEST for e in evidence)
-    runs = independent_runs(evidence)
+    has_physical = any(e.kind is EvidenceKind.PHYSICAL_TEST for e in solved)
+    runs = independent_runs(solved)
 
     # The one gate that simulation can never open.
     if has_physical and open_counters == 0:
         return EvidenceLevel.EXPERIMENTALLY_VALIDATED
 
     if open_counters == 0 and (
-        len(evidence) >= policy.high_confidence_evidence
+        len(solved) >= policy.high_confidence_evidence
         and runs >= policy.high_confidence_runs
     ):
         return EvidenceLevel.HIGH_CONFIDENCE
@@ -190,11 +242,16 @@ def compute_confidence(
 
     Adding evidence never lowers confidence; adding an unresolved
     counterexample always lowers it; the level ceiling caps it.
+
+    Surrogate evidence counts as support only for a statement that has nothing
+    else. Once a solver has spoken, predictions add nothing to n: they would
+    otherwise buy solver-grade confidence with model-grade evidence.
     """
     if level is None:
         level = derive_level(evidence, counterexamples, policy)
 
-    n = len(evidence)
+    counted = evidence if level is EvidenceLevel.SURROGATE else grounded(evidence)
+    n = len(counted)
     support = n / (n + policy.saturation) if n else 0.0
     penalty = 1.0 / (1.0 + unresolved(counterexamples))
     return float(min(support * penalty, LEVEL_CONFIDENCE_CEILING[level]))

@@ -6,6 +6,11 @@ treat a prediction as a measurement by accident.
 
 Safety factor is derived (yield / predicted stress), never predicted, so it can
 never disagree with the stress the model produced.
+
+Every prediction grades itself SURROGATE on the evidence ladder. That level sits
+below SIMULATED and may not decide anything, so a prediction handed to the Brain
+or to the verdict layer arrives already labelled as something that can screen
+but cannot pass or fail a design.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from brain.semantic.evidence import Evidence, EvidenceKind, EvidenceLevel
 from surrogate.datasets import INPUT_NAMES, OUTPUT_NAMES
 from surrogate.models import SurrogateBundle
 
@@ -39,6 +45,29 @@ class Prediction:
         value = float(self.values[metric][i])
         err = self.expected_relative_error.get(metric, 0.0)
         return value * (1.0 - err), value * (1.0 + err)
+
+    # --- where this sits on the evidence ladder --------------------------------
+
+    @property
+    def evidence_kind(self) -> EvidenceKind:
+        """Always SURROGATE. A prediction does not become a simulation by
+        being accurate; it becomes one by being replaced with a solve."""
+        return EvidenceKind.SURROGATE
+
+    @property
+    def evidence_level(self) -> EvidenceLevel:
+        return EvidenceLevel.SURROGATE
+
+    def as_evidence(self, ref: str, run_id: str | None = None,
+                    note: str = "") -> Evidence:
+        """This prediction as a Brain evidence item, graded SURROGATE.
+
+        The Brain will hold any statement resting only on such items at the
+        SURROGATE level, whatever their number, and will not let them count
+        toward promotion of a statement that also has solver evidence.
+        """
+        return Evidence(kind=EvidenceKind.SURROGATE, ref=ref, run_id=run_id,
+                        note=note or "surrogate prediction; not a solve")
 
 
 def build_inputs(

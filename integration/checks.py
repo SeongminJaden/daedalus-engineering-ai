@@ -26,12 +26,23 @@ the thing most likely to be misread:
   is the single most dangerous thing an integration layer can do, because it
   converts ignorance into confidence at exactly the point where a human stops
   looking.
+
+* **A surrogate cannot issue a verdict.** A learned model that approximates a
+  solver may rank candidates and say where to look. It may not say PASSED or
+  FAILED, because it can be wrong in exactly the region the verdict is about
+  and has no way of knowing. A check backed by surrogate evidence is refused
+  at construction; the honest status for it is SCREENED, which counts as a
+  gap. The rule itself lives in `brain.semantic.evidence.may_decide`; this
+  module enforces it rather than restating it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+
+from brain.semantic.evidence import (EvidenceKind, EvidenceLevel, VERDICT_FLOOR,
+                                     may_decide)
 
 
 # A safety factor may sit this far below 1.0 and still count as passing.
@@ -62,6 +73,14 @@ class CheckStatus(str, Enum):
     # The mode IS possible here and no registered method can evaluate it. This
     # is a gap, not a pass.
     NOT_ASSESSED = "not_assessed"
+    # A surrogate ranked this and no solver has looked at it. A screen says
+    # where to look next; it is not a verdict, and it counts as a gap until a
+    # solver replaces it.
+    SCREENED = "screened"
+
+
+class SurrogateVerdict(ValueError):
+    """A pass or fail was claimed on surrogate evidence. Refused."""
 
 
 @dataclass(frozen=True)
@@ -78,9 +97,20 @@ class CheckResult:
     # check rather than per phase, because the review needs the assumption
     # belonging to whichever check turns out to govern.
     optimistic_assumption: str = ""
+    # What produced the number. Defaults to a solver run because every check
+    # registered today is one; a surrogate has to declare itself, and once it
+    # does it cannot carry a verdict.
+    evidence_kind: EvidenceKind = EvidenceKind.SIMULATION
 
     def __post_init__(self) -> None:
         if self.status in (CheckStatus.PASSED, CheckStatus.FAILED):
+            if not may_decide(self.evidence_level):
+                raise SurrogateVerdict(
+                    f"{self.component}/{self.failure_mode} claims "
+                    f"{self.status.value} on {self.evidence_kind.value} "
+                    f"evidence, which ranks below {VERDICT_FLOOR.value}; a "
+                    f"surrogate may screen, not decide. Record it as "
+                    f"{CheckStatus.SCREENED.value} and run the solver")
             if self.method is None:
                 raise ValueError(
                     f"{self.component}/{self.failure_mode} has a verdict but "
@@ -95,6 +125,29 @@ class CheckResult:
                 f"{self.component}/{self.failure_mode} is unassessed and says "
                 f"nothing about why; an unexplained gap is indistinguishable "
                 f"from an oversight")
+        if self.status is CheckStatus.SCREENED:
+            if self.method is None:
+                raise ValueError(
+                    f"{self.component}/{self.failure_mode} was screened by "
+                    f"nothing in particular; name the model")
+            if self.safety_factor is not None:
+                raise ValueError(
+                    f"{self.component}/{self.failure_mode} is screened but "
+                    f"carries a safety factor; a predicted factor belongs in "
+                    f"detail, where it cannot be read back as a solved one")
+            if not self.detail:
+                raise ValueError(
+                    f"{self.component}/{self.failure_mode} is screened and "
+                    f"says nothing about what the screen predicted")
+
+    @property
+    def evidence_level(self) -> EvidenceLevel:
+        """The most this one check could earn on its own."""
+        if self.evidence_kind is EvidenceKind.SURROGATE:
+            return EvidenceLevel.SURROGATE
+        if self.evidence_kind is EvidenceKind.PHYSICAL_TEST:
+            return EvidenceLevel.EXPERIMENTALLY_VALIDATED
+        return EvidenceLevel.SIMULATED
 
     @property
     def is_verdict(self) -> bool:
@@ -135,6 +188,15 @@ class AssemblyVerdict:
     def unassessed(self) -> list[CheckResult]:
         return [r for r in self.results if r.status is CheckStatus.NOT_ASSESSED]
 
+    def screened(self) -> list[CheckResult]:
+        return [r for r in self.results if r.status is CheckStatus.SCREENED]
+
+    def gaps(self) -> list[CheckResult]:
+        """Everything that keeps the assembly from a clean PASSED: modes no
+        method could assess, and modes only a surrogate has looked at."""
+        return [r for r in self.results
+                if r.status in (CheckStatus.NOT_ASSESSED, CheckStatus.SCREENED)]
+
     def components(self) -> list[str]:
         seen: list[str] = []
         for result in self.results:
@@ -152,10 +214,13 @@ class AssemblyVerdict:
         averaging and no weighting, because a joint whose bearing outlasts the
         machine and whose bolt separates on the first cycle is not a
         three-quarters-good joint.
+
+        A screened check is a gap for the same reason an unassessed one is:
+        no solver has said anything about it.
         """
         if self.failures():
             return AssemblyStatus.FAILED
-        if self.unassessed():
+        if self.gaps():
             return AssemblyStatus.PASSED_WITH_GAPS
         return AssemblyStatus.PASSED
 

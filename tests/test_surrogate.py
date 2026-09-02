@@ -409,3 +409,81 @@ def test_evaluate_predictions_is_exact_on_perfect_predictions():
     for name in ("a", "b"):
         assert stats[name]["r2"] == pytest.approx(1.0)
         assert stats[name]["max_rel_err"] == pytest.approx(0.0)
+
+
+# =========================================================================== #
+# 5. the evidence gate - a prediction grades SURROGATE and cannot decide
+# =========================================================================== #
+
+from brain.semantic import (  # noqa: E402
+    EvidenceKind, EvidenceLevel, Knowledge, derive_level, may_decide,
+)
+from integration import CheckResult, CheckStatus, SurrogateVerdict  # noqa: E402
+from surrogate.inference import screened_check  # noqa: E402
+
+
+def test_a_prediction_grades_itself_surrogate(predictor, op):
+    pred = predictor.predict_designs(
+        np.array([0.05]), np.array([0.05]), np.array([0.004]),
+        load_case_from_problem(op.problem))
+    assert pred.verified is False
+    assert pred.evidence_kind is EvidenceKind.SURROGATE
+    assert pred.evidence_level is EvidenceLevel.SURROGATE
+    assert not may_decide(pred.evidence_level)
+    item = pred.as_evidence("pred-1", run_id="run-1")
+    assert item.kind is EvidenceKind.SURROGATE
+    assert derive_level([item], []) is EvidenceLevel.SURROGATE
+
+
+def test_a_thousand_predictions_stay_surrogate_in_the_brain(predictor, op):
+    """Accuracy does not promote. Only a solve does."""
+    pred = predictor.predict_designs(
+        np.array([0.05]), np.array([0.05]), np.array([0.004]),
+        load_case_from_problem(op.problem))
+    k = Knowledge(statement="the surrogate agrees with itself", domain="test",
+                  source="surrogate_mlp",
+                  evidence=[pred.as_evidence(f"p{i}", run_id=f"r{i}")
+                            for i in range(1000)])
+    assert k.evidence_level is EvidenceLevel.SURROGATE
+
+
+def test_a_prediction_cannot_be_turned_into_a_verdict(predictor, op):
+    pred = predictor.predict_designs(
+        np.array([0.05]), np.array([0.05]), np.array([0.004]),
+        load_case_from_problem(op.problem))
+    with pytest.raises(SurrogateVerdict):
+        CheckResult("link", "yield", CheckStatus.PASSED, "surrogate_mlp",
+                    float(pred.values["safety_factor"][0]),
+                    evidence_kind=pred.evidence_kind)
+
+
+def test_the_only_check_a_prediction_becomes_is_screened(predictor, op):
+    pred = predictor.predict_designs(
+        np.array([0.05]), np.array([0.05]), np.array([0.004]),
+        load_case_from_problem(op.problem))
+    check = screened_check("link", "yield", pred, 0)
+    assert check.status is CheckStatus.SCREENED
+    assert not check.is_verdict
+    assert check.safety_factor is None
+    assert check.evidence_kind is EvidenceKind.SURROGATE
+    assert "run the solver" in check.detail
+
+
+def test_a_verified_screening_result_grades_simulated(predictor, op):
+    result = screen_and_verify(predictor, op, _candidates(), top_k=16)
+    assert result.verified
+    assert result.evidence_kind is EvidenceKind.SIMULATION
+    assert result.evidence_level is EvidenceLevel.SIMULATED
+    assert may_decide(result.evidence_level)
+    assert derive_level([result.as_evidence("scr-1", run_id="r1")], []) \
+        is EvidenceLevel.SIMULATED
+
+
+def test_an_unverified_screening_result_grades_surrogate(predictor, op):
+    """No valid candidate reached the solver, so nothing here was solved."""
+    bad = np.array([[0.01, 0.01, 0.009]])
+    result = screen_and_verify(predictor, op, bad)
+    assert not result.verified
+    assert result.evidence_kind is EvidenceKind.SURROGATE
+    assert result.evidence_level is EvidenceLevel.SURROGATE
+    assert not may_decide(result.evidence_level)

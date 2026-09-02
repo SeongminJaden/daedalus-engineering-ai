@@ -621,3 +621,94 @@ def test_brain_summary_reports_levels(op, brain):
     summary = brain.summary()
     assert summary["counts"]["episodes"] > 0
     assert summary["knowledge_by_level"]["experimentally_validated"] == 0
+
+
+# =========================================================================== #
+# the SURROGATE gate: a model of the solver is not the solver
+# =========================================================================== #
+
+from brain.semantic import VERDICT_FLOOR, grounded, may_decide  # noqa: E402
+from brain.semantic.evidence import LEVEL_CONFIDENCE_CEILING, LEVEL_ORDER  # noqa: E402
+
+
+def surrogate(n: int, run_prefix: str = "s") -> list[Evidence]:
+    """n surrogate predictions, each from its own run, so that if runs were
+    counted they would look independent."""
+    return [Evidence(EvidenceKind.SURROGATE, f"{run_prefix}-p{i}",
+                     run_id=f"{run_prefix}{i}")
+            for i in range(n)]
+
+
+def test_surrogate_sits_between_unverified_and_simulated():
+    assert LEVEL_ORDER.index(EvidenceLevel.SURROGATE) == 1
+    assert EvidenceLevel.UNVERIFIED < EvidenceLevel.SURROGATE < EvidenceLevel.SIMULATED
+    ceiling = LEVEL_CONFIDENCE_CEILING
+    assert (ceiling[EvidenceLevel.UNVERIFIED] < ceiling[EvidenceLevel.SURROGATE]
+            < ceiling[EvidenceLevel.SIMULATED])
+
+
+def test_surrogate_evidence_alone_is_surrogate_however_much_of_it():
+    """A thousand predictions from a thousand runs are a thousand readings of
+    one model. They earn SURROGATE and nothing above it."""
+    assert derive_level(surrogate(1), []) is EvidenceLevel.SURROGATE
+    assert derive_level(surrogate(1000), []) is EvidenceLevel.SURROGATE
+    assert compute_confidence(surrogate(1000), []) <= LEVEL_CONFIDENCE_CEILING[
+        EvidenceLevel.SURROGATE]
+
+
+def test_surrogate_evidence_does_not_promote_a_grounded_statement():
+    """Two solver runs plus fifty surrogate runs is still two runs."""
+    mixed = sim(2) + surrogate(50)
+    assert derive_level(mixed, []) is EvidenceLevel.SIMULATED
+    assert derive_level(sim(3) + surrogate(50), []) is EvidenceLevel.REPEATED
+    # and item count is not inflated either: 7 sims from 7 runs plus 50
+    # predictions is 7 items, one short of the HIGH_CONFIDENCE threshold
+    assert derive_level(sim(7) + surrogate(50), []) is EvidenceLevel.REPEATED
+    assert derive_level(sim(8), []) is EvidenceLevel.HIGH_CONFIDENCE
+
+
+def test_surrogate_evidence_neither_raises_nor_lowers_grounded_confidence():
+    """Once a solver has spoken, predictions buy nothing and cost nothing."""
+    base = sim(3)
+    before = compute_confidence(base, [])
+    after = compute_confidence(base + surrogate(40), [])
+    assert after == before
+
+
+def test_surrogate_evidence_cannot_block_physical_validation():
+    """The gate is about what surrogates cannot do, not about penalising a
+    statement for having been screened first."""
+    level = derive_level(surrogate(5) + [
+        Evidence(EvidenceKind.PHYSICAL_TEST, "bench-1", run_id="bench")], [])
+    assert level is EvidenceLevel.EXPERIMENTALLY_VALIDATED
+
+
+def test_a_surrogate_may_screen_but_may_not_decide():
+    assert VERDICT_FLOOR is EvidenceLevel.SIMULATED
+    assert not may_decide(EvidenceLevel.UNVERIFIED)
+    assert not may_decide(EvidenceLevel.SURROGATE)
+    for level in LEVEL_ORDER[LEVEL_ORDER.index(EvidenceLevel.SIMULATED):]:
+        assert may_decide(level)
+
+
+def test_grounded_strips_exactly_the_surrogate_items():
+    mixed = sim(2) + surrogate(3)
+    kept = grounded(mixed)
+    assert len(kept) == 2
+    assert all(e.kind is not EvidenceKind.SURROGATE for e in kept)
+
+
+def test_surrogate_knowledge_persists_and_is_filtered_below_simulated(brain):
+    k = Knowledge(statement="the model says thicker walls are stiffer",
+                  domain="test", source="surrogate_mlp",
+                  evidence=surrogate(12))
+    brain.semantic.store(k)
+    back = brain.semantic.get(k.knowledge_id)
+    assert back.evidence_level is EvidenceLevel.SURROGATE
+    assert back.confidence <= LEVEL_CONFIDENCE_CEILING[EvidenceLevel.SURROGATE]
+    # a caller asking for solver-grade knowledge never sees it
+    assert all(item.knowledge_id != k.knowledge_id for item in
+               brain.semantic.by_domain("test", min_level=EvidenceLevel.SIMULATED))
+    assert any(item.knowledge_id == k.knowledge_id for item in
+               brain.semantic.by_domain("test", min_level=EvidenceLevel.SURROGATE))
+    assert brain.summary()["knowledge_by_level"]["surrogate"] >= 1

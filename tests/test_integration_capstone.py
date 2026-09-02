@@ -262,3 +262,86 @@ def test_a_thicker_shaft_relieves_the_shaft_failure():
     thick = design_joint(JointSpec(shaft_diameter_m=0.020))
     assert "shaft/fatigue" in failed_modes(thin)
     assert "shaft/fatigue" not in failed_modes(thick)
+
+
+# --- the surrogate gate ------------------------------------------------------
+
+from brain.semantic.evidence import EvidenceKind, EvidenceLevel  # noqa: E402
+from integration import SurrogateVerdict  # noqa: E402
+
+
+def test_a_surrogate_cannot_pass_a_check():
+    """The number may be right. The layer still refuses it, because a model of
+    the solver has no way of knowing when it is wrong."""
+    with pytest.raises(SurrogateVerdict, match="may screen, not decide"):
+        CheckResult("link", "yield", CheckStatus.PASSED, "surrogate_mlp", 3.0,
+                    evidence_kind=EvidenceKind.SURROGATE)
+
+
+def test_a_surrogate_cannot_fail_a_check_either():
+    """Rejecting a design on a prediction is a verdict too, and a wrong one
+    throws away a design the solver would have accepted."""
+    with pytest.raises(SurrogateVerdict):
+        CheckResult("link", "yield", CheckStatus.FAILED, "surrogate_mlp", 0.7,
+                    evidence_kind=EvidenceKind.SURROGATE)
+
+
+def test_a_solver_check_still_passes_by_default():
+    """The default evidence kind is a simulation, so nothing registered today
+    changes behaviour."""
+    r = CheckResult("link", "yield", CheckStatus.PASSED, "beam_theory", 3.0)
+    assert r.evidence_kind is EvidenceKind.SIMULATION
+    assert r.evidence_level is EvidenceLevel.SIMULATED
+    assert r.is_verdict
+
+
+def test_a_screened_check_is_a_gap_not_a_verdict():
+    verdict = AssemblyVerdict()
+    verdict.add(CheckResult("link", "fatigue", CheckStatus.PASSED,
+                            "fatigue_sn", 3.0))
+    screened = CheckResult("link", "yield", CheckStatus.SCREENED,
+                           "surrogate_mlp",
+                           detail="surrogate predicts 2.1; run the solver",
+                           evidence_kind=EvidenceKind.SURROGATE)
+    verdict.add(screened)
+    assert not screened.is_verdict
+    assert screened.evidence_level is EvidenceLevel.SURROGATE
+    assert verdict.status is AssemblyStatus.PASSED_WITH_GAPS
+    assert not verdict.passes
+    assert verdict.screened() == [screened]
+    assert verdict.gaps() == [screened]
+    assert verdict.unassessed() == []
+    # a screened mode never governs, whatever it predicted
+    assert verdict.governing().failure_mode == "fatigue"
+
+
+def test_a_screened_check_may_not_carry_a_safety_factor():
+    """A predicted factor in the solved slot would be read back as solved."""
+    with pytest.raises(ValueError, match="predicted factor belongs in detail"):
+        CheckResult("link", "yield", CheckStatus.SCREENED, "surrogate_mlp",
+                    2.1, detail="predicted",
+                    evidence_kind=EvidenceKind.SURROGATE)
+
+
+def test_a_screened_check_must_name_its_model_and_say_what_it_predicted():
+    with pytest.raises(ValueError, match="name the model"):
+        CheckResult("link", "yield", CheckStatus.SCREENED,
+                    detail="predicted 2.1", evidence_kind=EvidenceKind.SURROGATE)
+    with pytest.raises(ValueError, match="says nothing about what"):
+        CheckResult("link", "yield", CheckStatus.SCREENED, "surrogate_mlp",
+                    evidence_kind=EvidenceKind.SURROGATE)
+
+
+def test_the_review_lists_screened_modes_and_says_to_run_the_solver():
+    verdict = AssemblyVerdict()
+    verdict.add(CheckResult("link", "fatigue", CheckStatus.PASSED,
+                            "fatigue_sn", 3.0))
+    verdict.add(CheckResult("bolt", "separation", CheckStatus.SCREENED,
+                            "surrogate_mlp", detail="predicted 1.4",
+                            evidence_kind=EvidenceKind.SURROGATE))
+    r = review(verdict)
+    assert r.status is AssemblyStatus.PASSED_WITH_GAPS
+    assert r.screened == ("bolt/separation",)
+    assert r.unassessed == ()
+    assert any("only screened by a surrogate" in line
+               for line in r.recommendations)

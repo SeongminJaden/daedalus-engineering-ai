@@ -51,6 +51,17 @@ Screening *can* be wrong: it may mis-rank and discard a good candidate. That
 is a recall risk and the price of the shortlist. What it cannot do is put an
 unverified design in front of a user as a result.
 
+That rule is written into the evidence ladder, not only into this module's
+control flow. Every `Prediction` grades itself `EvidenceLevel.SURROGATE`, a
+level below `SIMULATED`; a `ScreeningResult` grades `SIMULATED` only when
+`verified` is true, and `SURROGATE` otherwise. The Brain holds any statement
+resting on surrogate evidence alone at `SURROGATE`, whatever the count, and the
+verdict layer (`integration/checks.py`) refuses to build a PASSED or a FAILED
+on it. The only `CheckResult` a bare prediction can become is `screened_check`,
+whose status is `SCREENED`: a gap that names the model and says to run the
+solver, with the predicted factor kept in text so it can never be read back as
+a solved one.
+
 Predictions are never returned bare: every `Prediction` carries the p95
 held-out relative error for each metric. Safety factor is **derived** from
 predicted stress (yield / stress), never predicted separately, so it can never

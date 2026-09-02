@@ -1488,6 +1488,49 @@ IR에 `Constraints.min_clear_bore_m`과 `LoadType.TORQUE`를 추가했다. 토�
 
 이것이 완결된 실증이다. **어떤 프라이어도 강제하지 않았다.** 각각을 그것을 만들어내는 **요건의 종류**로 추적한 다음에만 문제에 넣었고, 물리는 한 번도 우회되지 않았다.
 
+## SURROGATE 근거등급 게이트 (구현 완료)
+
+생성설계 트랙(합성데이터, 분류, 임베딩, 서로게이트, 설계의도, 생성)에 들어가기 전에
+막아 둔 것. 학습된 모델이 루프에 들어오면 "모델이 그렇게 말했다"가 "솔버가 그렇게
+말했다"와 섞이는 순간이 오고, 그 순간 근거 사다리는 무너진다. 그래서 등급을 먼저
+만들고 코드로 못 박았다.
+
+**등급.** `EvidenceLevel.SURROGATE`를 `UNVERIFIED`와 `SIMULATED` 사이에 넣었다.
+천장은 0.40으로, 정책값이지 측정값이 아니다. `SIMULATED` 천장 0.60보다 확실히
+아래에 둔 이유는 confidence 숫자만 보고 서로게이트 진술을 솔버 진술로 착각할 수
+없게 하기 위해서다. `EvidenceKind.SURROGATE`도 신설했다.
+
+**유도 규칙.** `derive_level`은 세기 전에 서로게이트 근거를 먼저 떼어 낸다. 서로게이트
+근거만 있으면 개수와 run 수가 얼마든 `SURROGATE`. 솔버 근거가 하나라도 있으면
+서로게이트 항목은 run 수에도, 항목 수에도, confidence 의 n 에도 들어가지 않는다.
+측정으로 확인한 것: sim 2 + surrogate 50 은 `SIMULATED`, sim 7 + surrogate 50 은
+`REPEATED`(HIGH_CONFIDENCE 문턱 8에 한 개 모자람), sim 3 의 confidence 는 surrogate
+40 을 더해도 그대로다. 반대로 물리시험 근거를 막지도 않는다: surrogate 5 + physical
+1 은 여전히 `EXPERIMENTALLY_VALIDATED`. 게이트는 서로게이트가 못 하는 것을 정하는
+것이지, 먼저 스크리닝됐다는 이유로 벌을 주는 것이 아니다.
+
+**판정 가드.** `may_decide(level)`이 규칙이 적힌 유일한 자리다. `VERDICT_FLOOR =
+SIMULATED`. `integration/checks.py`의 `CheckResult`에 `evidence_kind` 필드를 넣고,
+`SURROGATE` 근거로 PASSED 나 FAILED 를 만들면 생성 시점에 `SurrogateVerdict`로
+거부한다. FAILED 도 거부하는 이유: 예측으로 설계를 버리는 것도 판정이고, 틀리면
+솔버가 받아들였을 설계를 버린다. 서로게이트 결과의 정직한 상태는 새 상태 `SCREENED`
+이며, 어셈블리 판정에서 NOT_ASSESSED 와 같이 gap 으로 취급되어 PASSED 가 되지 못한다.
+`SCREENED`는 모델 이름과 예측 내용을 요구하고, `safety_factor` 필드는 금지한다.
+예측된 안전율이 그 자리에 들어가면 리뷰가 풀린 값으로 읽어 지배 조건으로 삼기
+때문이다. 예측값은 detail 텍스트로만 남는다.
+
+**Phase 6 연결.** `Prediction`은 항상 `SURROGATE`, `ScreeningResult`는 `verified`
+일 때만 `SIMULATED`. 둘 다 `as_evidence`로 Brain 근거 항목이 되고, 예측이 될 수 있는
+유일한 `CheckResult`는 `screened_check`다. 리뷰는 screened 목록을 unassessed 와
+별도로 보이고 "솔버를 돌려라"를 권고한다.
+
+**바뀌지 않은 것.** 기존 Brain/통합 테스트는 수정 없이 통과했다. rank 는 서로
+비교만 하므로 등급 삽입으로 이동한 것이 없고, DB 는 문자열을 저장하므로 마이그레이션도
+없다. 기본 `evidence_kind`는 SIMULATION 이어서 등록된 54개 능력의 동작은 그대로다.
+
+**하지 못하는 것.** 이 게이트는 서로게이트가 판정하는 것을 막을 뿐, 서로게이트가
+정확하다는 것을 말하지 않는다. 그리고 여전히 전부 SIMULATED 이하다.
+
 ## Method Registry와 향후 방법 라이브러리 확장
 registry에 등록된 방법이 시스템의 능력 상한이다. 지금 **없는** 것을 적어 둔다. 이후 단계는 이것들을 하나씩 **검증하고 등록하는** 일이며, 검증 없이 등록하는 것은 금지된다.
 

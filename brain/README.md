@@ -38,12 +38,13 @@ experience*. Three claims are worth stating plainly:
 ## The evidence ladder
 
 ```
-UNVERIFIED → SIMULATED → REPEATED → HIGH_CONFIDENCE → EXPERIMENTALLY_VALIDATED
+UNVERIFIED → SURROGATE → SIMULATED → REPEATED → HIGH_CONFIDENCE → EXPERIMENTALLY_VALIDATED
 ```
 
 | transition | rule |
 |---|---|
-| → `SIMULATED` | any supporting evidence |
+| → `SURROGATE` | only `EvidenceKind.SURROGATE` items: a learned model said so and no solver has. Ceiling 0.40 |
+| → `SIMULATED` | any supporting evidence from a solver, a test or a derivation |
 | → `REPEATED` | consistent across ≥ `repeat_independent_runs` **independent runs** |
 | → `HIGH_CONFIDENCE` | ≥ `high_confidence_evidence` items from ≥ `high_confidence_runs` runs, **and zero unresolved counterexamples** |
 | → `EXPERIMENTALLY_VALIDATED` | physical-test evidence, and nothing unresolved contradicting it |
@@ -57,6 +58,15 @@ into confidence it has not earned, so one run, however long, yields at most
 An **unresolved counterexample caps the level at `REPEATED`**: a statement with
 a standing contradiction is not high-confidence, whatever else supports it.
 Resolving it restores promotion.
+
+**A surrogate is not a simulation.** Surrogate evidence is set aside before any
+counting: a thousand predictions from a thousand runs promote nothing, add
+nothing to a solver-backed statement's confidence, and cannot block physical
+validation either. `may_decide(level)` is false for `SURROGATE` and
+`UNVERIFIED`, and the verdict layer in `integration/checks.py` refuses to
+build a PASSED or FAILED on surrogate evidence. The honest status for a
+surrogate result there is `SCREENED`, which is a gap. All of this is pinned by
+tests rather than by convention.
 
 ## Confidence
 

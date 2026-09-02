@@ -29,6 +29,10 @@ class Review:
     unassessed: tuple[str, ...]
     failures: tuple[str, ...]
     recommendations: tuple[str, ...]
+    # Modes a surrogate ranked and no solver has run. Listed separately from
+    # the unassessed ones because the remedy differs: these have a candidate
+    # answer waiting to be checked, those have nothing.
+    screened: tuple[str, ...] = ()
 
     @property
     def headline(self) -> str:
@@ -64,6 +68,12 @@ def _recommendations(verdict: AssemblyVerdict) -> tuple[str, ...]:
         lines.append(
             f"{len(gaps)} failure modes were not assessed at all and are "
             f"listed below. None of them is known to be satisfied")
+    screened = verdict.screened()
+    if screened:
+        lines.append(
+            f"{len(screened)} failure modes were only screened by a surrogate "
+            f"and are listed below. A prediction is not a verdict: run the "
+            f"solver on each before concluding anything")
     lines.append(
         "every result here is SIMULATED. Nothing has been physically tested, "
         "and the idealisations of the individual checks multiply, so the real "
@@ -86,4 +96,6 @@ def review(verdict: AssemblyVerdict) -> Review:
         failures=tuple(f"{r.component}/{r.failure_mode} at "
                        f"{r.safety_factor:.3f}" for r in verdict.failures()),
         recommendations=_recommendations(verdict),
+        screened=tuple(f"{r.component}/{r.failure_mode}"
+                       for r in verdict.screened()),
     )

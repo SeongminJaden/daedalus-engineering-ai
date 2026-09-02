@@ -51,11 +51,14 @@ A learned recogniser comes after there are labels to learn from, and the rule
 based one stays as the control to compare against. A learned model that agrees
 with nothing is not evidence.
 
-**A surrogate is not a verification.** The evidence ladder gains a SURROGATE
-level BELOW SIMULATED. A surrogate may screen, rank and suggest. It may never
-produce a final verdict, and a test enforces that rather than a convention.
-Human preference is a separate axis and does not enter the physical ladder at
-all.
+**A surrogate is not a verification.** The evidence ladder has a SURROGATE
+level BELOW SIMULATED (implemented, `brain/semantic/evidence.py`). A surrogate
+may screen, rank and suggest. It may never produce a final verdict:
+`may_decide` is false for it, `integration/checks.py` refuses a PASSED or
+FAILED on surrogate evidence at construction, and the Phase 6 predictor and
+`screen_and_verify` grade their own output. Tests enforce each of those rather
+than a convention. Human preference is a separate axis and does not enter the
+physical ladder at all.
 
 ## What the existing code already gives us
 
@@ -67,7 +70,7 @@ Checked against the code rather than assumed.
 | STEP reading | Verified on this project's own export: 2 solids, 20 faces, 96 edges, and a volume of 111200 mm3 that matches the closed form for the two links exactly. |
 | General shape to CalculiX | Done. Gmsh tetrahedra to CalculiX, C3D10, agreeing with the hex solution to 0.5 percent on the one shape both meshers cover. |
 | Registry for new nodes | Straightforward. Five external nodes have been added this way already. |
-| Brain SURROGATE level | Safe to insert. Ranks are only ever compared to each other, never to a hardcoded number, so adding a level shifts nothing. |
+| Brain SURROGATE level | DONE. Inserted between UNVERIFIED and SIMULATED with ceiling 0.40. Ranks are only ever compared to each other, so nothing else moved; the existing 140 Brain and integration tests passed unchanged. |
 | Material provenance | Already better than a new vocabulary would be, so the existing MaterialStatus is reused: reference_typical, supplier_datasheet, measured, assumed. Nothing parallel is added beside it, because two vocabularies for one idea eventually disagree. |
 | Design Genome extension | It already reserves `topology` and `structure` dict fields for later phases, so a CAD field fits the existing shape. It sets `extra="forbid"`, so the field has to be declared, which is the right way round. |
 | Design reference priors | Already present, with mandatory provenance and a confidence ceiling. Design Intent extends it rather than replacing it. |
@@ -112,7 +115,8 @@ bound, physics is GPU bound, so they do not contend.
 - **Phase 5** Synthetic data engine. Runs early and in parallel, because it is
   what makes the later phases possible without scraped CAD.
 - **Phase 6** CAD embeddings.
-- **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard.
+- **Phase 7** Surrogate prediction, behind the SURROGATE evidence guard. The
+  guard itself is in place; the prediction models for CAD shapes are not.
 - **Phase 8** Design intent, measured by ablation against real solvers rather
   than asserted.
 - **Phase 9** Generative design and an autonomous CAD loop, extending the
