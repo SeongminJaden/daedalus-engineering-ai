@@ -12,8 +12,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-281%20passing-brightgreen.svg)](#status)
-[![Status](https://img.shields.io/badge/status-phase%200--6%20complete-orange.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1547%20passing-brightgreen.svg)](#status)
+[![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#status)
+[![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
+[![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
 
 </div>
 
@@ -27,24 +29,50 @@ The agent and its CLI are branded **Daedalus**.
 
 ## Status
 
-Phases 0-6 are implemented and verified.
+Everything below has been built, tested against an independent reference, and
+run on the development machine. Nothing below has been physically tested, and
+the code grades its own output accordingly.
 
-| phase | what it does | state |
+**54 registered capabilities on 12 nodes.** A capability is a method plus the
+node that runs it, and one rule routes all of them: a method is a candidate
+only when it applies to the problem and its node is available. Excluded
+methods report why.
+
+| where it runs | count | what is there |
 |---|---|---|
-| 0 | venv, project skeleton, GPU profiles, Warp/torch sanity | done |
-| 1 | Engineering IR (the problem), materials DB, Design Genome (the variables) | done |
-| 2 | Differentiable GPU beam physics via NVIDIA Warp | done |
-| 3 | Constrained mass optimization (SLSQP + differential evolution) | done |
-| 4 | Autonomous design loop: state machine, episodes, budget, explore/exploit | done |
-| 5 | Engineering Brain: episodic/semantic memory, evidence levels, retrieval | done |
-| 6 | PyTorch surrogate + two-stage screen-and-verify | done |
-| 7 | High-fidelity 3D FEM verification gate (Warp, matrix-free CG) | done |
-| 8 | Material expansion (15 materials) and orthotropic elasticity | done |
-| 9 | Parametric CAD B-rep and STEP export, mass-consistent | done |
-| 10 | Assemblies and kinematics (FK, Jacobian, IK, statics, assembly STEP) | done |
-| 11 | Rigid-body dynamics (inertia, M/C/G, load cases, torque and power) | done |
-| 12 | Motor and gearbox selection (margins, reflected inertia, alternatives) | done |
-| 13 | Topology optimization (SIMP on the GPU FEM, sensitivity-verified) | done |
+| in-process engine, GPU | 42 | beam and Timoshenko theory, matrix-free 3D FEM, fatigue (S-N, Goodman, Miner), Euler buckling, shafts, bearings, bolts, threads, gears, keys, welds, press fits, ISO 286 fits, Hertz contact, thermal networks and transients, pipe flow, drag, fluid actuators, laminates (CLT), statics, rigid-body dynamics, motor and gearbox selection, SLSQP, differential evolution, NSGA-II, SIMP topology (compliance and stress), minimum sizing, multi-design review |
+| external solver nodes, stdio | 7 | CalculiX (FEA and general shapes), Code_Aster (plasticity), Elmer (magnetostatics), OpenFOAM (CFD), Gmsh (meshing), Pinocchio (multibody), MuJoCo (contact) |
+| CAD knowledge layer | 3 | STEP analyzer, rule-based feature recognition, wall thickness and draft checks; build123d parametric shapes to STEP |
+| stubs, honestly unavailable | 2 | Fusion round trip (needs a Windows host and an entitlement), external LLM reasoner |
+
+Where two methods overlap, the overlap is a cross-check, not a second
+capability. CalculiX agrees with the in-house hex FEM to 0.5 percent on the
+one shape both meshers cover; OpenFOAM was the first independent check on the
+fluid correlations; Pinocchio and MuJoCo check the dynamics from outside the
+continuum stack.
+
+**One evidence ladder for everything.** Every statement the Brain stores, every
+check in an assembly verdict and every surrogate prediction carries a level:
+
+```
+UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPERIMENTALLY_VALIDATED
+   0.20         0.40          0.60          0.80           0.95                   0.99
+```
+
+Everything in this repository sits at `SIMULATED` or below. `SURROGATE` is a
+learned model's output and may screen but never decide. `REPEATED` and above
+need independent runs that agree. `EXPERIMENTALLY_VALIDATED` needs a physical
+test, and no amount of simulation opens it. Each of those rules is a test, not
+a convention.
+
+**The validation ladder this project is climbing, in order:**
+
+| rung | state |
+|---|---|
+| verification against closed forms and independent solvers | done, and continuing with every method |
+| generative design track (synthetic data, classification, embeddings, surrogate, intent, generation) | in progress |
+| hardware: a manufactured part from an exported STEP | roadmap |
+| measurement: physical test evidence, the only key to `EXPERIMENTALLY_VALIDATED` | roadmap |
 
 **MVP problem:** minimize the mass of a single hollow-rectangular robot link,
 cantilevered, carrying a 196.2 N tip load (a 20 kg payload), in aluminium
@@ -56,8 +84,9 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**281 tests pass**, including independent verification of every critical
-calculation against a separately-derived reference.
+**1547 tests pass**, including independent verification of every critical
+calculation against a separately derived reference. Limits are pinned by tests
+too: where a method cannot do something, a test asserts that it says so.
 
 ---
 
@@ -67,15 +96,21 @@ calculation against a separately-derived reference.
 
 A goal enters as an **Engineering IR** (the problem: geometry, material, load,
 constraints, objectives, all fixed). The **Design Genome** holds only what a
-search may change, currently the cross-section. Candidates run through the
-engine (geometry, GPU physics, optimization) and down a **multi-fidelity
+search may change: the cross-section, a topology field, CAD parameters.
+Candidates go to the **capability registry**, which routes each failure mode
+to whichever registered method applies and whose node is up, in-process on the
+GPU or in an external solver over stdio. Results descend a **multi-fidelity
 funnel**: a surrogate screens thousands, beam theory evaluates the shortlist,
-and 3D FEM is the final gate. Results are judged against the constraints, and
-every iteration is written to the **Engineering Brain** with an evidence level
+3D FEM is the gate, and an independent solver cross-checks what it can. Every
+applicable failure mode has to pass a **conjunctive verdict**, where an
+unassessed mode or a surrogate-only screen is a gap rather than a pass. Every
+iteration is written to the **Engineering Brain** with an evidence level
 attached, which is what the reasoner reads on the next pass.
 
-The key separation is that physics never sees a genome without a problem
-attached, so a design variable can never quietly become a requirement.
+Two separations carry the design. Physics never sees a genome without a
+problem attached, so a design variable can never quietly become a
+requirement. And a verdict never rests on a surrogate, so a learned model can
+never quietly become a solver.
 
 ## Hardware & GPU profiles
 
@@ -258,15 +293,20 @@ reported alongside it, and that one does converge.
 **The surrogate (Phase 6) approximates that beam evaluator, not 3D FEM.** Its
 error stacks on top of beam theory's own. It never decides: `screen_and_verify`
 ranks thousands of candidates with the model but returns a design the **solver**
-evaluated. There is also **no speedup today**: the beam kernel is closed-form
-arithmetic, so the surrogate measures ~0.38× the batched solver's throughput.
-The value is deferred to Phase 7.
+evaluated. That rule is now in the evidence ladder, not only in control flow:
+every prediction grades itself `SURROGATE`, a level **below** `SIMULATED`, and
+the verdict layer refuses to build a pass or a fail on it. There is also **no
+speedup today**: the beam kernel is closed-form arithmetic, so the surrogate
+measures ~0.4× the batched solver's throughput. The value arrives when the
+base evaluator is an expensive solve.
 
 **The Brain (Phase 5) stores evidence-graded experience, not facts.**
 `EXPERIMENTALLY_VALIDATED` is reachable **only** with physical-test evidence: 
 no volume of simulation, no passing test suite, no analytical derivation can
 promote a claim to it. Independence is counted per *run*, not per episode, so
-one long search yields at most `SIMULATED`.
+one long search yields at most `SIMULATED`. Surrogate evidence is set aside
+before any counting, so a thousand predictions yield `SURROGATE` and nothing
+above it.
 
 **The reasoner (Phase 4) is a rule-based heuristic, not a language model.**
 Calling it AI reasoning would be an overclaim. `Reasoner` is a one-method ABC: 
@@ -373,21 +413,35 @@ command. Proposed direction:
 
 ## Roadmap
 
-- **Phase 7: high-fidelity 3D FEM**: stress concentration and buckling, the
-  gate a candidate must clear to be treated as a real part. This is also where
-  the surrogate infrastructure finally pays off.
-- **Anisotropic materials**: CFRP and 3D-printed plastics need direction-
-  dependent property fields **and** an anisotropic solver before they can be
-  added: forcing them into the current single-E schema would produce confident
-  wrong answers.
-- **Topology optimization**, implicit/SDF geometry, lattice structures.
-- **LLM-backed reasoner** plugged into the existing `Reasoner` ABC.
-- **Multi-GPU device pool**: independent candidates shard linearly.
-- **CAD / STEP export** for manufacturing handoff.
-- **Part scope**: link → joint → gearbox → leg → humanoid.
-- **Text-embedding semantic retrieval + ANN indexing** in the Brain (today's
-  retrieval is numeric feature similarity, deliberately not called semantic).
-- **Fine-tuning** a domain-specialized model on accumulated experience.
+Two ladders, climbed in order. Nothing on either is claimed until it is
+measured.
+
+**Generative design track (in progress).** The order was fixed after the
+evidence gate for surrogates landed, because a learned model entering the loop
+without that gate would let "the model said so" blend into "the solver said
+so".
+
+| step | what | state |
+|---|---|---|
+| gate | `SURROGATE` evidence level below `SIMULATED`; a surrogate may screen and never decide, enforced in code and tests | done |
+| P5 | synthetic data engine: build123d parametric shapes, through the STEP analyzer, labelled by the existing verified solvers (CalculiX and the rest); labels recorded `SIMULATED` | in progress |
+| P3 | shape descriptors and classification | planned |
+| P6 | CAD embeddings | planned |
+| P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | planned |
+| P8 | design intent, measured by ablation against real solvers rather than asserted | planned |
+| P9 | generative design and an autonomous CAD loop that emits STEP | planned |
+
+**Validation ladder (roadmap).** Simulation verification is where the project
+is. Hardware comes next: a part manufactured from an exported STEP file.
+Measurement comes last: a physical test whose evidence is the only thing that
+can promote a statement to `EXPERIMENTALLY_VALIDATED`. Hardware and
+measurement are run by a person, not by this software.
+
+**Also open**, in no promised order: an LLM-backed reasoner behind the existing
+`Reasoner` seam; a multi-GPU device pool; the Fusion round trip on a Windows
+host, as an independent CAD kernel to check the analyzer against; text
+embedding retrieval in the Brain, which today is numeric feature similarity
+and is deliberately not called semantic.
 
 ---
 

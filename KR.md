@@ -12,8 +12,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-281%20passing-brightgreen.svg)](#현재-상태)
-[![Status](https://img.shields.io/badge/status-phase%200--6%20complete-orange.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1547%20passing-brightgreen.svg)](#현재-상태)
+[![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#현재-상태)
+[![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
+[![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
 
 </div>
 
@@ -27,24 +29,47 @@
 
 ## 현재 상태
 
-Phase 0~6 구현·검증 완료.
+아래 전부는 구현되고, 독립 레퍼런스와 대조 테스트되고, 개발 머신에서 실행된
+것이다. 아래 어느 것도 물리시험은 거치지 않았고, 코드는 자기 출력을 그에 맞게
+등급 매긴다.
 
-| phase | 내용 | 상태 |
+**12개 노드 위에 등록된 능력 54개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
+라우팅 규칙은 하나뿐이다: 방법이 문제에 적용 가능하고 노드가 살아 있을 때만 후보가
+된다. 제외된 방법은 이유를 말한다.
+
+| 실행 위치 | 수 | 내용 |
 |---|---|---|
-| 0 | venv, 프로젝트 골격, GPU 프로파일, Warp/torch 새너티 | 완료 |
-| 1 | Engineering IR(문제), 재료 DB, Design Genome(설계변수) | 완료 |
-| 2 | NVIDIA Warp 기반 미분가능 GPU 보 물리 | 완료 |
-| 3 | 제약 하 질량 최소화 (SLSQP + 차분진화) | 완료 |
-| 4 | 자율 설계 루프: 상태머신, 에피소드, 예산, 탐색/활용 | 완료 |
-| 5 | Engineering Brain: 에피소드/의미 기억, 증거수준, 검색 | 완료 |
-| 6 | PyTorch surrogate + 2단계 screen-and-verify | 완료 |
-| 7 | 고정밀 3D FEM 검증 관문 (Warp, matrix-free CG) | 완료 |
-| 8 | 재료 확장(15종)과 직교이방성 탄성 | 완료 |
-| 9 | 파라메트릭 CAD B-rep과 STEP 출력, 질량 정합 | 완료 |
-| 10 | 어셈블리와 기구학 (FK, Jacobian, IK, 정역학, 어셈블리 STEP) | 완료 |
-| 11 | 강체 동역학 (관성, M/C/G, 하중케이스, 토크·파워) | 완료 |
-| 12 | 모터·감속기 선정 (마진, 반사관성, 대안비교) | 완료 |
-| 13 | 토폴로지 최적화 (GPU FEM 위 SIMP, 민감도 검증) | 완료 |
+| 프로세스 내 엔진, GPU | 42 | 보·Timoshenko 이론, matrix-free 3D FEM, 피로(S-N, Goodman, Miner), 오일러 좌굴, 샤프트, 베어링, 볼트, 나사, 기어, 키, 용접, 압입, ISO 286 끼워맞춤, Hertz 접촉, 열저항망과 과도열, 관유동, 항력, 유체 액추에이터, 적층판(CLT), 정역학, 강체 동역학, 모터·감속기 선정, SLSQP, 차분진화, NSGA-II, SIMP 토폴로지(컴플라이언스·응력), 최소치수, 다중설계검토 |
+| 외부 솔버 노드, stdio | 7 | CalculiX(FEA, 일반 형상), Code_Aster(소성), Elmer(정자기), OpenFOAM(CFD), Gmsh(메싱), Pinocchio(다물체), MuJoCo(접촉) |
+| CAD 지식 계층 | 3 | STEP 분석기, 규칙기반 피처 인식, 벽두께·구배 검사; build123d 파라메트릭 형상의 STEP 출력 |
+| 스텁, 정직하게 미가용 | 2 | Fusion 라운드트립(Windows 호스트와 엔타이틀먼트 필요), 외부 LLM reasoner |
+
+두 방법이 겹치는 곳은 교차검증이지 두 번째 능력이 아니다. CalculiX 는 두 메셔가
+모두 덮는 한 형상에서 자체 hex FEM 과 0.5 퍼센트 안에서 일치했고, OpenFOAM 은 유체
+상관식의 첫 독립 검증이었으며, Pinocchio 와 MuJoCo 는 연속체 스택 밖에서 동역학을
+검사한다.
+
+**모든 것에 하나의 근거 사다리.** Brain 이 저장하는 모든 진술, 어셈블리 판정의 모든
+체크, 모든 서로게이트 예측이 등급을 달고 있다:
+
+```
+UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPERIMENTALLY_VALIDATED
+   0.20         0.40          0.60          0.80           0.95                   0.99
+```
+
+이 저장소의 모든 것은 `SIMULATED` 이하에 있다. `SURROGATE` 는 학습된 모델의 출력이며
+스크리닝은 해도 판정은 절대 못 한다. `REPEATED` 이상은 서로 일치하는 독립 실행이
+필요하다. `EXPERIMENTALLY_VALIDATED` 는 물리시험이 필요하고, 시뮬레이션은 아무리
+많아도 그 문을 열지 못한다. 이 규칙들은 각각 관례가 아니라 테스트다.
+
+**이 프로젝트가 오르는 검증 사다리, 순서대로:**
+
+| 단 | 상태 |
+|---|---|
+| 닫힌 형태 해와 독립 솔버에 대한 검증 | 완료, 모든 방법에서 계속 |
+| 생성설계 트랙(합성데이터, 분류, 임베딩, 서로게이트, 설계의도, 생성) | 진행중 |
+| 하드웨어: 출력된 STEP 으로 제조한 부품 | 로드맵 |
+| 실측: 물리시험 근거, `EXPERIMENTALLY_VALIDATED` 의 유일한 열쇠 | 로드맵 |
 
 **MVP 문제**: 중공 사각단면 로봇 링크 1개의 질량 최소화. 근부 고정 캔틸레버,
 팁에 196.2 N(20 kg 페이로드), 알루미늄 7075-T6, 응력 상한·팁 처짐 한계·안전율
@@ -54,7 +79,9 @@ Phase 0~6 구현·검증 완료.
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 281개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조 검증.
+**테스트 1547개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
+확인한다.
 
 ---
 
@@ -63,14 +90,18 @@ Phase 0~6 구현·검증 완료.
 <p align="center"><img src="assets/architecture.svg" alt="Daedalus architecture" width="840"></p>
 
 목표는 **Engineering IR**(문제: 형상·재료·하중·제약·목표, 전부 고정)로 들어온다.
-**Design Genome**은 탐색이 바꿔도 되는 것만 담으며 현재는 단면 치수다. 후보는
-엔진(지오메트리, GPU 물리, 최적화)을 거쳐 **다중 충실도 깔때기**를 내려간다:
-surrogate가 수천 개를 걸러내고, 보 이론이 후보군을 평가하며, 3D FEM이 최종
-관문이다. 결과는 제약과 대조해 판정되고, 매 이터레이션은 증거수준이 붙은 채
-**Engineering Brain**에 기록되어 다음 회차에 reasoner가 읽는다.
+**Design Genome**은 탐색이 바꿔도 되는 것만 담는다: 단면 치수, 토폴로지 필드, CAD
+파라미터. 후보는 **capability registry** 로 가고, 레지스트리는 각 파손 모드를 적용
+가능하고 노드가 살아 있는 등록 방법으로 보낸다. GPU 위 프로세스 내에서든, stdio 너머
+외부 솔버에서든 규칙은 같다. 결과는 **다중 충실도 깔때기**를 내려간다: surrogate가
+수천 개를 걸러내고, 보 이론이 후보군을 평가하며, 3D FEM이 관문이고, 독립 솔버가
+가능한 것을 교차검증한다. 적용 가능한 모든 파손 모드가 **결합 판정**을 통과해야 하며,
+평가되지 않은 모드나 서로게이트만 본 모드는 통과가 아니라 공백이다. 매 이터레이션은
+증거수준이 붙은 채 **Engineering Brain**에 기록되어 다음 회차에 reasoner가 읽는다.
 
-핵심 분리는 물리가 문제 없이 genome만 보는 일이 절대 없다는 것이다. 그래서 설계
-변수가 조용히 요구사항으로 둔갑할 수 없다.
+두 가지 분리가 설계를 받친다. 물리가 문제 없이 genome만 보는 일은 절대 없어서 설계
+변수가 조용히 요구사항으로 둔갑할 수 없다. 그리고 판정이 서로게이트 위에 서는 일은
+절대 없어서 학습된 모델이 조용히 솔버로 둔갑할 수 없다.
 
 ## 하드웨어 & GPU 프로파일
 
@@ -247,15 +278,18 @@ python -m interfaces.cli.main brain --generalize
 **surrogate(Phase 6)가 근사하는 것은 그 보 이론 평가기이지 3D FEM이 아니다.**
 그래서 오차가 보 이론 오차 위에 더해진다. 그리고 surrogate는 결정하지 않는다: 
 `screen_and_verify`는 수천 후보를 모델로 순위 매기지만, 반환하는 설계는 항상
-**솔버가 실제로 평가한** 것이다. 또한 **현재 속도 이득은 없다**: 보 커널이
-닫힌 형태 산술이라 surrogate 처리량은 배치 솔버의 약 0.38배다. 가치는 Phase 7에서
-발현된다.
+**솔버가 실제로 평가한** 것이다. 이 규칙은 이제 제어 흐름이 아니라 근거등급
+사다리에 박혀 있다: 모든 예측은 스스로를 `SIMULATED` **아래**의 `SURROGATE`
+등급으로 매기고, 판정 계층은 그 위에 pass/fail 을 세우기를 거부한다. 또한
+**현재 속도 이득은 없다**: 보 커널이 닫힌 형태 산술이라 surrogate 처리량은 배치
+솔버의 약 0.4배다. 가치는 기본 평가기가 비싼 솔브가 될 때 나온다.
 
 **Brain(Phase 5)은 사실이 아니라 증거수준이 표시된 경험을 저장한다.**
 `EXPERIMENTALLY_VALIDATED`는 **물리시험 증거로만** 도달 가능하다: 시뮬레이션을
 아무리 많이 돌려도, 테스트 스위트를 전부 통과해도, 해석적으로 유도해도 그
 관문은 열리지 않는다. 독립성은 에피소드가 아니라 **run 단위**로 세므로, 한 번의
-긴 탐색은 최대 `SIMULATED`에 머문다.
+긴 탐색은 최대 `SIMULATED`에 머문다. 서로게이트 근거는 세기 전에 따로 떼어 놓으므로,
+예측 천 개는 `SURROGATE`를 낳고 그 위로는 올라가지 못한다.
 
 **reasoner(Phase 4)는 규칙기반 휴리스틱이지 언어모델이 아니다.** 이걸 AI 추론이라
 부르면 과대주장이다. `Reasoner`는 메서드 하나짜리 ABC이며, 그것이 LLM 정책을
@@ -358,19 +392,31 @@ python -m interfaces.cli.main brain --generalize
 
 ## 로드맵
 
-- **Phase 7: 고정밀 3D FEM**: 응력집중과 좌굴. 후보가 실물 부품으로 취급되기
-  위해 통과해야 하는 관문이며, surrogate 인프라가 실제로 값어치를 하는 지점이다.
-- **이방성 재료**: CFRP와 3D 프린팅 플라스틱은 방향별 물성 필드 **와** 이방성
-  솔버가 먼저 있어야 한다. 지금의 단일 E 스키마에 밀어 넣으면 자신 있게 틀린
-  답을 낸다.
-- **토폴로지 최적화**, implicit/SDF 지오메트리, 라티스 구조.
-- 기존 `Reasoner` ABC에 꽂는 **LLM 기반 reasoner**.
-- **멀티 GPU device pool**: 독립 후보 병렬은 선형 확장된다.
-- 제조 인계를 위한 **CAD / STEP export**.
-- **부품 범위 확장**: 링크 → 관절 → 감속기 → 다리 → 휴머노이드.
-- Brain의 **텍스트 임베딩 의미검색 + ANN 인덱싱** (현재 검색은 수치 특징
-  유사도이며, 의도적으로 의미검색이라 부르지 않는다).
-- 축적된 경험 데이터로 **도메인 특화 모델 fine-tuning**.
+사다리 둘을 순서대로 오른다. 어느 것도 측정되기 전에는 주장하지 않는다.
+
+**생성설계 트랙(진행중).** 순서는 서로게이트 근거 게이트가 들어간 뒤에 확정했다.
+그 게이트 없이 학습 모델이 루프에 들어오면 "모델이 그렇게 말했다"가 "솔버가 그렇게
+말했다"에 섞이기 때문이다.
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 게이트 | `SIMULATED` 아래의 `SURROGATE` 근거등급; 서로게이트는 스크리닝만 하고 판정은 못 한다, 코드와 테스트로 강제 | 완료 |
+| P5 | 합성데이터 엔진: build123d 파라메트릭 형상을 STEP 분석기에 통과시키고 기존 검증된 솔버(CalculiX 등)로 라벨링; 라벨은 `SIMULATED` 로 기록 | 진행중 |
+| P3 | 형상 기술자와 분류 | 계획 |
+| P6 | CAD 임베딩 | 계획 |
+| P7 | CAD 형상 서로게이트 예측, 탐색 가속 전용, 게이트 뒤에서 | 계획 |
+| P8 | 설계의도, 주장이 아니라 실제 솔버 대비 절제 실험으로 측정 | 계획 |
+| P9 | 생성설계와 STEP 을 내보내는 자율 CAD 루프 | 계획 |
+
+**검증 사다리(로드맵).** 시뮬레이션 검증이 지금 프로젝트가 있는 자리다. 다음은
+하드웨어: 출력된 STEP 파일로 제조한 부품. 마지막은 실측: 진술을
+`EXPERIMENTALLY_VALIDATED` 로 올릴 수 있는 유일한 것인 물리시험. 하드웨어와 실측은
+이 소프트웨어가 아니라 사람이 수행한다.
+
+**그 외 열려 있는 것**, 순서 약속 없이: 기존 `Reasoner` 이음매 뒤의 LLM 기반
+reasoner; 멀티 GPU device pool; 분석기를 대조할 독립 CAD 커널로서 Windows 호스트의
+Fusion 라운드트립; Brain 의 텍스트 임베딩 검색(현재는 수치 특징 유사도이며 의도적으로
+의미검색이라 부르지 않는다).
 
 ---
 
