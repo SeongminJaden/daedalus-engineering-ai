@@ -12,8 +12,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1574%20passing-brightgreen.svg)](#status)
-[![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-1585%20passing-brightgreen.svg)](#status)
+[![Capabilities](https://img.shields.io/badge/capabilities-55%20registered-orange.svg)](#status)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#status)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#fidelity--safety-read-before-trusting-any-number)
 
@@ -33,7 +33,7 @@ Everything below has been built, tested against an independent reference, and
 run on the development machine. Nothing below has been physically tested, and
 the code grades its own output accordingly.
 
-**54 registered capabilities on 12 nodes.** A capability is a method plus the
+**55 registered capabilities on 13 nodes.** A capability is a method plus the
 node that runs it, and one rule routes all of them: a method is a candidate
 only when it applies to the problem and its node is available. Excluded
 methods report why.
@@ -42,7 +42,7 @@ methods report why.
 |---|---|---|
 | in-process engine, GPU | 42 | beam and Timoshenko theory, matrix-free 3D FEM, fatigue (S-N, Goodman, Miner), Euler buckling, shafts, bearings, bolts, threads, gears, keys, welds, press fits, ISO 286 fits, Hertz contact, thermal networks and transients, pipe flow, drag, fluid actuators, laminates (CLT), statics, rigid-body dynamics, motor and gearbox selection, SLSQP, differential evolution, NSGA-II, SIMP topology (compliance and stress), minimum sizing, multi-design review |
 | external solver nodes, stdio | 7 | CalculiX (FEA and general shapes), Code_Aster (plasticity), Elmer (magnetostatics), OpenFOAM (CFD), Gmsh (meshing), Pinocchio (multibody), MuJoCo (contact) |
-| CAD knowledge layer | 3 | STEP analyzer, rule-based feature recognition, wall thickness and draft checks; build123d parametric shapes to STEP |
+| CAD knowledge layer | 4 | STEP analyzer, rule-based feature recognition, shape descriptors with rule-based family classification (UNKNOWN for anything outside the five synthetic families), wall thickness and draft checks; build123d parametric shapes to STEP |
 | stubs, honestly unavailable | 2 | Fusion round trip (needs a Windows host and an entitlement), external LLM reasoner |
 
 Where two methods overlap, the overlap is a cross-check, not a second
@@ -84,7 +84,7 @@ optimizers agree to 1.3×10⁻⁵ relative. The design is **deflection-limited**
 tip deflection sits exactly on its 1 mm cap while the stress constraint keeps
 over 70% margin.
 
-**1574 tests pass**, including independent verification of every critical
+**1585 tests pass**, including independent verification of every critical
 calculation against a separately derived reference. Limits are pinned by tests
 too: where a method cannot do something, a test asserts that it says so.
 
@@ -425,8 +425,8 @@ so".
 |---|---|---|
 | gate | `SURROGATE` evidence level below `SIMULATED`; a surrogate may screen and never decide, enforced in code and tests | done |
 | P5 | synthetic data engine: five build123d families with closed-form volumes, every record checked against its own parameters, labelled through Gmsh and CalculiX with mesh sensitivity on every solver label; labels graded `SIMULATED` by construction | done |
-| P3 | shape descriptors and classification | in progress |
-| P6 | CAD embeddings | planned |
+| P3 | 22 scale-free descriptors from the B-rep; topology rules classify the five families and say UNKNOWN otherwise, a nearest-neighbour model graded `SURROGATE` checks them and rejects what it has not seen | done |
+| P6 | CAD embeddings | in progress |
 | P7 | surrogate prediction on CAD shapes, search acceleration only, behind the gate | planned |
 | P8 | design intent, measured by ablation against real solvers rather than asserted | planned |
 | P9 | generative design and an autonomous CAD loop that emits STEP | planned |

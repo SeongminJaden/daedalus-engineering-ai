@@ -6,7 +6,7 @@
   </defs>
   <rect x="1" y="1" width="958" height="978" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
   <text x="480" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">Daedalus: Autonomous Engineering Loop</text>
-  <text x="480" y="58" text-anchor="middle" font-size="11.5" fill="#6b7280">54 registered capabilities on 12 nodes, one conjunctive verdict, one evidence ladder</text>
+  <text x="480" y="58" text-anchor="middle" font-size="11.5" fill="#6b7280">55 registered capabilities on 13 nodes, one conjunctive verdict, one evidence ladder</text>
 
   <!-- goal -->
   <rect x="280" y="78" width="400" height="46" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
@@ -54,10 +54,10 @@
   <text x="481" y="456" text-anchor="middle" font-size="10.5" fill="#6b7280">overlap is cross-validation, not a new capability</text>
 
   <rect x="622" y="334" width="262" height="136" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
-  <text x="753" y="354" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">CAD knowledge layer (3)</text>
+  <text x="753" y="354" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">CAD knowledge layer (4)</text>
   <text x="753" y="372" text-anchor="middle" font-size="10.5" fill="#6b7280">OpenCASCADE via build123d, no scraped CAD</text>
   <text x="753" y="390" text-anchor="middle" font-size="10.5" fill="#374151">STEP analyzer: geometry, topology, adjacency</text>
-  <text x="753" y="406" text-anchor="middle" font-size="10.5" fill="#374151">rule-based feature recognition, stated domains</text>
+  <text x="753" y="406" text-anchor="middle" font-size="10.5" fill="#374151">feature recognition and family classification, by rules</text>
   <text x="753" y="422" text-anchor="middle" font-size="10.5" fill="#374151">parametric shapes to STEP, mass-consistent</text>
   <text x="753" y="438" text-anchor="middle" font-size="10.5" fill="#374151">manufacturability: wall thickness, draft</text>
   <text x="753" y="456" text-anchor="middle" font-size="10.5" fill="#7c3aed">generative design track: in progress</text>

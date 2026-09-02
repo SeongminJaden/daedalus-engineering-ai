@@ -8,8 +8,8 @@ repository is SIMULATED or below; nothing has been physically tested.
 
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
-- Capabilities registered: 54 (`nodes.roster.build_roster`, `len`). Nodes: 12.
-- Tests collected: 1575, 1574 passing and 1 xfail (1548 after the SURROGATE gate, 27 more for P5).
+- Capabilities registered: 55 (`nodes.roster.build_roster`, `len`). Nodes: 13.
+- Tests collected: 1586, 1585 passing and 1 xfail (1548 after the gate, 27 for P5, 11 for P3).
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)
@@ -18,8 +18,8 @@ repository is SIMULATED or below; nothing has been physically tested.
 |---|---|---|
 | gate | SURROGATE evidence level below SIMULATED, verdict guard in code and tests | DONE |
 | P5 | synthetic data engine: `core/part_dataset/{families,labeller,store,engine}.py`, five families, ground truth checked per record, CalculiX labels with mesh sensitivity | DONE |
-| P3 | shape descriptors and classification | next |
-| P6 | CAD embeddings | not started |
+| P3 | descriptors and classification: `core/part_dataset/{descriptors,classify}.py`, `nodes/shape_classifier.py`, capability `analysis.cad.classify` | DONE |
+| P6 | CAD embeddings | next |
 | P7 | surrogate prediction, search acceleration only, behind the gate | not started |
 | P8 | design intent, measured by ablation against real solvers | not started |
 | P9 | generative design and the autonomous CAD loop | not started |
@@ -27,6 +27,21 @@ repository is SIMULATED or below; nothing has been physically tested.
 Parallel task: GitHub README refresh (54 capabilities, 7 external solvers,
 the evidence ladder, roadmap with P3 to P9 marked in progress or planned,
 architecture diagram replaced). Not started.
+
+## P3 descriptors and classification, as built
+
+- 22 scale-free descriptors (`DESCRIPTOR_NAMES`); Euler characteristic is
+  V - E + F - inner loops (wires minus faces), which the first version got
+  wrong and measurement caught.
+- `rule_classify` gives a family or UNKNOWN with reasons, graded SIMULATED;
+  1.00 on generated parts, Fusion plates A and B classify as plates, C to G
+  UNKNOWN.
+- `NearestNeighbourClassifier` (numpy, k=5, standardised, open-set rejection
+  at 1.0 times the 99th percentile leave-one-out distance) graded SURROGATE;
+  1.00 held-out after logging compactness, rejects the cone fixture D.
+- Registered as `analysis.cad.classify` on node `shape.classifier` (55th
+  capability, 13th node).
+- Tests: `tests/test_shape_classifier.py` (11).
 
 ## P5 synthetic engine, as built
 

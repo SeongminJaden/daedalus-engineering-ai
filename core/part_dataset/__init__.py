@@ -11,8 +11,14 @@ from .labeller import (LabelReport, LoadCase, cantilever_labels,
 from .store import read_jsonl, write_jsonl
 from .engine import (SYNTHETIC_PROVENANCE, GenerationReport, generate_dataset,
                      make_part)
+from .descriptors import DESCRIPTOR_NAMES, ShapeDescriptor, describe_step
+from .classify import (UNKNOWN, Classification, NearestNeighbourClassifier,
+                       classification_label, evaluate, rule_classify)
 
-__all__ = ["FAMILIES", "Family", "GenerationReport", "GeometrySummary",
+__all__ = ["DESCRIPTOR_NAMES", "Classification", "FAMILIES", "Family",
+           "GenerationReport", "GeometrySummary", "NearestNeighbourClassifier",
+           "ShapeDescriptor", "UNKNOWN", "classification_label",
+           "describe_step", "evaluate", "rule_classify",
            "LABEL_CEILING", "LabelReport", "Licence", "LoadCase",
            "PartRecord", "Provenance", "ProvenanceKind", "SCHEMA_VERSION",
            "SYNTHETIC_PROVENANCE", "TopologySummary", "cantilever_labels",

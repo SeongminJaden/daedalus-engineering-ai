@@ -109,7 +109,12 @@ bound, physics is GPU bound, so they do not contend.
   each quantity checked against a closed form where one exists.
 - **Phase 2** Rule based feature recognition, with the validity domain of each
   rule stated before it is written.
-- **Phase 3** Shape descriptors and classification.
+- **Phase 3** Shape descriptors and classification. DONE
+  (`core/part_dataset/descriptors.py`, `classify.py`, capability
+  `analysis.cad.classify`): 22 scale-free descriptors, topology rules that
+  classify the five families and say UNKNOWN otherwise, and a nearest
+  neighbour model graded SURROGATE that rejects parts beyond its training
+  set. The Euler count had to learn about inner face loops first.
 - **Phase 4** Physical labelling through the EXISTING solvers, including
   boundary condition tagging.
 - **Phase 5** Synthetic data engine. DONE (`core/part_dataset/engine.py`):

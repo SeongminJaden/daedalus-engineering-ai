@@ -12,8 +12,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GPU: NVIDIA Warp](https://img.shields.io/badge/GPU-NVIDIA%20Warp-76b900.svg)](https://github.com/NVIDIA/warp)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.13-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-1574%20passing-brightgreen.svg)](#현재-상태)
-[![Capabilities](https://img.shields.io/badge/capabilities-54%20registered-orange.svg)](#현재-상태)
+[![Tests](https://img.shields.io/badge/tests-1585%20passing-brightgreen.svg)](#현재-상태)
+[![Capabilities](https://img.shields.io/badge/capabilities-55%20registered-orange.svg)](#현재-상태)
 [![External solvers](https://img.shields.io/badge/external%20solvers-7%20cross--checking-blue.svg)](#현재-상태)
 [![Evidence](https://img.shields.io/badge/evidence-simulated%2C%20not%20validated-lightgrey.svg)](#충실도와-안전성-숫자를-믿기-전에-읽을-것)
 
@@ -33,7 +33,7 @@
 것이다. 아래 어느 것도 물리시험은 거치지 않았고, 코드는 자기 출력을 그에 맞게
 등급 매긴다.
 
-**12개 노드 위에 등록된 능력 54개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
+**13개 노드 위에 등록된 능력 55개.** 능력은 방법 하나와 그것을 돌리는 노드 하나다.
 라우팅 규칙은 하나뿐이다: 방법이 문제에 적용 가능하고 노드가 살아 있을 때만 후보가
 된다. 제외된 방법은 이유를 말한다.
 
@@ -41,7 +41,7 @@
 |---|---|---|
 | 프로세스 내 엔진, GPU | 42 | 보·Timoshenko 이론, matrix-free 3D FEM, 피로(S-N, Goodman, Miner), 오일러 좌굴, 샤프트, 베어링, 볼트, 나사, 기어, 키, 용접, 압입, ISO 286 끼워맞춤, Hertz 접촉, 열저항망과 과도열, 관유동, 항력, 유체 액추에이터, 적층판(CLT), 정역학, 강체 동역학, 모터·감속기 선정, SLSQP, 차분진화, NSGA-II, SIMP 토폴로지(컴플라이언스·응력), 최소치수, 다중설계검토 |
 | 외부 솔버 노드, stdio | 7 | CalculiX(FEA, 일반 형상), Code_Aster(소성), Elmer(정자기), OpenFOAM(CFD), Gmsh(메싱), Pinocchio(다물체), MuJoCo(접촉) |
-| CAD 지식 계층 | 3 | STEP 분석기, 규칙기반 피처 인식, 벽두께·구배 검사; build123d 파라메트릭 형상의 STEP 출력 |
+| CAD 지식 계층 | 4 | STEP 분석기, 규칙기반 피처 인식, 형상 기술자와 규칙기반 패밀리 분류(합성 패밀리 다섯 밖은 UNKNOWN), 벽두께·구배 검사; build123d 파라메트릭 형상의 STEP 출력 |
 | 스텁, 정직하게 미가용 | 2 | Fusion 라운드트립(Windows 호스트와 엔타이틀먼트 필요), 외부 LLM reasoner |
 
 두 방법이 겹치는 곳은 교차검증이지 두 번째 능력이 아니다. CalculiX 는 두 메셔가
@@ -79,7 +79,7 @@ UNVERIFIED  <  SURROGATE  <  SIMULATED  <  REPEATED  <  HIGH_CONFIDENCE  <  EXPE
 상대차 1.3×10⁻⁵로 일치. 이 설계는 **처짐 지배(deflection-limited)** 다.
 팁 처짐이 1 mm 한계에 정확히 붙는 반면 응력 제약은 70% 넘는 여유가 남는다.
 
-**테스트 1574개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
+**테스트 1585개 통과.** 중요 계산은 전부 별도로 유도한 독립 레퍼런스와 대조
 검증. 한계도 테스트로 박혀 있다: 방법이 못 하는 것은 못 한다고 말하는지를 테스트가
 확인한다.
 
@@ -402,8 +402,8 @@ python -m interfaces.cli.main brain --generalize
 |---|---|---|
 | 게이트 | `SIMULATED` 아래의 `SURROGATE` 근거등급; 서로게이트는 스크리닝만 하고 판정은 못 한다, 코드와 테스트로 강제 | 완료 |
 | P5 | 합성데이터 엔진: 닫힌 형태 부피를 가진 build123d 패밀리 다섯, 모든 레코드를 자기 파라미터와 대조, Gmsh 와 CalculiX 로 라벨링하며 모든 솔버 라벨에 메시 민감도 기록; 라벨은 구조적으로 `SIMULATED` | 완료 |
-| P3 | 형상 기술자와 분류 | 진행중 |
-| P6 | CAD 임베딩 | 계획 |
+| P3 | B-rep 에서 읽는 척도 무관 기술자 22개; 토폴로지 규칙이 다섯 패밀리를 분류하고 그 밖은 UNKNOWN, `SURROGATE` 등급 최근접이웃 모델이 규칙을 대조하며 본 적 없는 것은 거부 | 완료 |
+| P6 | CAD 임베딩 | 진행중 |
 | P7 | CAD 형상 서로게이트 예측, 탐색 가속 전용, 게이트 뒤에서 | 계획 |
 | P8 | 설계의도, 주장이 아니라 실제 솔버 대비 절제 실험으로 측정 | 계획 |
 | P9 | 생성설계와 STEP 을 내보내는 자율 CAD 루프 | 계획 |
