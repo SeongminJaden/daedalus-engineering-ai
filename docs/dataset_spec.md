@@ -100,6 +100,23 @@ parts (ground truth mismatch, solver returned nothing) are written to a
 `refused.jsonl` with the reason and are counted in the report; a run that
 drops parts silently is biased toward the easy ones and does not know it.
 
+## The driver
+
+`scripts/generate_industrial_dataset.py --workers 8 --samples 100 --root
+data/generated/industrial_v1` runs every cell through a process pool, each
+cell resuming from its own files, then writes the scaled copies under
+`scaled/` and a `manifest.json` with counts, timing, md5 sums per file and the
+sha256 of the specification (families, cases, samples, seed, reference
+material, commit). `/data/generated/` is ignored by git; the manifest's
+numbers are copied into this document when a run finishes.
+
+The first launch found a defect the tests had not: a cell's seed was derived
+with `hash(name)`, which Python salts per process, so every spawned worker
+and every resume drew different parts and the specification could not
+reproduce the set it described. The seed now uses crc32 and a test compares
+the value across two processes. The run was restarted from nothing after the
+fix.
+
 ## Measured on the mount family before generation
 
 The full test suite caught the first mount drawn at seed 0: Gmsh refused the

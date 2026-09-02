@@ -60,3 +60,6 @@ warp_cache/
 .vscode/
 .idea/
 .DS_Store
+
+# --- generated datasets (anchored; see docs/dataset_spec.md, manifests are recorded in docs) ---
+/data/generated/

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import time
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -53,7 +54,10 @@ class Cell:
         return f"{self.family}__{self.case.kind.value}"
 
     def seed(self, base: int) -> int:
-        return (base * 1000003 + hash(self.name) % 1000003) % (2 ** 32)
+        # crc32, not hash(): Python salts str hashes per process, so the
+        # first version drew different parts in every worker and on every
+        # resume, and the spec could not reproduce the set it described.
+        return (base * 1000003 + zlib.crc32(self.name.encode()) % 1000003) % (2 ** 32)
 
 
 @dataclass

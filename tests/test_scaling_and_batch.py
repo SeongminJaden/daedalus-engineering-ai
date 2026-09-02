@@ -9,6 +9,8 @@ run labels only what the first did not.
 from __future__ import annotations
 
 import json
+import os
+import zlib
 from pathlib import Path
 
 import pytest
@@ -148,3 +150,23 @@ def test_a_batch_bounded_in_time_stops_and_reports_what_it_did(tmp_path):
     report = run_batch(cells, samples_per_cell=1, root=tmp_path, seed=1)
     assert report.labelled == 2 and report.refused == 0
     assert "box__axial" in report.summary()
+
+
+def test_a_cell_seed_is_the_same_in_another_process():
+    """The first version used hash(name), which Python salts per process, so
+    every spawned worker and every resume drew different parts and the spec
+    could not reproduce the set. crc32 is stable; the value is pinned."""
+    import subprocess
+    import sys
+    cell = Cell("box", LoadCase(total_load_n=-100.0, kind=LoadKind.BENDING))
+    here = cell.seed(3)
+    code = ("from core.part_dataset.batch import Cell; "
+            "from core.part_dataset.labeller import LoadCase, LoadKind; "
+            "print(Cell('box', LoadCase(total_load_n=-100.0, "
+            "kind=LoadKind.BENDING)).seed(3))")
+    root = str(Path(__file__).resolve().parents[1])
+    other = int(subprocess.run([sys.executable, "-c", code], check=True,
+                               capture_output=True, text=True, cwd=root,
+                               env={**os.environ, "PYTHONPATH": root}).stdout)
+    assert here == other
+    assert here == (3 * 1000003 + zlib.crc32(b"box__bending") % 1000003) % 2 ** 32

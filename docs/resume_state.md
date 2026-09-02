@@ -59,7 +59,11 @@ architecture diagram replaced). Not started.
 - Gazebo: `integration/simulation/gazebo.py` (spring hold, envelope
   interference). Runs need `ign` and real time; about 15 s per test file.
 - Guideline: `docs/measurement_guideline.md`. Dataset spec: `docs/dataset_spec.md`.
-- Not done: large-scale generation run; classifier rules for the eight new
+- Generation run started 2026-09-03 08:12 KST: `scripts/generate_industrial_dataset.py`
+  --workers 8 --samples 100 into `data/generated/industrial_v1` (ignored by git),
+  log at `data/generated/industrial_v1.log`. When it finishes, copy the
+  manifest numbers into docs/dataset_spec.md and report them.
+- Not done: classifier rules for the eight new
   families; Isaac Sim (hardware below requirements); anything physical.
 
 ## P9 generative CAD loop, as built
