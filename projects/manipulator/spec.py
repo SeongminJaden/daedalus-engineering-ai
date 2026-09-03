@@ -91,6 +91,12 @@ class ManipulatorSpec:
     #: candidate so a reader can apply a different one.
     max_inertia_ratio: float = 10.0
 
+    #: The arm runs one bus. A module whose printed performance belongs to a
+    #: different voltage is not comparable at this one, and the selection
+    #: refuses it rather than assuming the numbers carry over. CHOSEN at 48 V
+    #: because the joints that need the most torque are only offered there.
+    bus_voltage_v: float = 48.0
+
     materials: dict[str, str] = field(default_factory=lambda: {
         "link": "al_6061_t6",
         "link_alternative": "al_7075_t6",

@@ -85,14 +85,14 @@ Note: two simulations agreeing is a cross validation, not evidence.
 
 ## 3. Drive selection from the sourced catalogue
 
-| backlash_arcmin | inertia_ratio | joint | mass_kg | note | path | peak_margin | peak_nm | rated_nm | ratio | required_peak_nm | required_rms_nm | required_speed_rad_s | rms_margin | selected | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 15 | 8.404 | j1_base_yaw | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 122.8 | 22 | 9 | 9 | 0.1792 | 0.1111 | 1.178 | 81.03 | cubemars_ak80_9_v3 | selected |
-| 10.8 | 0.3193 | j2_shoulder | 0.85 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 4.689 | 120 | 48 | 64 | 25.59 | 16.46 | 1.178 | 2.916 | cubemars_ak80_64_kv80 | selected |
-| 10.8 | 0.04671 | j3_elbow | 0.85 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 9.248 | 120 | 48 | 64 | 12.98 | 9.875 | 1.178 | 4.861 | cubemars_ak80_64_kv80 | selected |
-| 15 | 0.002549 | j4_wrist_roll | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 11.41 | 22 | 9 | 9 | 1.928 | 1.07 | 1.178 | 8.414 | cubemars_ak80_9_v3 | selected |
-| 15 | 0.004368 | j5_wrist_pitch | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 11.41 | 22 | 9 | 9 | 1.929 | 1.279 | 1.178 | 7.035 | cubemars_ak80_9_v3 | selected |
-| 0 | 0.3816 | j6_tool_roll | 0.213 | motor and gear unit, sized on the smaller of the motor side and the gear unit rating | direct drive | 2.23e+04 | 1.37 | 0.413 | 1 | 6.142e-05 | 3.337e-05 | 1.178 | 1.238e+04 | kollmorgen_tbm_6013_a | selected |
+| backlash_arcmin | grade | inertia_ratio | joint | mass_kg | note | path | peak_condition | peak_margin | peak_nm | rated_nm | ratio | required_peak_nm | required_rms_nm | required_speed_rad_s | rms_margin | selected | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 15 | robotics_module | 8.404 | j1_base_yaw | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | printed without a duration or duty | 122.8 | 22 | 9 | 9 | 0.1792 | 0.1111 | 1.178 | 81.03 | cubemars_ak80_9_v3 | selected |
+| 10.8 | robotics_module | 0.3193 | j2_shoulder | 0.85 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | printed without a duration or duty | 4.689 | 120 | 48 | 64 | 25.59 | 16.46 | 1.178 | 2.916 | cubemars_ak80_64_kv80 | selected |
+| 22.8 | robotics_module | 1.369 | j3_elbow | 0.57 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | not stated on the cited document | 1.927 | 25 | 10 | 8 | 12.98 | 9.875 | 1.178 | 1.013 | cubemars_ak80_8_kv60 | selected |
+| 15 | robotics_module | 0.002549 | j4_wrist_roll | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | printed without a duration or duty | 11.41 | 22 | 9 | 9 | 1.928 | 1.07 | 1.178 | 8.414 | cubemars_ak80_9_v3 | selected |
+| 15 | robotics_module | 0.004368 | j5_wrist_pitch | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | printed without a duration or duty | 11.41 | 22 | 9 | 9 | 1.929 | 1.279 | 1.178 | 7.035 | cubemars_ak80_9_v3 | selected |
+| 0 | industrial | 0.3816 | j6_tool_roll | 0.213 | motor and gear unit, sized on the smaller of the motor side and the gear unit rating | direct drive | peak STALL torque at a 25 C winding temperature, printed with that condition | 2.23e+04 | 1.37 | 0.413 | 1 | 6.142e-05 | 3.337e-05 | 1.178 | 1.238e+04 | kollmorgen_tbm_6013_a | selected |
 
 Note: the geared path is considered first and the lightest feasible candidate of any path wins; every candidate, feasible or not, is kept so the comparison table can show why the others lost.
 
@@ -104,7 +104,7 @@ Note: the geared path is considered first and the lightest feasible candidate of
 |---|---|---|---|---|---|---|
 | 8.404 | j1_base_yaw | 0.07613 | 26.09 | 9 | 0.0009398 | 0.0001118 |
 | 0.3193 | j2_shoulder | 0.07384 | 36.17 | 64 | 1.803e-05 | 5.645e-05 |
-| 0.04671 | j3_elbow | 0.0108 | 13.83 | 64 | 2.637e-06 | 5.645e-05 |
+| 1.369 | j3_elbow | 0.0108 | 9.36 | 8 | 0.0001687 | 0.0001233 |
 | 0.002549 | j4_wrist_roll | 2.309e-05 | 0.4544 | 9 | 2.851e-07 | 0.0001118 |
 | 0.004368 | j5_wrist_pitch | 3.957e-05 | 0.5948 | 9 | 4.885e-07 | 0.0001118 |
 | 0.3816 | j6_tool_roll | 5.38e-06 | 0.6177 | 1 | 5.38e-06 | 1.41e-05 |
@@ -122,7 +122,7 @@ Note: the load inertia is the diagonal of the mass matrix at the rated pose, whi
 | 10.8 | cubemars_ak80_64_kv80 | True | 0.3193 | j2_shoulder | 0.85 | integrated actuator | 64 | 2.916 | None |  |
 | 5 | kollmorgen_tbm_6013_a + apex_af042_ratio50 | True | 2.095 | j2_shoulder | 1.013 | motor and gearbox | 50 | 1.179 | 1.031e+04 |  |
 | 0 | kollmorgen_tbm_6013_a | False | 765.9 | j3_elbow | 0.213 | direct drive | 1 | 0.04182 | None | continuous 0.41 N m against 9.9 required; peak 1.37 N m; inertia ratio 766 against a limit |
-| 10.8 | cubemars_ak80_64_kv80 | True | 0.04671 | j3_elbow | 0.85 | integrated actuator | 64 | 4.861 | None |  |
+| 22.8 | cubemars_ak80_8_kv60 | True | 1.369 | j3_elbow | 0.57 | integrated actuator | 8 | 1.013 | None |  |
 | 5 | kollmorgen_tbm_6013_a + apex_af042_ratio50 | True | 0.3064 | j3_elbow | 1.013 | motor and gearbox | 50 | 1.966 | 1.031e+04 |  |
 | 0 | kollmorgen_tbm_6051_a | True | 0.4862 | j4_wrist_roll | 0.55 | direct drive | 1 | 1.085 | None |  |
 | 15 | cubemars_ak80_9_v3 | True | 0.002549 | j4_wrist_roll | 0.49 | integrated actuator | 9 | 8.414 | None |  |
@@ -142,7 +142,7 @@ Note: the inertia ratio column is the reflected load inertia over the rotor iner
 |---|---|---|---|---|---|---|---|---|---|
 | 15 | cubemars_ak80_9_v3 | j1_base_yaw | 0.6 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.002618 | None | 0.08544 | None |
 | 10.8 | cubemars_ak80_64_kv80 | j2_shoulder | 0.6 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.001885 | None | 12.66 | None |
-| 10.8 | cubemars_ak80_64_kv80 | j3_elbow | 0.32 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.001005 | None | 7.597 | None |
+| 22.8 | cubemars_ak80_8_kv60 | j3_elbow | 0.32 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.002122 | None | 7.597 | None |
 | 15 | cubemars_ak80_9_v3 | j4_wrist_roll | 0.08 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.0003491 | None | 0.8228 | None |
 | 15 | cubemars_ak80_9_v3 | j5_wrist_pitch | 0.05 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.0002182 | None | 0.9841 | None |
 |  | kollmorgen_tbm_6013_a | j6_tool_roll | 0.025 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None |  | None | 2.567e-05 | None |
@@ -153,12 +153,22 @@ Note: backlash is a position uncertainty, not a deflection: the tool can sit any
 
 **Could not:** The integrated actuators print a backlash and no torsional stiffness, so joints driven by them have a position uncertainty here and no compliance figure at all.
 
+## 3e. What the bus voltage costs
+
+| bus_voltage_v | drive_mass_kg | grades | joints_driven | joints_without_a_drive | parts |
+|---|---|---|---|---|---|
+| 24 | 4.347 | industrial, robotics_module | 6 | 0 | damiao_dm_j8009_2ec, kollmorgen_tbm_6013_a, kollmorgen_tbm_6051_a |
+| 36 | 3.76 | industrial, industrial motor, industrial gear unit, robotics_module | 6 | 0 | kollmorgen_tbm_6013_a, kollmorgen_tbm_6013_a + apex_af042_ratio50, mjbots_qdd100_beta3 |
+| 48 | 3.103 | industrial, robotics_module | 6 | 0 | cubemars_ak80_64_kv80, cubemars_ak80_8_kv60, cubemars_ak80_9_v3, kollmorgen_tbm_6013_a |
+
+Note: a module printed at another voltage is refused rather than scaled: torque and speed both move with the bus and the pages do not tabulate the arm's voltage for every part.
+
 ## 4. Each link through both design paths
 
 | comparability_note | comparable | deflection_limit_m | family_deflection_m | family_feasible | family_mass_kg | family_material | family_seconds | family_shape | freeform_deflection_m | freeform_feasible | freeform_grey | freeform_mass_kg | freeform_seconds | link | load_n |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004667 | 1.758e-05 | True | 0.5735 | al_6061_t6 | 4.033 | hollow_rect | 1.132e-05 | True | 0.1703 | 1.101 | 15.03 | upper_arm | 52.65 |
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004 | 0.0002908 | True | 0.1623 | al_6061_t6 | 5.163 | box | 7.505e-06 | True | 0.2281 | 0.6798 | 8.329 | forearm | 41.87 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004667 | 1.758e-05 | True | 0.5735 | al_6061_t6 | 3.998 | hollow_rect | 1.132e-05 | True | 0.1703 | 1.101 | 15.1 | upper_arm | 52.65 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004 | 0.0002908 | True | 0.1623 | al_6061_t6 | 5.166 | box | 7.505e-06 | True | 0.2281 | 0.6798 | 8.365 | forearm | 41.87 |
 
 **Could not:** The free form path is not sized to the requirement: it takes a volume fraction. Comparing its mass with the family search's is only meaningful when its extracted part happens to meet the same limit, which the row above states one way or the other.
 
@@ -242,6 +252,7 @@ Sourced parts, whose numbers come from a vendor page:
 | count | item | mass_kg | source |
 |---|---|---|---|
 | 1 | cubemars_ak80_64_kv80 | None | vendor datasheet |
+| 1 | cubemars_ak80_8_kv60 | None | vendor datasheet |
 | 1 | cubemars_ak80_9_v3 | None | vendor datasheet |
 | 1 | kollmorgen_tbm_6013_a | None | vendor datasheet |
 

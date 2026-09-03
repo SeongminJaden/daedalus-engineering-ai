@@ -179,3 +179,41 @@ def test_fatigue_refuses_the_printed_material_and_passes_the_aluminium():
     for row in by_material[SPEC.materials["link"]]:
         assert row["damage_sum"] is not None
         assert row["survives"]
+
+
+def test_a_module_printed_at_another_voltage_is_refused_not_scaled():
+    """The arm runs one bus. Most of the robotics modules in the pool are
+    printed at 24 V, and their torque and speed both move with the bus, so
+    they are refused at 48 V rather than converted."""
+    from projects.manipulator.stages import StageResult, drivetrain_stage
+
+    dynamics = StageResult(name="fake", rows=[{
+        "joint": "j2_shoulder", "peak_trapezoidal_nm": 20.0,
+        "peak_s_curve_nm": 20.0, "rms_trapezoidal_nm": 12.0,
+        "rms_s_curve_nm": 12.0}])
+    drives = drivetrain_stage(dynamics, SPEC, {"j2_shoulder": 0.2})
+    candidates = drives.data["candidates"]["j2_shoulder"]
+    damiao = next(c for c in candidates if c["candidate"] == "damiao_dm_j8009_2ec")
+    assert not damiao["feasible"]
+    assert "24 V" in damiao["why"] and "48 V bus" in damiao["why"]
+    assert damiao["grade"] == "robotics_module"
+
+
+@pytest.mark.slow
+def test_the_bus_voltage_changes_the_mass_and_the_stage_prices_it():
+    """A design decision with a mass consequence, not a wiring detail."""
+    from projects.manipulator.stages import bus_voltage_stage, dynamics_stage
+
+    arm = build_arm()
+    dynamics = dynamics_stage(arm, SPEC, samples=60)
+    inertias = {joint.name: 0.05 for joint in arm.actuated_joints()}
+    stage = bus_voltage_stage(dynamics, inertias, SPEC)
+    by_voltage = {row["bus_voltage_v"]: row for row in stage.rows}
+    assert set(by_voltage) == {24.0, 36.0, 48.0}
+    for row in stage.rows:
+        assert row["joints_driven"] + row["joints_without_a_drive"] == 6
+    driven = [row for row in stage.rows if row["drive_mass_kg"]]
+    assert driven, "no bus voltage could drive the arm at all"
+    assert len({row["parts"] for row in driven}) > 1, (
+        "the bus voltage changed nothing, which would mean it is not being "
+        "applied")

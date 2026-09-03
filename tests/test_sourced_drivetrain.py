@@ -154,3 +154,64 @@ def test_the_integrated_actuator_says_its_ratings_are_at_the_output():
     ak80 = sourced_motor("cubemars_ak80_9_v3")
     assert ak80.gear_ratio == 9.0
     assert "OUTPUT" in ak80.notes
+
+
+# --- the wider pool, its grades and its conditions ---------------------------
+
+def test_the_pool_covers_several_manufacturers_and_both_paths():
+    from drivetrain.sourced import PartGrade
+
+    makers = {motor.manufacturer for motor in SOURCED_MOTORS}
+    assert len(SOURCED_MOTORS) >= 14
+    assert {"ROBOTIS", "CubeMars", "Kollmorgen", "maxon", "mjbots",
+            "DAMIAO"} <= makers
+    assert len(SOURCED_GEARBOXES) >= 7
+    assert {g.family.value for g in SOURCED_GEARBOXES if g.family} >= {
+        "planetary", "harmonic", "cycloidal"}
+    assert {m.grade for m in SOURCED_MOTORS} >= {PartGrade.INDUSTRIAL,
+                                                PartGrade.ROBOTICS_MODULE}
+
+
+def test_a_distributor_listing_is_labelled_as_one():
+    """A retailer's page is a document and it is not a data sheet."""
+    from drivetrain.sourced import DocumentKind, sourced_motor
+
+    damiao = sourced_motor("damiao_dm_j8009_2ec")
+    assert damiao.documents[0].kind is DocumentKind.DISTRIBUTOR_PAGE
+    assert "DISTRIBUTOR" in damiao.notes
+    robotis = sourced_motor("robotis_ph54_200_s500_r")
+    assert robotis.documents[0].kind is DocumentKind.MANUFACTURER_MANUAL
+
+
+def test_every_peak_carries_its_condition_or_says_it_has_none():
+    for motor in SOURCED_MOTORS:
+        assert motor.peak_torque_condition.strip()
+        if motor.peak_torque_nm is None:
+            lowered = motor.peak_torque_condition.lower()
+            assert ("no peak" in lowered or "stall" in lowered
+                    or "not stated" in lowered), motor.id
+    from drivetrain.sourced import sourced_motor
+    assert "less than 1 second" in sourced_motor(
+        "mjbots_qdd100_beta3").peak_torque_condition
+    assert "25 C winding" in sourced_motor(
+        "kollmorgen_tbm_6051_a").peak_torque_condition
+
+
+def test_a_stall_torque_is_not_stored_as_a_rating():
+    """The XM540 page prints a stall torque and no continuous one, so the
+    entry has no nominal torque at all and cannot be selected on."""
+    from drivetrain.sourced import sourced_motor
+
+    servo = sourced_motor("robotis_xm540_w270")
+    assert servo.nominal_torque_nm is None
+    assert servo.stall_torque_nm == 10.6
+    assert servo.bus_voltage_v == 12.0
+    assert "not a continuous rating" in servo.peak_torque_condition
+
+
+def test_the_bus_voltage_is_stored_with_the_figures_it_belongs_to():
+    from drivetrain.sourced import sourced_motor
+
+    assert sourced_motor("robotis_ph54_200_s500_r").bus_voltage_v == 24.0
+    assert sourced_motor("cubemars_ak80_64_kv80").bus_voltage_v == 48.0
+    assert sourced_motor("mjbots_qdd100_beta3").bus_voltage_v == 36.0

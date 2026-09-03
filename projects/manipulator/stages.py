@@ -185,7 +185,10 @@ GEARBOX_CANDIDATES = ("apex_af042_ratio20", "apex_af042_ratio50",
                       "harmonic_csf_17_100_2uh", "harmonic_csf_25_50_2uh",
                       "nabtesco_rv_42n")
 INTEGRATED_CANDIDATES = ("cubemars_ak80_9_v3", "cubemars_ak70_10_kv100",
-                         "cubemars_ak10_9_v2_kv60", "cubemars_ak80_64_kv80")
+                         "cubemars_ak10_9_v2_kv60", "cubemars_ak80_64_kv80",
+                         "cubemars_ak80_8_kv60", "robotis_ph54_200_s500_r",
+                         "robotis_ph42_020_s300_r", "robotis_xm540_w270",
+                         "mjbots_qdd100_beta3", "damiao_dm_j8009_2ec")
 
 #: A joint of this arm must turn 90 degrees in two seconds, so its peak speed
 #: is 1.5 times the average. Anything slower cannot do the move whatever its
@@ -196,7 +199,8 @@ def required_joint_speed_rad_s(spec: ManipulatorSpec) -> float:
 
 def _candidate_rows(required_rms: float, required_peak: float,
                     required_speed: float, load_inertia_kg_m2: float,
-                    max_inertia_ratio: float = 10.0) -> list[dict]:
+                    max_inertia_ratio: float = 10.0,
+                    bus_voltage_v: float | None = None) -> list[dict]:
     """Every drive option for one joint, priced the same way.
 
     Returns a row per candidate whether it passes or not, because the point of
@@ -250,6 +254,10 @@ def _candidate_rows(required_rms: float, required_peak: float,
             rows.append({
                 "path": "motor and gearbox",
                 "candidate": f"{motor_id} + {gearbox_id}",
+                "grade": f"{sourced_motor(motor_id).grade.value} motor, "
+                         f"{entry.grade.value} gear unit",
+                "bus_voltage_v": sourced_motor(motor_id).bus_voltage_v,
+                "peak_condition": sourced_motor(motor_id).peak_torque_condition,
                 "ratio": gearbox.ratio,
                 "mass_kg": motor.mass_kg + gearbox.mass_kg,
                 "rms_capability_nm": min(output_rms, gearbox_limited_rms),
@@ -270,9 +278,18 @@ def _candidate_rows(required_rms: float, required_peak: float,
         rated, peak = actuator.nominal_torque_nm, actuator.peak_torque_nm
         speed = actuator.nominal_speed_rad_s
         reasons = []
-        if rated is None or peak is None:
-            reasons.append("no rated or peak torque printed")
-        else:
+        if (bus_voltage_v is not None and actuator.bus_voltage_v is not None
+                and abs(actuator.bus_voltage_v - bus_voltage_v) > 1e-9):
+            reasons.append(
+                f"its figures are printed at {actuator.bus_voltage_v:.0f} V "
+                f"and this arm runs one {bus_voltage_v:.0f} V bus")
+        if rated is None:
+            reasons.append("no continuous torque printed"
+                           + (" (a stall torque is printed and is not one)"
+                              if actuator.stall_torque_nm else ""))
+        if peak is None:
+            reasons.append("no peak torque printed")
+        if rated is not None and peak is not None:
             if rated < required_rms:
                 reasons.append(f"rated {rated:.1f} N m")
             if peak < required_peak:
@@ -287,6 +304,9 @@ def _candidate_rows(required_rms: float, required_peak: float,
                 reasons.append(f"inertia ratio {ratio_of_inertias:.0f}")
         rows.append({
             "path": "integrated actuator", "candidate": part_id,
+            "grade": actuator.grade.value,
+            "bus_voltage_v": actuator.bus_voltage_v,
+            "peak_condition": actuator.peak_torque_condition,
             "ratio": ratio, "mass_kg": actuator.mass_kg,
             "rms_capability_nm": rated, "peak_capability_nm": peak,
             "output_speed_rad_s": speed,
@@ -318,6 +338,9 @@ def _candidate_rows(required_rms: float, required_peak: float,
                 f"reduction, in a number")
         rows.append({
             "path": "direct drive", "candidate": motor_id, "ratio": 1.0,
+            "grade": sourced_motor(motor_id).grade.value,
+            "bus_voltage_v": sourced_motor(motor_id).bus_voltage_v,
+            "peak_condition": sourced_motor(motor_id).peak_torque_condition,
             "mass_kg": motor.mass_kg,
             "rms_capability_nm": motor.continuous_torque_nm,
             "peak_capability_nm": motor.peak_torque_nm,
@@ -351,7 +374,8 @@ def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
         inertia = load_inertias.get(row["joint"], 0.01)
         candidates = _candidate_rows(required_rms, required_peak,
                                      required_speed, inertia,
-                                     spec.max_inertia_ratio)
+                                     spec.max_inertia_ratio,
+                                     spec.bus_voltage_v)
         result.data.setdefault("candidates", {})[row["joint"]] = candidates
         feasible = [c for c in candidates if c["feasible"]]
         best = min(feasible, key=lambda c: c["mass_kg"]) if feasible else None
@@ -366,7 +390,9 @@ def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
                                          list(reasons.items())[:3])[:300]})
         else:
             out.update({"selected": best["candidate"], "status": "selected",
-                        "path": best["path"], "ratio": best["ratio"],
+                        "path": best["path"], "grade": best.get("grade"),
+                        "peak_condition": best.get("peak_condition"),
+                        "ratio": best["ratio"],
                         "mass_kg": best["mass_kg"],
                         "rated_nm": best["rms_capability_nm"],
                         "peak_nm": best["peak_capability_nm"],
@@ -966,4 +992,37 @@ def compliance_stage(arm: Assembly, drivetrain: StageResult,
         "The integrated actuators print a backlash and no torsional "
         "stiffness, so joints driven by them have a position uncertainty here "
         "and no compliance figure at all.")
+    return result
+
+
+# ------------------------------------- 3e. the bus voltage as a design choice
+
+def bus_voltage_stage(dynamics: StageResult, load_inertias: dict[str, float],
+                      spec: ManipulatorSpec = SPEC,
+                      voltages=(24.0, 36.0, 48.0)) -> StageResult:
+    """The same joints selected on each candidate bus voltage.
+
+    The arm runs one bus, and a module's printed performance belongs to the
+    voltage it was printed at. That makes the bus a design decision with a
+    mass consequence, not a wiring detail, and this stage prices it.
+    """
+    from dataclasses import replace
+
+    result = StageResult(name="bus voltage")
+    for voltage in voltages:
+        variant = replace(spec, bus_voltage_v=voltage)
+        drives = drivetrain_stage(dynamics, variant, load_inertias)
+        selected = [row for row in drives.rows if row.get("status") == "selected"]
+        mass = sum(row["mass_kg"] for row in selected)
+        result.rows.append({
+            "bus_voltage_v": voltage,
+            "joints_driven": len(selected),
+            "joints_without_a_drive": len(drives.rows) - len(selected),
+            "drive_mass_kg": mass if selected else None,
+            "grades": ", ".join(sorted({str(row.get("grade")) for row in selected})),
+            "parts": ", ".join(sorted({row["selected"] for row in selected}))[:110]})
+    result.notes.append(
+        "a module printed at another voltage is refused rather than scaled: "
+        "torque and speed both move with the bus and the pages do not "
+        "tabulate the arm's voltage for every part")
     return result

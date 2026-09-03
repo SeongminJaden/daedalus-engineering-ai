@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from drivetrain.gearboxes.catalog import GearboxFamily, GearboxSpec
@@ -49,12 +50,40 @@ class MissingDatasheetValue(ValueError):
     """A conversion needs a number the manufacturer's page did not print."""
 
 
+class DocumentKind(str, Enum):
+    """How close the document is to the manufacturer.
+
+    A distributor's listing is a document and it is not a data sheet. Values
+    read from one are stored with this tag so a comparison table can show
+    where each number came from rather than treating them as equal.
+    """
+
+    MANUFACTURER_DATASHEET = "manufacturer_datasheet"
+    MANUFACTURER_PAGE = "manufacturer_page"
+    MANUFACTURER_MANUAL = "manufacturer_manual"
+    DISTRIBUTOR_PAGE = "distributor_page"
+
+
+class PartGrade(str, Enum):
+    """What kind of part this is, so unlike things do not compete as like.
+
+    A hobby servo and an industrial gear unit can carry the same torque
+    number and mean very different things by it. The selection prints the
+    grade of whatever it chose.
+    """
+
+    INDUSTRIAL = "industrial"
+    ROBOTICS_MODULE = "robotics_module"
+    HOBBY = "hobby"
+
+
 @dataclass(frozen=True)
 class SourceDocument:
     publisher: str
     title: str
     url: str
     read_on: str                    # ISO date
+    kind: DocumentKind = DocumentKind.MANUFACTURER_PAGE
 
 
 @dataclass(frozen=True)
@@ -76,6 +105,15 @@ class SourcedPart:
     documents: list[SourceDocument]
     value_sources: list[ValueSource] = field(default_factory=list)
     notes: str = ""
+    grade: PartGrade = PartGrade.ROBOTICS_MODULE
+    #: The bus voltage the stored performance figures belong to. A module
+    #: rated at 24 V and at 48 V is two sets of numbers, and storing one set
+    #: without its voltage is how a 24 V figure ends up in a 48 V design.
+    bus_voltage_v: float | None = None
+    #: What the printed peak torque is qualified by: a duration, a duty, a
+    #: temperature. "not stated" is itself a finding and is shown in the
+    #: selection.
+    peak_torque_condition: str = "not stated on the cited document"
 
     def sourced_fields(self) -> set[str]:
         return {v.field for v in self.value_sources}
@@ -95,7 +133,8 @@ class SourcedPart:
                     f"is empty")
         for name, value in self.__dict__.items():
             if name in ("id", "manufacturer", "part_number", "documents",
-                        "value_sources", "notes"):
+                        "value_sources", "notes", "grade", "bus_voltage_v",
+                        "peak_torque_condition"):
                 continue
             if value is not None and name not in self.sourced_fields():
                 raise ValueError(
@@ -263,6 +302,42 @@ CUBEMARS_AK80_64 = SourceDocument(
     url="https://www.cubemars.com/goods-1143-AK80-64.html",
     read_on="2026-09-04")
 
+ROBOTIS_PH54 = SourceDocument(
+    publisher="ROBOTIS",
+    title="Dynamixel PH54-200-S500-R e-Manual specifications table",
+    url="https://emanual.robotis.com/docs/en/dxl/p/ph54-200-s500-r/",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_MANUAL)
+
+ROBOTIS_PH42 = SourceDocument(
+    publisher="ROBOTIS",
+    title="Dynamixel PH42-020-S300-R e-Manual specifications table",
+    url="https://emanual.robotis.com/docs/en/dxl/p/ph42-020-s300-r/",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_MANUAL)
+
+ROBOTIS_XM540 = SourceDocument(
+    publisher="ROBOTIS",
+    title="Dynamixel XM540-W270 e-Manual specifications table",
+    url="https://emanual.robotis.com/docs/en/dxl/x/xm540-w270/",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_MANUAL)
+
+CUBEMARS_AK80_8 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK80-8 KV60 robotic actuator product page",
+    url="https://www.cubemars.com/product/ak80-8-kv60-robotic-actuator.html",
+    read_on="2026-09-04")
+
+MJBOTS_QDD100 = SourceDocument(
+    publisher="mjbots",
+    title="qdd100 beta 3 servo product page",
+    url="https://mjbots.com/products/qdd100-beta-3",
+    read_on="2026-09-04")
+
+DAMIAO_J8009 = SourceDocument(
+    publisher="DAMIAO, via a distributor listing",
+    title="DM-J8009-2EC integrated joint motor listing",
+    url="https://www.dronegearup.com/products/damiao-dm-j8009-2ec-24-v-20-n-m-9-1-98-mm-od-dual-encoder-integrated-robot-motor-with-can-1-mbps/",
+    read_on="2026-09-04", kind=DocumentKind.DISTRIBUTOR_PAGE)
+
 KOLLMORGEN_TBM = SourceDocument(
     publisher="Kollmorgen",
     title="TBM(S) frameless motor selection guide, TBM 60 series performance "
@@ -298,6 +373,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         id="maxon_ec_i_40_100w_48v",
         manufacturer="maxon", part_number="EC-i 40, 100 W, 48 V",
         documents=[MAXON_EC_I_40],
+        grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
+        peak_torque_condition="no peak torque is printed; the stall torque is not one",
         nominal_voltage_v=48.0,
         nominal_torque_nm=224.0 * MNM_TO_NM,
         stall_torque_nm=2080.0 * MNM_TO_NM,
@@ -327,6 +404,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         id="cubemars_ak80_9_v3",
         manufacturer="CubeMars", part_number="AK80-9 V3.0 KV100",
         documents=[CUBEMARS_AK80_9],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
         nominal_torque_nm=9.0,
         peak_torque_nm=22.0,
@@ -359,6 +438,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         id="cubemars_ak10_9_v2_kv60",
         manufacturer="CubeMars", part_number="AK10-9 V2.0 KV60",
         documents=[CUBEMARS_AK10_9],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
         nominal_torque_nm=18.0,
         peak_torque_nm=48.0,
@@ -390,12 +471,175 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "it. The two speed figures are the 24 V and 48 V values and "
                "the 48 V one is stored. Backlash is printed in degrees and "
                "stored in arc minutes.")),
+    # --- smart actuator modules the robotics industry actually uses ---------
+    SourcedMotor(
+        id="robotis_ph54_200_s500_r",
+        manufacturer="ROBOTIS", part_number="Dynamixel PH54-200-S500-R",
+        documents=[ROBOTIS_PH54],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=24.0,
+        peak_torque_condition="no peak torque is printed; the continuous "
+                              "figure is calculated from the core motor and "
+                              "the manual points to a performance graph",
+        nominal_voltage_v=24.0,
+        nominal_torque_nm=44.7,
+        no_load_speed_rad_s=33.1 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=33.1 * RPM_TO_RAD_S,
+        mass_kg=0.855,
+        gear_ratio=501.923,
+        backlash_arcmin=6.0,
+        rated_current_a=9.3,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Input Voltage 24.0 V", ROBOTIS_PH54.title),
+            ValueSource("nominal_torque_nm", "Continuous Torque 44.7 N.m at 24 V", ROBOTIS_PH54.title),
+            ValueSource("no_load_speed_rad_s", "No Load Speed 33.1 rev/min", ROBOTIS_PH54.title),
+            ValueSource("nominal_speed_rad_s", "No Load Speed 33.1 rev/min, used as the rated speed because no separate rated speed is printed", ROBOTIS_PH54.title),
+            ValueSource("mass_kg", "Weight 855 g", ROBOTIS_PH54.title),
+            ValueSource("gear_ratio", "Gear Ratio 501.923 : 1", ROBOTIS_PH54.title),
+            ValueSource("backlash_arcmin", "Backlash < 6 arcmin, 0.1 degrees", ROBOTIS_PH54.title),
+            ValueSource("rated_current_a", "Continuous Current 9.3 A", ROBOTIS_PH54.title),
+        ],
+        notes=("Integrated actuator. No peak torque and no rotor inertia are "
+               "printed, so it can be selected on continuous torque and "
+               "cannot be selected where a peak matters, and its reflected "
+               "inertia cannot be computed at all.")),
+    SourcedMotor(
+        id="robotis_ph42_020_s300_r",
+        manufacturer="ROBOTIS", part_number="Dynamixel PH42-020-S300-R",
+        documents=[ROBOTIS_PH42],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=24.0,
+        peak_torque_condition="no peak torque is printed",
+        nominal_voltage_v=24.0,
+        nominal_torque_nm=5.1,
+        no_load_speed_rad_s=32.7 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=32.7 * RPM_TO_RAD_S,
+        mass_kg=0.340,
+        gear_ratio=303.75,
+        backlash_arcmin=6.0,
+        rated_current_a=1.5,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Input Voltage 24.0 V", ROBOTIS_PH42.title),
+            ValueSource("nominal_torque_nm", "Continuous Torque 5.1 N.m", ROBOTIS_PH42.title),
+            ValueSource("no_load_speed_rad_s", "No Load Speed 32.7 rev/min", ROBOTIS_PH42.title),
+            ValueSource("nominal_speed_rad_s", "No Load Speed 32.7 rev/min, used as the rated speed because none is printed", ROBOTIS_PH42.title),
+            ValueSource("mass_kg", "Weight 340 g", ROBOTIS_PH42.title),
+            ValueSource("gear_ratio", "Gear Ratio 303.75:1", ROBOTIS_PH42.title),
+            ValueSource("backlash_arcmin", "Backlash < 6 arcmin, 0.1 degrees", ROBOTIS_PH42.title),
+            ValueSource("rated_current_a", "Continuous Current 1.5 A", ROBOTIS_PH42.title),
+        ],
+        notes="Integrated actuator, same gaps as the PH54."),
+    SourcedMotor(
+        id="robotis_xm540_w270",
+        manufacturer="ROBOTIS", part_number="Dynamixel XM540-W270",
+        documents=[ROBOTIS_XM540],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=12.0,
+        peak_torque_condition="the printed figure is a STALL torque at 12.0 V "
+                              "and 4.4 A, which is not a continuous rating "
+                              "and not a peak rating with a duration",
+        nominal_voltage_v=12.0,
+        stall_torque_nm=10.6,
+        no_load_speed_rad_s=30.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=30.0 * RPM_TO_RAD_S,
+        mass_kg=0.165,
+        gear_ratio=272.5,
+        backlash_arcmin=15.0,
+        rated_current_a=4.4,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Operating Voltage 10.0 ~ 14.8 V, recommended 12.0 V", ROBOTIS_XM540.title),
+            ValueSource("stall_torque_nm", "Stall Torque 10.6 N.m at 12.0 V, 4.4 A", ROBOTIS_XM540.title),
+            ValueSource("no_load_speed_rad_s", "No Load Speed 30 rev/min at 12.0 V", ROBOTIS_XM540.title),
+            ValueSource("nominal_speed_rad_s", "No Load Speed 30 rev/min at 12.0 V", ROBOTIS_XM540.title),
+            ValueSource("mass_kg", "Weight 165 g", ROBOTIS_XM540.title),
+            ValueSource("gear_ratio", "Gear Ratio 272.5 : 1", ROBOTIS_XM540.title),
+            ValueSource("backlash_arcmin", "Backlash 15 arcmin, 0.25 degrees", ROBOTIS_XM540.title),
+            ValueSource("rated_current_a", "4.4 A at the 12.0 V stall point", ROBOTIS_XM540.title),
+        ],
+        notes=("A stall torque is not a continuous rating and this entry "
+               "therefore has NO nominal torque at all, which is why the "
+               "selection cannot use it: sizing a joint on a stall figure is "
+               "how a servo gets cooked. The 11.1 V and 14.8 V rows exist too "
+               "and only the 12 V one is stored, with its voltage.")),
+    SourcedMotor(
+        id="cubemars_ak80_8_kv60",
+        manufacturer="CubeMars", part_number="AK80-8 KV60",
+        documents=[CUBEMARS_AK80_8],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        nominal_voltage_v=48.0, nominal_torque_nm=10.0, peak_torque_nm=25.0,
+        no_load_speed_rad_s=360.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=243.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=1232.6191 * GCM2_TO_KG_M2,
+        torque_constant_nm_a=0.199, mass_kg=0.570, gear_ratio=8.0,
+        backlash_arcmin=0.38 * 60.0, rated_current_a=6.9, peak_current_a=21.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Rated Voltage 48V", CUBEMARS_AK80_8.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 10 Nm", CUBEMARS_AK80_8.title),
+            ValueSource("peak_torque_nm", "Peak Torque 25 Nm", CUBEMARS_AK80_8.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 360 rpm", CUBEMARS_AK80_8.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 243 rpm", CUBEMARS_AK80_8.title),
+            ValueSource("rotor_inertia_kg_m2", "Rotor Inertia 1232.6191 gcm2", CUBEMARS_AK80_8.title),
+            ValueSource("torque_constant_nm_a", "Kt 0.199 Nm/A", CUBEMARS_AK80_8.title),
+            ValueSource("mass_kg", "Weight 570 g", CUBEMARS_AK80_8.title),
+            ValueSource("gear_ratio", "Reduction Ratio 8:1", CUBEMARS_AK80_8.title),
+            ValueSource("backlash_arcmin", "Backlash 0.38 degrees", CUBEMARS_AK80_8.title),
+            ValueSource("rated_current_a", "Rated Current 6.9 A", CUBEMARS_AK80_8.title),
+            ValueSource("peak_current_a", "Peak Current 21 A", CUBEMARS_AK80_8.title),
+        ],
+        notes="Integrated actuator; the peak is printed without a duration."),
+    SourcedMotor(
+        id="mjbots_qdd100_beta3",
+        manufacturer="mjbots", part_number="qdd100 beta 3",
+        documents=[MJBOTS_QDD100],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=36.0,
+        peak_torque_condition="16 Nm for less than 1 second, printed with "
+                              "that duration",
+        nominal_voltage_v=36.0, nominal_torque_nm=3.3, peak_torque_nm=16.0,
+        mass_kg=0.507,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "10-44V input range; 36 V is the voltage the speed figure is stated at", MJBOTS_QDD100.title),
+            ValueSource("nominal_torque_nm", "3.3 Nm indefinite", MJBOTS_QDD100.title),
+            ValueSource("peak_torque_nm", "16 Nm (< 1s)", MJBOTS_QDD100.title),
+            ValueSource("mass_kg", "507 g", MJBOTS_QDD100.title),
+        ],
+        notes=("The gear ratio, the rotor inertia and the rated speed are not "
+               "printed on this page, so this module cannot be checked for "
+               "speed or for reflected inertia and the selection says so. Its "
+               "peak carries a duration, which most of the others do not.")),
+    SourcedMotor(
+        id="damiao_dm_j8009_2ec",
+        manufacturer="DAMIAO", part_number="DM-J8009-2EC",
+        documents=[DAMIAO_J8009],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=24.0,
+        peak_torque_condition="no duration or duty is printed on this listing",
+        nominal_voltage_v=24.0, nominal_torque_nm=20.0, peak_torque_nm=40.0,
+        nominal_speed_rad_s=100.0 * RPM_TO_RAD_S,
+        no_load_speed_rad_s=100.0 * RPM_TO_RAD_S,
+        mass_kg=0.896, gear_ratio=9.0,
+        rated_current_a=20.0, peak_current_a=50.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Nominal Voltage 24V", DAMIAO_J8009.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 20 Nm", DAMIAO_J8009.title),
+            ValueSource("peak_torque_nm", "Peak Torque 40 Nm", DAMIAO_J8009.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 100 rpm", DAMIAO_J8009.title),
+            ValueSource("no_load_speed_rad_s", "Rated Speed 100 rpm, no separate no load figure is printed", DAMIAO_J8009.title),
+            ValueSource("mass_kg", "Weight approximately 896 g", DAMIAO_J8009.title),
+            ValueSource("gear_ratio", "9:1 gear ratio", DAMIAO_J8009.title),
+            ValueSource("rated_current_a", "Nominal Current 20A", DAMIAO_J8009.title),
+            ValueSource("peak_current_a", "Peak Current 50A", DAMIAO_J8009.title),
+        ],
+        notes=("Read from a DISTRIBUTOR listing, not from a manufacturer data "
+               "sheet, and the document kind says so. No rotor inertia is "
+               "printed. The listing also mentions 48 V operation with "
+               "different figures, which are not stored because they are not "
+               "tabulated.")),
+
     # --- frameless motors for the geared path -------------------------------
     # These print a continuous AND a peak torque, which is what a motor needs
     # to be selectable; the maxon page above prints a stall torque instead and
     # is refused for it.
     SourcedMotor(
         id="kollmorgen_tbm_6013_a",
+        grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
+        peak_torque_condition="peak STALL torque at a 25 C winding "
+                              "temperature, printed with that condition",
         manufacturer="Kollmorgen", part_number="TBM(S)-6013-A",
         documents=[KOLLMORGEN_TBM],
         nominal_voltage_v=48.0,
@@ -426,6 +670,9 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "the speed check conservative.")),
     SourcedMotor(
         id="kollmorgen_tbm_6025_a",
+        grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
+        peak_torque_condition="peak STALL torque at a 25 C winding "
+                              "temperature, printed with that condition",
         manufacturer="Kollmorgen", part_number="TBM(S)-6025-A",
         documents=[KOLLMORGEN_TBM],
         nominal_voltage_v=48.0,
@@ -451,6 +698,9 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         notes="Frameless, same caveat as the 6013."),
     SourcedMotor(
         id="kollmorgen_tbm_6051_a",
+        grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
+        peak_torque_condition="peak STALL torque at a 25 C winding "
+                              "temperature, printed with that condition",
         manufacturer="Kollmorgen", part_number="TBM(S)-6051-A",
         documents=[KOLLMORGEN_TBM],
         nominal_voltage_v=48.0,
@@ -478,6 +728,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         id="cubemars_ak80_64_kv80",
         manufacturer="CubeMars", part_number="AK80-64 KV80",
         documents=[CUBEMARS_AK80_64],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
         nominal_torque_nm=48.0,
         peak_torque_nm=120.0,
@@ -512,6 +764,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         id="cubemars_ak70_10_kv100",
         manufacturer="CubeMars", part_number="AK70-10 KV100",
         documents=[CUBEMARS_AK70_10],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
         nominal_torque_nm=8.3,
         peak_torque_nm=24.8,
@@ -540,7 +794,7 @@ SOURCED_MOTORS: list[SourcedMotor] = [
 
 SOURCED_GEARBOXES: list[SourcedGearbox] = [
     SourcedGearbox(
-        id="harmonic_csf_17_50_2uh", manufacturer="Harmonic Drive",
+        id="harmonic_csf_17_50_2uh", grade=PartGrade.INDUSTRIAL, manufacturer="Harmonic Drive",
         part_number="CSF-17-50-2UH", documents=[HD_CSF_17_50, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=50.0,
         rated_torque_nm=16.0, repeated_peak_torque_nm=34.0,
@@ -573,7 +827,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
                "breakpoint; K1 (0.81e4) and K2 (1.1e4) are lower and apply at "
                "smaller torques.")),
     SourcedGearbox(
-        id="harmonic_csf_17_100_2uh", manufacturer="Harmonic Drive",
+        id="harmonic_csf_17_100_2uh", grade=PartGrade.INDUSTRIAL, manufacturer="Harmonic Drive",
         part_number="CSF-17-100-2UH", documents=[HD_CSF_17_100, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=100.0,
         rated_torque_nm=24.0, repeated_peak_torque_nm=54.0,
@@ -599,7 +853,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
             ValueSource("family", "cup type harmonic gear unit", HD_CSF_17_100.title),
         ]),
     SourcedGearbox(
-        id="harmonic_csf_25_50_2uh", manufacturer="Harmonic Drive",
+        id="harmonic_csf_25_50_2uh", grade=PartGrade.INDUSTRIAL, manufacturer="Harmonic Drive",
         part_number="CSF-25-50-2UH", documents=[HD_CSF_25_50, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=50.0,
         rated_torque_nm=39.0, repeated_peak_torque_nm=98.0,
@@ -626,7 +880,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
         ]),
     # --- planetary units whose catalogue prints everything a pairing needs ---
     SourcedGearbox(
-        id="apex_af042_ratio50", manufacturer="Apex Dynamics",
+        id="apex_af042_ratio50", grade=PartGrade.INDUSTRIAL, manufacturer="Apex Dynamics",
         part_number="AF042, 2 stage, ratio 50", documents=[APEX_AF],
         family=GearboxFamily.PLANETARY, ratio=50.0,
         rated_torque_nm=22.0,
@@ -658,7 +912,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
                "Backlash is the reduced backlash grade P1; standard P2 is "
                "7 arcmin.")),
     SourcedGearbox(
-        id="apex_af060_ratio50", manufacturer="Apex Dynamics",
+        id="apex_af060_ratio50", grade=PartGrade.INDUSTRIAL, manufacturer="Apex Dynamics",
         part_number="AF060, 2 stage, ratio 50", documents=[APEX_AF],
         family=GearboxFamily.PLANETARY, ratio=50.0,
         rated_torque_nm=60.0,
@@ -683,7 +937,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
         ],
         notes="Same catalogue and the same caveats as the AF042 entry."),
     SourcedGearbox(
-        id="apex_af042_ratio20", manufacturer="Apex Dynamics",
+        id="apex_af042_ratio20", grade=PartGrade.INDUSTRIAL, manufacturer="Apex Dynamics",
         part_number="AF042, 2 stage, ratio 20", documents=[APEX_AF],
         family=GearboxFamily.PLANETARY, ratio=20.0,
         rated_torque_nm=19.0,
@@ -708,7 +962,7 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
         ],
         notes="Same catalogue and the same caveats as the ratio 50 entry."),
     SourcedGearbox(
-        id="nabtesco_rv_42n", manufacturer="Nabtesco",
+        id="nabtesco_rv_42n", grade=PartGrade.INDUSTRIAL, manufacturer="Nabtesco",
         part_number="RV-42N", documents=[NABTESCO_RV_42N],
         family=GearboxFamily.CYCLOIDAL,
         rated_torque_nm=412.0, repeated_peak_torque_nm=1029.0,
