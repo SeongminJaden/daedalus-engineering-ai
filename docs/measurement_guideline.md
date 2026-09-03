@@ -6,6 +6,55 @@ Brain as `PHYSICAL_TEST` evidence through the format below and the checks
 pass, and not before. Until then every result here is SIMULATED or lower, and
 the code says so.
 
+## Where to start: two tests, and the arithmetic behind the choice
+
+Two specimens are enough for a first entry, and the reason for each is a
+number rather than a preference. Both are a printed solid bar, 200 by 20 by
+6 mm, clamped at one end with 150 mm free, loaded by hanging a known mass at
+the free end. Print it flat, in PLA, and weigh and measure it before loading.
+
+**First test: mass and dimensions.** It costs one print, a caliper and a
+kitchen scale, and it validates the two things every later comparison rests
+on. The bar is 24 cm3, which is 29.8 g in PLA. A 0.1 g scale reads that to
+0.34 percent, and a 0.02 mm caliper reads the 6 mm thickness to 0.33 percent.
+Both are far inside any tolerance that matters, so a disagreement here is a
+real disagreement: the printer under-extruded, the infill is not what the
+slicer said, or the density in the table is not the density of this filament.
+Everything downstream inherits that error, and a deflection prediction
+inherits it cubed: 0.33 percent on the thickness is 1.0 percent on the
+deflection.
+
+**Second test: tip deflection under a hanging mass.** It adds a dial gauge
+and a clamp. With 500 g on the 150 mm free length the PLA bar deflects 10.1
+mm, and a 0.01 mm dial gauge resolves that to 0.10 percent. The root stress is
+8.2 MPa against a 53 MPa yield, so the bar is nowhere near failure and the
+test is repeatable. The same bar in 6061 aluminium would deflect 0.53 mm and
+the same gauge would resolve it to 1.9 percent, which is why the first
+specimen should be printed plastic rather than metal: the compliance is the
+signal, and plastic gives fifty times more of it for the same load.
+
+**Why not natural frequency first.** The same bar's first bending mode is
+41 Hz, which a phone accelerometer or a microphone can capture, and frequency
+is measurable to a fraction of a percent, which looks better than the dial
+gauge. It is not a better first test, because the frequency depends on the
+clamp as much as the beam. A soft clamp lowers it and there is no way to
+separate the two from one number, while a deflection test can be repeated at
+three loads and its linearity checked. Frequency belongs in the second round,
+once the clamp itself has been characterised.
+
+**What each result buys.** A mass and dimension agreement inside the process
+tolerance validates the geometry and density path for that part, which is what
+lets the labelled volume and mass carry a PHYSICAL_TEST grade. A deflection
+agreement inside the tolerance below validates one statement: this shape, this
+material, this load case, this direction. It does not validate the solver, the
+family, or the material. Ten of them are ten statements.
+
+**Equipment this assumes.** An FDM printer, a 0.02 mm vernier caliper, a 0.1 g
+kitchen scale, a 0.01 mm dial gauge with a magnetic base, a bench vice or a
+clamped steel block for the root, and known masses. That is the whole list for
+the first round, and it costs less than one CalculiX licence would if
+CalculiX were not free.
+
 ## What is being compared
 
 A part designed here carries labels from a solver (deflection, twist,
