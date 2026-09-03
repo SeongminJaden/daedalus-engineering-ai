@@ -67,12 +67,13 @@ def test_an_unknown_method_is_refused_not_defaulted(op):
         execute("no_such_method", op)
 
 
-def test_the_four_registry_strategies_are_all_executable():
-    """The three from before, and the generative CAD strategy added with
-    the knowledge layer; the routing reasoner reads this set rather than
-    assuming it."""
+def test_the_five_registry_strategies_are_all_executable():
+    """The three from before, the generative CAD strategy added with the
+    knowledge layer, and the free form topology strategy that needs no family
+    at all; the routing reasoner reads this set rather than assuming it."""
     assert executable_methods() == {"parametric_section", COMPLIANCE_METHOD,
-                                    STRESS_METHOD, "generative_cad"}
+                                    STRESS_METHOD, "generative_cad",
+                                    "freeform_topology"}
 
 
 # --- the executors -----------------------------------------------------------

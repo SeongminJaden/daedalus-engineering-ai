@@ -56,7 +56,8 @@ architecture diagram replaced). Not started.
 | 13 | sourced motor and gearbox entries (maxon, CubeMars, Harmonic Drive, Nabtesco) with per value provenance | DONE, first pass |
 | 17 | curved mesh refusals: deeper retry ladder, zero refusals on the two worst cells | DONE |
 | 14 | manufacturing shape: fillet study, fastener features, ISO 2768 and ISO 286 notes, `docs/manufacturing_shape.md` | DONE |
-| 15, 16, 18 | free form generation, LLM policy, material limits | next, in that order |
+| 15 | free form topology strategy, registered and dispatchable, result labelled by CalculiX | DONE |
+| 16, 18 | LLM policy at the documented seam, material limits | next, in that order |
 | 11'-1 | bisection on the volume fraction, judged on the extracted part | DONE, stops at connectivity (0.225, 3.366 kg) not at the limit |
 | 11'-2 | chain rule through the additive support filter | DONE, cost 5.07x to 1.15x, unsupported elements 0.025 to 0 |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |

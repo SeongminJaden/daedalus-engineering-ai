@@ -116,6 +116,28 @@ def build_default_registry() -> MethodRegistry:
               "against a closed form before it is labelled."))
 
     registry.register(Method(
+        name="freeform_topology",
+        category=Category.DESIGN_GENERATION,
+        summary="Optimise a shape with no parametric family, extract it, "
+                "smooth it to a watertight body and label it with CalculiX.",
+        inputs=("engineering_ir", "voxel_domain"),
+        outputs=("part_record", "stl_file"),
+        fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
+        conditions=(_cad_family,),
+        implementation="agent.execution.freeform.run",
+        evidence="SIMULATED",
+        notes="The only generator here that is not a family search: the "
+              "envelope, the load and the supports are the whole input. The "
+              "result is a marching cubes body, not a clean STEP, and its "
+              "volume differs from the density field's by the iso level (about "
+              "12 to 17 percent measured). It is solved with LINEAR "
+              "tetrahedra because second order elements invert on such a "
+              "surface, and linear elements are stiff in bending by a median "
+              "of 10.7 percent, so the deflection is a lower bound and every "
+              "label says so. The rule classifier returns UNKNOWN for the "
+              "result, which is correct: no family describes it."))
+
+    registry.register(Method(
         name="topology_stress",
         category=Category.DESIGN_GENERATION,
         summary="SIMP compliance minimisation carrying an aggregated stress "

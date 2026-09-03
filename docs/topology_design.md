@@ -239,6 +239,25 @@ compliance belonged to a heavier structure than every iterate after it and the
 history appeared to get worse. And a couple is applied as an explicit nodal
 force vector with zero net force, checked against the torque it claims.
 
+## Free form generation: the same pipeline with no family behind it
+
+`agent.execution.freeform` is the fifth executable strategy and the only one
+that is not a family search. It takes the envelope, the load and the supports,
+optimises, drops unattached material, extracts and smooths, meshes and solves,
+and returns a part record whose labels came from CalculiX like any other
+part's. On the demo cantilever at 960 elements it runs in about twenty
+seconds and returns a 4.07 kg body at 4.73e-5 m of loaded face displacement.
+
+Three things about the result are stated in the record rather than left to be
+discovered. Its volume differs from the density field's by the iso level, minus
+17 percent on that run. It is solved with linear tetrahedra, because second
+order elements invert on a marching cubes surface, and linear tetrahedra are
+stiff in bending by a median of 10.7 percent, so the displacement is a lower
+bound. And the shape has no family, so the rule classifier returns UNKNOWN,
+which is correct and which nothing downstream may depend on: the
+manufacturability rules read triangles and work unchanged, and a test checks
+that they do.
+
 ## What this does not fix
 
 The part is still a voxel body. It is blocky, its surface is non-manifold
