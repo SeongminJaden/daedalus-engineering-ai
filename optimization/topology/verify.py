@@ -273,3 +273,53 @@ def format_table(rows: list[dict]) -> str:
             f"{r['part_compliance_j']:.4e} | {r['compliance_ratio']:.2f} | "
             f"{r['peak_von_mises_pa']:.3e} |")
     return "\n".join(lines)
+
+
+@dataclass
+class StressCheck:
+    """What a stress-constrained run claims, next to what a solver reads.
+
+    `physical_peak_verified` is always False and is a field rather than a
+    docstring so that a caller cannot skip it. The peak von Mises at a
+    re-entrant corner is a singularity: it does not converge under refinement,
+    so no number here is the peak stress of the part. What can be said is
+    whether the constrained design's own measure sits under the limit, and
+    what an independent solver reads on the extracted body at a stated mesh.
+    """
+
+    stress_limit_pa: float
+    p_norm: float
+    design_max_relaxed_pa: float
+    extracted_peak_pa: dict            # mesh description to peak von Mises
+    physical_peak_verified: bool = False
+
+    @property
+    def design_satisfies_limit(self) -> bool:
+        return self.design_max_relaxed_pa <= self.stress_limit_pa
+
+    def summary(self) -> str:
+        reads = ", ".join(f"{k} {v / 1e6:.1f} MPa"
+                          for k, v in self.extracted_peak_pa.items())
+        return (f"limit {self.stress_limit_pa / 1e6:.0f} MPa, p-norm "
+                f"{self.p_norm:.3f}, design relaxed peak "
+                f"{self.design_max_relaxed_pa / 1e6:.1f} MPa; extracted part "
+                f"reads {reads}. The peak sits at a re-entrant corner and does "
+                f"not converge under refinement, so none of these is the peak "
+                f"stress of the part.")
+
+
+def stress_check(stress_problem, result, density_kg_m3: float,
+                 thresholds=(0.3, 0.5)) -> StressCheck:
+    """Compare a stress-constrained design with what CalculiX reads on it."""
+    peaks: dict = {}
+    for threshold in thresholds:
+        try:
+            check = verify_extracted(stress_problem.base, result.density, threshold,
+                                     result.final_compliance, density_kg_m3)
+        except DisconnectedAtThreshold:
+            continue
+        peaks[f"voxel mesh at threshold {threshold}"] = check.peak_von_mises_pa
+    return StressCheck(stress_limit_pa=float(stress_problem.stress_limit_pa),
+                       p_norm=float(result.final_p_norm),
+                       design_max_relaxed_pa=float(result.final_max_stress_pa),
+                       extracted_peak_pa=peaks)

@@ -188,3 +188,43 @@ def test_the_compliance_is_the_work_of_the_load(projected):
     again = compliance_from(solution.displacements, loaded,
                             problem.total_load_n, problem.load_direction)
     assert again == pytest.approx(check.part_compliance_j, rel=1e-9)
+
+
+# --- the stress constraint, and what it does not promise ---------------------
+
+@requires_ccx
+def test_a_stress_constrained_design_reports_both_numbers_and_claims_neither():
+    """The p-norm constraint acts on the design's own relaxed measure. The
+    part's peak is a re-entrant corner singularity, so the check reports what
+    each number is and refuses to call any of them the peak stress.
+
+    Measured on the L bracket at 1152 elements: p-norm 0.998, design relaxed
+    peak 37.5 MPa against a 60 MPa limit, the voxel part reads 38.2 MPa, and
+    the smoothed part meshed with linear tetrahedra reads 81.0, 66.2, 70.9 and
+    75.6 MPa at 12, 8, 5 and 3.5 mm while its displacement converges
+    monotonically from 7.40e-4 to 6.82e-4 m. Displacement converges; the peak
+    does not.
+    """
+    from optimization.topology.stress import StressProblem, optimize_constrained
+    from optimization.topology.verify import stress_check
+    from physics.fem.mesh import l_bracket_mesh
+
+    size = 0.4
+    mesh = l_bracket_mesh(size, 0.4, 0.01, 20, nz=2, allow_snapping=True)
+    top = mesh.nodes_where(np.abs(mesh.node_coords[:, 1] - size) < 1e-9)
+    tip = mesh.nodes_where(np.abs(mesh.node_coords[:, 0] - size) < 1e-9)
+    base = SimpProblem(mesh=mesh, youngs_modulus_pa=MATERIAL.youngs_modulus_pa,
+                       poisson_ratio=MATERIAL.poisson_ratio, fixed_nodes=top,
+                       load_nodes=tip, total_load_n=-3000.0, load_direction=1,
+                       volume_fraction=0.4, filter_radius_elements=2.0,
+                       passive_solid=(elements_touching(mesh, tip)
+                                      | elements_touching(mesh, top)))
+    problem = StressProblem(base=base, stress_limit_pa=60e6, p_norm=8.0)
+    result = optimize_constrained(problem, max_iterations=30)
+
+    check = stress_check(problem, result, MATERIAL.density_kg_m3)
+    assert check.physical_peak_verified is False
+    assert check.extracted_peak_pa, "no threshold produced a solvable part"
+    assert "does not converge" in check.summary()
+    assert check.design_max_relaxed_pa > 0.0
+    print("\n" + check.summary())

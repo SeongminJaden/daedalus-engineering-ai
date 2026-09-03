@@ -159,6 +159,36 @@ radius. So on this grid the minimum member size is set by the discretisation
 rather than by the filter, and a real minimum-thickness requirement needs a
 mesh several cells finer than the member, not a larger radius.
 
+## The stress constraint: what it does, and what it cannot promise
+
+`optimization/topology/stress.py` minimises compliance subject to a p-norm
+aggregate of the relaxed element stress. What that constrains is the design's
+own measure on its own discretisation. Whether it caps the part's peak stress
+is a separate question, and the answer is no.
+
+Measured on the L bracket, 1152 elements, 60 MPa limit, p-norm 8:
+
+| quantity | value |
+|---|---|
+| p-norm at the end | 0.998 |
+| design relaxed peak | 37.5 MPa |
+| extracted voxel part, CalculiX | 38.2 MPa |
+| smoothed part, linear tets at 12 mm | 81.0 MPa |
+| at 8 mm | 66.2 MPa |
+| at 5 mm | 70.9 MPa |
+| at 3.5 mm | 75.6 MPa |
+
+The displacement over those four meshes converges monotonically, 7.40e-4 to
+6.82e-4 m. The peak stress does not converge at all: it moves between 66 and
+81 MPa with no trend, on a part whose design measure was 37.5. That is the
+signature of a singularity at the re-entrant corner, and it means no mesh
+refinement will produce the number the constraint was supposed to bound.
+
+`stress_check` therefore returns both numbers and a field named
+`physical_peak_verified` that is always False, so a caller has to see it.
+Using this to certify a part against a stress allowable would be wrong. Using
+it to compare two designs on the same discretisation is what it is for.
+
 ## What this does not fix
 
 The part is still a voxel body. It is blocky, its surface is non-manifold

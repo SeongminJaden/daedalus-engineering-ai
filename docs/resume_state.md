@@ -48,7 +48,8 @@ architecture diagram replaced). Not started.
 | 11a | topology extraction re-verified in CalculiX, passive regions added, `docs/topology_design.md` | DONE |
 | 11b | marching cubes, Taubin smoothing, STL, re-solve with linear tets, DFM on the surface | DONE |
 | 11c | manufacturing projections (symmetry, support, pull) with the price of each measured | DONE |
-| 11d to 11g | multi load, stress constraint measurement, demo, docs | next |
+| 11e | stress constraint measured against CalculiX; the peak does not converge and the check says so | DONE |
+| 11d, 11f, 11g | multi load compliance, end to end demo, README wording | next |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
 | 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
 
