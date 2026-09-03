@@ -16,6 +16,8 @@ pin both the refusal and the fix.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -228,3 +230,41 @@ def test_a_stress_constrained_design_reports_both_numbers_and_claims_neither():
     assert "does not converge" in check.summary()
     assert check.design_max_relaxed_pa > 0.0
     print("\n" + check.summary())
+
+
+# --- the end to end demo, as a smoke test ------------------------------------
+
+@requires_ccx
+def test_the_end_to_end_demo_runs_both_paths(tmp_path):
+    """The demo script wires eight subsystems together, so the thing worth
+    testing is that the wiring holds: a requirement in, a solver verified part
+    from the family path, a re-solved extracted part from the topology path,
+    manufacturability on both, and catalogue fasteners with their sources.
+
+    Run small on purpose. The numbers in docs/demo_end_to_end.md come from the
+    default settings, which take about ninety seconds.
+    """
+    import sys
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]
+                          / "scripts"))
+    import importlib
+    demo = importlib.import_module("demo_end_to_end")
+
+    op = demo.build_optimization_problem(demo.build_mvp_problem())
+    family = demo.family_path(op, tmp_path)
+    assert family["feasible"]
+    assert family["evidence"] == "simulated"
+    assert family["tip_deflection_m"] < family["limit_m"]
+    assert family["dfm"]["grade"] == "rule_based_dfm_guideline"
+
+    topology = demo.topology_path(op, tmp_path, divisions=(16, 6, 3),
+                                  iterations=20)
+    assert topology["elements"] == 16 * 6 * 3
+    assert topology["surface"]["watertight"]
+    assert Path(topology["stl"]).exists()
+    assert topology["dfm"]["rules_measured"] >= 1
+
+    fasteners = demo.fasteners("M6")
+    assert fasteners["screw"]["head_diameter_mm"] == 10.0
+    assert fasteners["screw"]["material"][0] == "steel_scm440"
+    assert "nearest" in fasteners["screw"]["material"][2]

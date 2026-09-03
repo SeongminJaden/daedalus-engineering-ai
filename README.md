@@ -453,6 +453,18 @@ opposite of the 40-part result. The CAD embedding on thirteen families reaches
 0.95 precision at 1 against 0.99 for the plain descriptors. Everything here is
 SURROGATE and cannot decide anything.
 
+**One requirement through both design paths.** `scripts/demo_end_to_end.py`
+takes a forearm link requirement (0.5 m, 196.2 N at the tip, 1 mm deflection
+limit, milled aluminium) and runs it through the family search and through
+topology optimisation, then applies the same checks to both: manufacturability
+rules, catalogue fasteners with their standards, and a statics cross check
+against Gazebo through preloaded joint springs which agrees to 0.03 percent.
+The family path returns a 0.590 kg part at 0.661 mm deflection in four
+seconds. The topology path returns a 5.3 kg part whose extracted compliance is
+0.87 of the field's, and `docs/demo_end_to_end.md` says plainly why the two
+masses are not comparable: a fixed volume compliance minimisation answers a
+different question from a deflection limited mass minimisation.
+
 **Validation ladder (roadmap).** Simulation verification is where the project
 is. Hardware comes next: a part manufactured from an exported STEP file.
 Measurement comes last: a physical test whose evidence is the only thing that
