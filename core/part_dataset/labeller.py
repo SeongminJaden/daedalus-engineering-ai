@@ -142,7 +142,18 @@ def mesh_sizes_for(bounding_box_m: tuple[float, float, float]
 
 #: How much finer to mesh after the solver rejects a mesh, and how often.
 RETRY_FACTOR = 0.7
-MAX_RETRIES = 2
+#: Four retries, not two. Measured on the 70 parts the first industrial run
+#: refused: every one of a nine part sample across all seven affected families
+#: solved within four steps of this ladder, the deepest at 0.7^3 of the fine
+#: target (2.8 to 3.7 mm on parts whose targets were 5.7 to 10.9 mm). Two
+#: retries stopped one step short of most of them.
+MAX_RETRIES = 4
+
+#: When the coarse control mesh has to be refined so far that it is within
+#: this factor of the fine mesh, the two are no longer independent and their
+#: agreement says nothing. The sensitivity is then reported as unavailable
+#: rather than as a small number.
+SENSITIVITY_SIZE_RATIO = 1.25
 
 
 def torque_forces(points: np.ndarray, torque_nm: float, axis: int = 0
@@ -292,7 +303,20 @@ PRIMARY_LABEL = {
 }
 
 
-def _sensitivity(fine: float, coarse: float) -> float:
+def _sensitivity(fine: float, coarse: float,
+                 sizes: tuple[float, float] | None = None) -> float | None:
+    """Relative difference between the two meshes, or None when the two
+    meshes ended up too close in size to be a check on each other.
+
+    Deep retries can drive the coarse control mesh down towards the fine one.
+    Two nearly identical meshes agree by construction, and reporting that
+    agreement as a mesh sensitivity would turn a failure to refine into a
+    quality signal.
+    """
+    if sizes is not None:
+        coarse_size, fine_size = sizes
+        if coarse_size <= fine_size * SENSITIVITY_SIZE_RATIO:
+            return None
     scale = max(abs(fine), 1e-300)
     return abs(fine - coarse) / scale
 
@@ -321,7 +345,12 @@ def cantilever_labels(step_path: str | Path, volume_m3: float,
                  f"{fine_mesh.n_nodes} nodes; coarse control at "
                  f"{coarse_used * 1e3:.2f} mm, {coarse_mesh.n_nodes} nodes"
                  + ("; the mesher or the solver rejected the first mesh and "
-                    "a finer one was used" if retried else ""))
+                    "a finer one was used" if retried else "")
+                 + ("; the two meshes are within "
+                    f"{SENSITIVITY_SIZE_RATIO:.2f} of each other in size, so "
+                    "their agreement is not a mesh sensitivity and none is "
+                    "reported"
+                    if coarse_used <= fine_used * SENSITIVITY_SIZE_RATIO else ""))
 
     primary_name, primary_unit, primary_scaling = PRIMARY_LABEL[case.kind]
     primary_note = {
@@ -345,13 +374,15 @@ def cantilever_labels(step_path: str | Path, volume_m3: float,
         primary_name: label(
             fine_tip, primary_unit, EvidenceKind.SIMULATION, solver,
             note=primary_note + "; " + mesh_note,
-            mesh_sensitivity=_sensitivity(fine_tip, coarse_tip),
+            mesh_sensitivity=_sensitivity(fine_tip, coarse_tip,
+                                          (coarse_used, fine_used)),
             scaling=primary_scaling),
         "max_displacement_m": label(
             fine.max_displacement_magnitude(), "m", EvidenceKind.SIMULATION,
             solver, note=mesh_note,
             mesh_sensitivity=_sensitivity(fine.max_displacement_magnitude(),
-                                          coarse.max_displacement_magnitude()),
+                                          coarse.max_displacement_magnitude(),
+                                          (coarse_used, fine_used)),
             scaling=("expansion" if case.kind is LoadKind.THERMAL_GRADIENT
                      else "inverse_shear_modulus" if case.kind is LoadKind.TORSION
                      else "inverse_modulus")),
@@ -361,7 +392,8 @@ def cantilever_labels(step_path: str | Path, volume_m3: float,
                  "singularity: this value does NOT converge under refinement "
                  "and must not be used to certify anything; " + mesh_note,
             mesh_sensitivity=_sensitivity(fine.max_von_mises_pa(),
-                                          coarse.max_von_mises_pa()),
+                                          coarse.max_von_mises_pa(),
+                                          (coarse_used, fine_used)),
             scaling=("modulus_times_expansion"
                      if case.kind is LoadKind.THERMAL_GRADIENT else "none")),
     }

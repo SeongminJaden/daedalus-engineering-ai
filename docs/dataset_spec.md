@@ -260,6 +260,53 @@ the set did not confuse the descriptors, which is a statement about these
 families being separable by counts and moments, not about descriptors in
 general.
 
+## The 70 refusals, diagnosed and removed
+
+Run 1 refused 70 of 6,500 parts, every one from a family with a hole or a
+boss, all with the same message: CalculiX returned nothing after the retry
+ladder, which is a nonpositive Jacobian in quadratic tetrahedra whose mid side
+nodes sit on a curved face.
+
+Three remedies were measured on the refused parts themselves.
+
+**Linear tetrahedra.** They always solve. They are also biased, and by more
+than the labels can absorb: on fourteen parts that solve both ways at 8 mm,
+the loaded face displacement differs from the quadratic answer by a median of
+10.7 percent and a maximum of 65, and the peak stress by 7.0 and 37. On one
+flange at 3.5 mm the bias was under 1.3 percent, so linear elements are fine
+when the mesh is fine and useless as a same size fallback. Rejected.
+
+**Curvature based sizing** (`points_per_circle`). It rescues every failure
+tried, including one Gmsh could not mesh at all, and it changes the answer.
+On a flange whose uniform meshes agree to 1.3 percent across three
+refinements (loaded face displacement 2.4903, 2.4829 and 2.5143 nanometres),
+the curvature meshes give 3.06 and 2.92, which is 17 to 23 percent off, and
+they move the location of the peak displacement to a hole edge. A remedy that
+changes the answer by twenty percent is not a fallback, whatever it does to
+the failure rate. Rejected as a default.
+
+**A deeper retry ladder.** The ladder was two steps of 0.7. A nine part sample
+across all seven affected families solved within four steps, the deepest at
+0.7 cubed: 2.8 to 3.7 mm on parts whose fine targets were 5.7 to 10.9 mm. So
+the ladder is four steps deep now.
+
+| cell | before | after |
+|---|---|---|
+| flange, bending | 93 labelled, 7 refused, 785 s | 100 labelled, 0 refused, 1104 s |
+| plate with holes, bending | 94 labelled, 6 refused, 735 s | 100 labelled, 0 refused, 718 s |
+
+Zero refusals on both, and the cost is paid by the parts that need it: the
+plate cell got slightly faster, the flange cell 1.4 times slower.
+
+One thing had to be protected. Deep retries can drive the coarse control mesh
+down onto the fine one, and two nearly identical meshes agree by construction.
+When the two sizes end up within a factor of 1.25, the mesh sensitivity is
+reported as unavailable rather than as a small number, so a failure to refine
+cannot masquerade as a quality signal. That is not a rare case: of the 200
+records in the two re-run cells, 43 have no sensitivity for this reason. The
+deeper ladder therefore buys labelled parts at the cost of a quality signal on
+a fifth of them, and both halves of that trade are in the record.
+
 ## What this does not claim
 
 Nothing in it is physically validated. The families are analysis shapes, not

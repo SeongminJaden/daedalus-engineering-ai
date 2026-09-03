@@ -12,6 +12,7 @@ recogniser, which the family now says.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -118,3 +119,54 @@ def test_a_boundary_mesh_failure_is_retried_finer_like_a_solver_rejection(tmp_pa
     text = json.dumps(report.labels)
     assert f"{coarse * 0.7 * 1e3:.2f} mm" in text, text
     assert "was used" in text
+
+
+@requires_cad
+@pytest.mark.skipif(not labelling_available(), reason="gmsh and CalculiX required")
+def test_a_part_the_first_ladder_refused_is_labelled_by_the_deeper_one():
+    """The 70 refusals of the first industrial run were all curved parts whose
+    quadratic mid side nodes CalculiX rejected. A nine part sample across all
+    seven affected families solved within four steps of the 0.7 ladder, the
+    deepest at 0.7 cubed, so the ladder is four steps deep now instead of two.
+
+    Re-running the two worst cells with it: flange 100 labelled and 0 refused
+    against 93 and 7, at 1104 s against 785; plate with holes the same, at
+    about 1.5 times the time. The cost is paid only by the parts that need it.
+    """
+    from core.materials import get_material
+    from core.part_dataset.labeller import (MAX_RETRIES, RETRY_FACTOR, LoadCase,
+                                            cantilever_labels, mesh_sizes_for)
+
+    assert MAX_RETRIES == 4
+    fam = FAMILIES["flange"]
+    rng = np.random.default_rng(0)
+    params = None
+    for _ in range(40):
+        candidate = sample_parameters(fam, rng)
+        if candidate["bolt_count"] >= 6:
+            params = candidate
+            break
+    assert params is not None
+    import tempfile
+    directory = Path(tempfile.mkdtemp())
+    record, _ = make_part(fam, params, directory, labelled=False)
+    step = directory / f"{record.part_id}.step"
+    report = cantilever_labels(step, record.geometry.volume_m3,
+                               record.geometry.bounding_box_m,
+                               get_material("al_7075_t6"), LoadCase(direction=1))
+    assert report.labels["tip_deflection_m"]["value"] != 0.0
+    coarse, fine = mesh_sizes_for(record.geometry.bounding_box_m)
+    deepest = fine * RETRY_FACTOR ** MAX_RETRIES
+    assert deepest < fine * 0.25
+
+
+def test_a_sensitivity_between_two_nearly_equal_meshes_is_not_reported():
+    """Deep retries can drive the coarse control mesh down onto the fine one.
+    Two nearly identical meshes agree by construction, and reporting that as a
+    mesh sensitivity would turn a failure to refine into a quality signal."""
+    from core.part_dataset.labeller import SENSITIVITY_SIZE_RATIO, _sensitivity
+
+    assert _sensitivity(1.0, 1.1) == pytest.approx(0.1)
+    assert _sensitivity(1.0, 1.1, (0.010, 0.005)) == pytest.approx(0.1)
+    assert _sensitivity(1.0, 1.1, (0.0055, 0.005)) is None
+    assert SENSITIVITY_SIZE_RATIO == 1.25

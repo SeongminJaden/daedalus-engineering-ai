@@ -54,7 +54,8 @@ architecture diagram replaced). Not started.
 | 11g | README, KR and DESIGN brought to the measurements | DONE |
 | 12 | trajectories, torque profiles, friction that refuses defaults, gear ratio, three engine cross check | DONE |
 | 13 | sourced motor and gearbox entries (maxon, CubeMars, Harmonic Drive, Nabtesco) with per value provenance | DONE, first pass |
-| 17, 14, 15, 16, 18 | curved mesh refusals, manufacturing STEP, free form, LLM policy, material limits | next, in that order |
+| 17 | curved mesh refusals: deeper retry ladder, zero refusals on the two worst cells | DONE |
+| 14, 15, 16, 18 | manufacturing STEP, free form generation, LLM policy, material limits | next, in that order |
 | 11'-1 | bisection on the volume fraction, judged on the extracted part | DONE, stops at connectivity (0.225, 3.366 kg) not at the limit |
 | 11'-2 | chain rule through the additive support filter | DONE, cost 5.07x to 1.15x, unsupported elements 0.025 to 0 |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
