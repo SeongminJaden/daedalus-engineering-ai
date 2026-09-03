@@ -58,7 +58,7 @@ architecture diagram replaced). Not started.
 | 14 | manufacturing shape: fillet study, fastener features, ISO 2768 and ISO 286 notes, `docs/manufacturing_shape.md` | DONE |
 | 15 | free form topology strategy, registered and dispatchable, result labelled by CalculiX | DONE |
 | 16 | policy seam: rule policy, language model policy behind a caller supplied callable, injection tests | DONE, no API key needed or stored |
-| 18 | material limits: print anisotropy, CFRP failure criterion, brittle materials | next |
+| 18 | material limits: printed anisotropy from two machines, brittle criterion that refuses without Weibull data, laminate criterion checked from the material side | DONE |
 | 11'-1 | bisection on the volume fraction, judged on the extracted part | DONE, stops at connectivity (0.225, 3.366 kg) not at the limit |
 | 11'-2 | chain rule through the additive support filter | DONE, cost 5.07x to 1.15x, unsupported elements 0.025 to 0 |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
