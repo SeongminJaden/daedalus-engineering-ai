@@ -173,97 +173,226 @@ def pinocchio_cross_check(arm: Assembly, spec: ManipulatorSpec = SPEC) -> StageR
 
 # ---------------------------------------------------------- 3. drivetrain
 
-#: What each joint may be built from. The integrated actuator is a whole
-#: joint; the motor and gear unit pairs are components. The rule about not
-#: stacking a gearbox on an integrated actuator is enforced by construction:
-#: the integrated candidate carries no gearbox field at all.
-INTEGRATED_CANDIDATES = ("cubemars_ak80_9_v3",)
-MOTOR_CANDIDATES = ("maxon_ec_i_40_100w_48v",)
-GEARBOX_CANDIDATES = ("harmonic_csf_17_50_2uh", "harmonic_csf_17_100_2uh",
-                      "harmonic_csf_25_50_2uh", "nabtesco_rv_42n")
+#: The three ways a joint can be driven, in the order the design considers
+#: them. The geared path is FIRST: a motor turning fast behind a reduction is
+#: how a joint of this torque is normally built, and the integrated actuator is
+#: one packaged instance of it. Direct drive is included so that the reason it
+#: loses can be a number rather than an assertion.
+MOTOR_CANDIDATES = ("kollmorgen_tbm_6013_a", "kollmorgen_tbm_6025_a",
+                    "kollmorgen_tbm_6051_a", "maxon_ec_i_40_100w_48v")
+GEARBOX_CANDIDATES = ("apex_af042_ratio20", "apex_af042_ratio50",
+                      "apex_af060_ratio50", "harmonic_csf_17_50_2uh",
+                      "harmonic_csf_17_100_2uh", "harmonic_csf_25_50_2uh",
+                      "nabtesco_rv_42n")
+INTEGRATED_CANDIDATES = ("cubemars_ak80_9_v3", "cubemars_ak70_10_kv100",
+                         "cubemars_ak10_9_v2_kv60", "cubemars_ak80_64_kv80")
+
+#: A joint of this arm must turn 90 degrees in two seconds, so its peak speed
+#: is 1.5 times the average. Anything slower cannot do the move whatever its
+#: torque.
+def required_joint_speed_rad_s(spec: ManipulatorSpec) -> float:
+    return 1.5 * spec.move_angle_rad / spec.move_time_s
 
 
-def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC
+def _candidate_rows(required_rms: float, required_peak: float,
+                    required_speed: float, load_inertia_kg_m2: float,
+                    max_inertia_ratio: float = 10.0) -> list[dict]:
+    """Every drive option for one joint, priced the same way.
+
+    Returns a row per candidate whether it passes or not, because the point of
+    the table is to show why the ones that lose, lose.
+    """
+    from drivetrain.sourced import (MissingDatasheetValue, SOURCED_GEARBOXES,
+                                    sourced_gearbox, sourced_motor)
+
+    rows: list[dict] = []
+
+    # --- path (iii): a motor behind a reduction, the primary path ----------
+    for motor_id in MOTOR_CANDIDATES:
+        try:
+            motor = sourced_motor(motor_id).as_motor_spec()
+        except MissingDatasheetValue as exc:
+            rows.append({"path": "motor and gearbox", "candidate": motor_id,
+                         "feasible": False,
+                         "why": f"the motor cannot be specified: "
+                                f"{str(exc).split(';')[0]}"})
+            continue
+        for gearbox_id in GEARBOX_CANDIDATES:
+            entry = sourced_gearbox(gearbox_id)
+            try:
+                gearbox = entry.as_gearbox_spec()
+            except MissingDatasheetValue as exc:
+                rows.append({"path": "motor and gearbox",
+                             "candidate": f"{motor_id} + {gearbox_id}",
+                             "feasible": False,
+                             "why": f"the gear unit cannot be specified: "
+                                    f"{str(exc).split(';')[0]}"})
+                continue
+            output_rms = motor.continuous_torque_nm * gearbox.ratio * gearbox.efficiency
+            output_peak = motor.peak_torque_nm * gearbox.ratio * gearbox.efficiency
+            output_speed = motor.rated_speed_rad_s / gearbox.ratio
+            gearbox_limited_peak = gearbox.peak_output_torque_nm
+            gearbox_limited_rms = gearbox.rated_output_torque_nm
+            reasons = []
+            if output_rms < required_rms:
+                reasons.append(f"motor side continuous {output_rms:.1f} N m")
+            if gearbox_limited_rms < required_rms:
+                reasons.append(f"gear rated {gearbox_limited_rms:.1f} N m")
+            if min(output_peak, gearbox_limited_peak) < required_peak:
+                reasons.append(
+                    f"peak {min(output_peak, gearbox_limited_peak):.1f} N m")
+            if output_speed < required_speed:
+                reasons.append(f"output speed {output_speed:.2f} rad/s")
+            ratio_of_inertias = ((load_inertia_kg_m2 / gearbox.ratio ** 2)
+                                 / motor.rotor_inertia_kg_m2)
+            if ratio_of_inertias > max_inertia_ratio:
+                reasons.append(f"inertia ratio {ratio_of_inertias:.0f}")
+            rows.append({
+                "path": "motor and gearbox",
+                "candidate": f"{motor_id} + {gearbox_id}",
+                "ratio": gearbox.ratio,
+                "mass_kg": motor.mass_kg + gearbox.mass_kg,
+                "rms_capability_nm": min(output_rms, gearbox_limited_rms),
+                "peak_capability_nm": min(output_peak, gearbox_limited_peak),
+                "output_speed_rad_s": output_speed,
+                "reflected_inertia_kg_m2":
+                    load_inertia_kg_m2 / gearbox.ratio ** 2,
+                "inertia_ratio": (load_inertia_kg_m2 / gearbox.ratio ** 2)
+                                 / motor.rotor_inertia_kg_m2,
+                "backlash_arcmin": gearbox.backlash_arcmin,
+                "torsional_stiffness_nm_rad": entry.torsional_stiffness_nm_rad,
+                "feasible": not reasons,
+                "why": "; ".join(reasons)})
+
+    # --- path (ii): an integrated actuator ---------------------------------
+    for part_id in INTEGRATED_CANDIDATES:
+        actuator = sourced_motor(part_id)
+        rated, peak = actuator.nominal_torque_nm, actuator.peak_torque_nm
+        speed = actuator.nominal_speed_rad_s
+        reasons = []
+        if rated is None or peak is None:
+            reasons.append("no rated or peak torque printed")
+        else:
+            if rated < required_rms:
+                reasons.append(f"rated {rated:.1f} N m")
+            if peak < required_peak:
+                reasons.append(f"peak {peak:.1f} N m")
+        if speed is not None and speed < required_speed:
+            reasons.append(f"rated speed {speed:.2f} rad/s")
+        ratio = actuator.gear_ratio or 1.0
+        if actuator.rotor_inertia_kg_m2:
+            ratio_of_inertias = ((load_inertia_kg_m2 / ratio ** 2)
+                                 / actuator.rotor_inertia_kg_m2)
+            if ratio_of_inertias > max_inertia_ratio:
+                reasons.append(f"inertia ratio {ratio_of_inertias:.0f}")
+        rows.append({
+            "path": "integrated actuator", "candidate": part_id,
+            "ratio": ratio, "mass_kg": actuator.mass_kg,
+            "rms_capability_nm": rated, "peak_capability_nm": peak,
+            "output_speed_rad_s": speed,
+            "reflected_inertia_kg_m2": load_inertia_kg_m2 / ratio ** 2,
+            "inertia_ratio": ((load_inertia_kg_m2 / ratio ** 2)
+                              / actuator.rotor_inertia_kg_m2
+                              if actuator.rotor_inertia_kg_m2 else None),
+            "backlash_arcmin": actuator.backlash_arcmin,
+            "torsional_stiffness_nm_rad": None,
+            "feasible": not reasons, "why": "; ".join(reasons)})
+
+    # --- path (i): direct drive, the motor alone ---------------------------
+    for motor_id in MOTOR_CANDIDATES:
+        try:
+            motor = sourced_motor(motor_id).as_motor_spec()
+        except MissingDatasheetValue:
+            continue
+        reasons = []
+        if motor.continuous_torque_nm < required_rms:
+            reasons.append(f"continuous {motor.continuous_torque_nm:.2f} N m "
+                           f"against {required_rms:.1f} required")
+        if motor.peak_torque_nm < required_peak:
+            reasons.append(f"peak {motor.peak_torque_nm:.2f} N m")
+        direct_ratio = load_inertia_kg_m2 / motor.rotor_inertia_kg_m2
+        if direct_ratio > max_inertia_ratio:
+            reasons.append(
+                f"inertia ratio {direct_ratio:.0f} against a limit of "
+                f"{max_inertia_ratio:.0f}: this is the argument for a "
+                f"reduction, in a number")
+        rows.append({
+            "path": "direct drive", "candidate": motor_id, "ratio": 1.0,
+            "mass_kg": motor.mass_kg,
+            "rms_capability_nm": motor.continuous_torque_nm,
+            "peak_capability_nm": motor.peak_torque_nm,
+            "output_speed_rad_s": motor.rated_speed_rad_s,
+            "reflected_inertia_kg_m2": load_inertia_kg_m2,
+            "inertia_ratio": load_inertia_kg_m2 / motor.rotor_inertia_kg_m2,
+            "backlash_arcmin": 0.0,
+            "torsional_stiffness_nm_rad": None,
+            "feasible": not reasons, "why": "; ".join(reasons)})
+    return rows
+
+
+def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
+                     load_inertias: dict[str, float] | None = None
                      ) -> StageResult:
-    """Pick a drive per joint from the sourced catalogue, or say why not."""
-    from drivetrain.sourced import (MissingDatasheetValue, sourced_gearbox,
-                                    sourced_motor)
+    """Pick a drive per joint, geared path first, and keep every candidate.
 
+    The lightest feasible candidate wins, and the row says which path it came
+    from. `data["candidates"]` holds every option that was considered for
+    every joint, which is what the design document prints as the direct drive
+    against geared comparison.
+    """
     result = StageResult(name="drivetrain")
+    required_speed = required_joint_speed_rad_s(spec)
+    load_inertias = load_inertias or {}
     for row in dynamics.rows:
         peak = max(row["peak_trapezoidal_nm"], row["peak_s_curve_nm"])
         rms = max(row["rms_trapezoidal_nm"], row["rms_s_curve_nm"])
         required_peak = peak * spec.torque_margin
         required_rms = rms * spec.torque_margin
-        chosen = None
-        reasons = []
+        inertia = load_inertias.get(row["joint"], 0.01)
+        candidates = _candidate_rows(required_rms, required_peak,
+                                     required_speed, inertia,
+                                     spec.max_inertia_ratio)
+        result.data.setdefault("candidates", {})[row["joint"]] = candidates
+        feasible = [c for c in candidates if c["feasible"]]
+        best = min(feasible, key=lambda c: c["mass_kg"]) if feasible else None
 
-        for part_id in INTEGRATED_CANDIDATES:
-            actuator = sourced_motor(part_id)
-            rated = actuator.nominal_torque_nm
-            actuator_peak = actuator.peak_torque_nm
-            if rated is None or actuator_peak is None:
-                reasons.append(f"{part_id}: no rated or peak torque printed")
-                continue
-            if rated >= required_rms and actuator_peak >= required_peak:
-                chosen = {
-                    "part": part_id, "kind": "integrated actuator",
-                    "ratio": actuator.gear_ratio,
-                    "rated_nm": rated, "peak_nm": actuator_peak,
-                    "mass_kg": actuator.mass_kg,
-                    "rms_margin": rated / max(required_rms, 1e-9),
-                    "peak_margin": actuator_peak / max(required_peak, 1e-9),
-                    "note": "ratings are at the output of its own 9:1 stage; "
-                            "no further gearbox may be stacked on it"}
-                break
-            reasons.append(
-                f"{part_id}: rated {rated:.1f} N m and peak {actuator_peak:.1f} "
-                f"against required {required_rms:.1f} and {required_peak:.1f}")
-
-        if chosen is None:
-            for motor_id in MOTOR_CANDIDATES:
-                for gearbox_id in GEARBOX_CANDIDATES:
-                    try:
-                        motor = sourced_motor(motor_id).as_motor_spec()
-                    except MissingDatasheetValue as exc:
-                        reasons.append(f"{motor_id}: {str(exc).split(';')[0]}")
-                        break
-                    try:
-                        gearbox = sourced_gearbox(gearbox_id).as_gearbox_spec()
-                    except MissingDatasheetValue as exc:
-                        reasons.append(f"{gearbox_id}: {str(exc).split(';')[0]}")
-                        continue
-                    output = motor.continuous_torque_nm * gearbox.ratio * gearbox.efficiency
-                    if output >= required_rms:
-                        chosen = {"part": f"{motor_id} + {gearbox_id}",
-                                  "kind": "motor and gear unit",
-                                  "ratio": gearbox.ratio,
-                                  "rated_nm": output,
-                                  "mass_kg": motor.mass_kg + gearbox.mass_kg}
-                        break
-                if chosen is not None:
-                    break
-
-        row_out = {"joint": row["joint"], "required_rms_nm": required_rms,
-                   "required_peak_nm": required_peak}
-        if chosen is None:
-            row_out.update({"selected": None, "status": "CANNOT SELECT",
-                            "why": "; ".join(dict.fromkeys(reasons))[:300]})
+        out = {"joint": row["joint"], "required_rms_nm": required_rms,
+               "required_peak_nm": required_peak,
+               "required_speed_rad_s": required_speed}
+        if best is None:
+            reasons = {c["candidate"]: c["why"] for c in candidates if c["why"]}
+            out.update({"selected": None, "status": "CANNOT SELECT",
+                        "why": "; ".join(f"{k}: {v}" for k, v in
+                                         list(reasons.items())[:3])[:300]})
         else:
-            row_out.update({"selected": chosen["part"], "status": "selected",
-                            **{k: v for k, v in chosen.items() if k != "part"}})
-        result.rows.append(row_out)
+            out.update({"selected": best["candidate"], "status": "selected",
+                        "path": best["path"], "ratio": best["ratio"],
+                        "mass_kg": best["mass_kg"],
+                        "rated_nm": best["rms_capability_nm"],
+                        "peak_nm": best["peak_capability_nm"],
+                        "rms_margin": best["rms_capability_nm"] / max(required_rms, 1e-9),
+                        "peak_margin": best["peak_capability_nm"] / max(required_peak, 1e-9),
+                        "backlash_arcmin": best["backlash_arcmin"],
+                        "inertia_ratio": best["inertia_ratio"],
+                        "note": ("ratings are at the output of its own stage; "
+                                 "no further gearbox may be stacked on it"
+                                 if best["path"] == "integrated actuator"
+                                 else "motor and gear unit, sized on the "
+                                      "smaller of the motor side and the gear "
+                                      "unit rating")})
+        result.rows.append(out)
 
-    result.could_not.append(
-        "The geared path cannot be selected at all from the sourced "
-        "catalogue. The maxon page prints no peak torque, so the motor entry "
-        "refuses to become a selectable spec, and the Harmonic Drive pages "
-        "print no moment of inertia or efficiency, so the gear units refuse "
-        "too. Filling either in would be inventing a rating.")
     result.notes.append(
-        "the reflected inertia and the matched ratio below are computed for "
-        "the joints that a drive was found for; a joint with no drive has no "
-        "ratio to report")
+        "the geared path is considered first and the lightest feasible "
+        "candidate of any path wins; every candidate, feasible or not, is "
+        "kept so the comparison table can show why the others lost")
+    result.could_not.append(
+        "The Harmonic Drive units still cannot be paired: their catalogue "
+        "gives efficiency as curves against ambient temperature for each "
+        "ratio and input speed at rated torque, with a compensation "
+        "coefficient below rated torque, so there is no single number to "
+        "multiply by and collapsing the curve would be inventing an "
+        "operating point. The maxon motor still prints no peak torque.")
     return result
 
 
@@ -733,4 +862,108 @@ def measurement_plan_stage(spec: ManipulatorSpec, sections,
         "for the person with the printer and the bench, and until a record in "
         "the format of docs/measurement_guideline.md comes back, every number "
         "in this document stays SIMULATED.")
+    return result
+
+
+# --------------------------------- 4b. direct drive against geared, per joint
+
+def drive_comparison_stage(drivetrain: StageResult, spec: ManipulatorSpec = SPEC
+                           ) -> StageResult:
+    """The three paths side by side for every joint, feasible or not.
+
+    One row per path per joint: the lightest candidate of that path, whether
+    it can do the job, and the numbers that decide it. The direct drive row is
+    the one to read: it is usually light and its inertia ratio is usually
+    hundreds, which is the argument for a reduction expressed as a
+    measurement rather than as advice.
+    """
+    result = StageResult(name="drive comparison")
+    for joint, candidates in drivetrain.data.get("candidates", {}).items():
+        for path in ("direct drive", "integrated actuator", "motor and gearbox"):
+            rows = [c for c in candidates if c["path"] == path
+                    and c.get("mass_kg") is not None]
+            if not rows:
+                result.rows.append({"joint": joint, "path": path,
+                                    "best": None,
+                                    "why": "no candidate of this path could "
+                                           "even be specified"})
+                continue
+            feasible = [c for c in rows if c["feasible"]]
+            best = min(feasible or rows, key=lambda c: c["mass_kg"])
+            result.rows.append({
+                "joint": joint, "path": path, "best": best["candidate"],
+                "feasible": best["feasible"],
+                "mass_kg": best["mass_kg"], "ratio": best["ratio"],
+                "rms_margin": (best["rms_capability_nm"]
+                               / max(next(r["required_rms_nm"] for r in
+                                          drivetrain.rows
+                                          if r["joint"] == joint), 1e-9)),
+                "inertia_ratio": best["inertia_ratio"],
+                "backlash_arcmin": best["backlash_arcmin"],
+                "stiffness_nm_rad": best["torsional_stiffness_nm_rad"],
+                "why_not": best["why"][:90]})
+    result.notes.append(
+        "the inertia ratio column is the reflected load inertia over the "
+        "rotor inertia; the design refuses anything above "
+        f"{spec.max_inertia_ratio:.0f}, which is a stated choice and not a "
+        "measurement")
+    return result
+
+
+# ---------------------------- 5b. what the gear data now fills, and what not
+
+def compliance_stage(arm: Assembly, drivetrain: StageResult,
+                     spec: ManipulatorSpec = SPEC) -> StageResult:
+    """Joint compliance and backlash, now that the gear units print them."""
+    import numpy as np
+
+    from core.assembly.kinematics import forward_kinematics
+    from drivetrain.sourced import sourced_gearbox, sourced_motor
+
+    result = StageResult(name="compliance and backlash")
+    pose = forward_kinematics(arm, stretched_pose(spec))
+    tool = pose.tool_position()
+    for row in drivetrain.rows:
+        if row.get("status") != "selected":
+            continue
+        name = row["selected"]
+        stiffness = None
+        backlash = row.get("backlash_arcmin")
+        if "+" in name:
+            gearbox = sourced_gearbox(name.split("+")[1].strip())
+            stiffness = gearbox.torsional_stiffness_nm_rad
+        torque = row["required_rms_nm"] / spec.torque_margin
+        origin = pose.joint_origins[row["joint"]]
+        lever = float(np.linalg.norm(tool - origin))
+        entry = {"joint": row["joint"], "drive": name,
+                 "torque_nm": torque, "lever_m": lever}
+        if stiffness:
+            twist = torque / stiffness
+            entry.update({"stiffness_nm_rad": stiffness,
+                          "twist_under_load_rad": twist,
+                          "tool_error_from_twist_m": twist * lever})
+        else:
+            entry.update({"stiffness_nm_rad": None,
+                          "twist_under_load_rad": None,
+                          "tool_error_from_twist_m": None,
+                          "note": "no torsional stiffness is printed for this "
+                                  "drive, so its compliance is not modelled"})
+        if backlash:
+            backlash_rad = backlash * (np.pi / (180.0 * 60.0))
+            entry.update({"backlash_arcmin": backlash,
+                          "tool_error_from_backlash_m": backlash_rad * lever})
+        result.rows.append(entry)
+    result.notes.append(
+        "backlash is a position uncertainty, not a deflection: the tool can "
+        "sit anywhere inside it and the number below is the width of that "
+        "band at the tool, not an error that a controller can remove")
+    result.could_not.append(
+        "Bearing and seal friction are still not modelled and still refused: "
+        "the gear unit efficiency covers the losses inside the reduction and "
+        "says nothing about the joint bearings, and no source in this "
+        "repository gives their breakaway or viscous coefficients.")
+    result.could_not.append(
+        "The integrated actuators print a backlash and no torsional "
+        "stiffness, so joints driven by them have a position uncertainty here "
+        "and no compliance figure at all.")
     return result

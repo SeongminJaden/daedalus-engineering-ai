@@ -91,9 +91,18 @@ def test_a_motor_without_a_published_peak_is_refused_by_name():
         sourced_motor("maxon_ec_i_40_100w_48v").as_motor_spec()
 
 
-def test_a_gear_unit_without_inertia_or_efficiency_is_refused_by_name():
-    with pytest.raises(MissingDatasheetValue, match="input_inertia_kg_m2"):
-        sourced_gearbox("harmonic_csf_17_50_2uh").as_gearbox_spec()
+def test_a_gear_unit_without_an_efficiency_is_refused_by_name():
+    """The inertia came later from the catalogue rating table. The efficiency
+    did not, and cannot: the catalogue gives it as curves against ambient
+    temperature for each ratio and input speed at rated torque, with about
+    three percent scatter and a compensation coefficient below rated torque.
+    Collapsing that into one number would be inventing an operating point."""
+    gearbox = sourced_gearbox("harmonic_csf_17_50_2uh")
+    assert gearbox.input_inertia_kg_m2 == pytest.approx(7.9e-6)
+    assert gearbox.efficiency is None
+    assert "EFFICIENCY IS NOT A NUMBER" in gearbox.notes
+    with pytest.raises(MissingDatasheetValue, match="efficiency"):
+        gearbox.as_gearbox_spec()
 
 
 def test_a_borrowed_value_needs_its_own_source():
@@ -114,7 +123,8 @@ def test_a_borrowed_value_needs_its_own_source():
 def test_the_gaps_are_reported_rather_than_filled():
     report = unsourced_report()
     assert "peak_torque_nm" in report["motors"]["maxon_ec_i_40_100w_48v"]
-    assert "input_inertia_kg_m2" in report["gearboxes"]["harmonic_csf_17_50_2uh"]
+    assert "efficiency" in report["gearboxes"]["harmonic_csf_17_50_2uh"]
+    assert "input_inertia_kg_m2" in report["gearboxes"]["nabtesco_rv_42n"]
     # The Nabtesco page lists eight ratios and one rated torque, so no single
     # ratio is stored and the caller has to say which one it is using.
     assert "ratio" in report["gearboxes"]["nabtesco_rv_42n"]

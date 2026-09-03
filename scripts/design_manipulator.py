@@ -22,7 +22,8 @@ from core.materials import get_material  # noqa: E402
 from projects.manipulator.arm import build_arm, stretched_pose  # noqa: E402
 from projects.manipulator.loop import run_loop  # noqa: E402
 from projects.manipulator.spec import SPEC  # noqa: E402
-from projects.manipulator.stages import (assembly_stage, drivetrain_stage,  # noqa: E402
+from projects.manipulator.stages import (assembly_stage, compliance_stage,  # noqa: E402
+                                         drive_comparison_stage, drivetrain_stage,
                                          dynamics_stage, fatigue_stage,
                                          features_stage, link_design_stage,
                                          manufacturability_stage,
@@ -83,8 +84,17 @@ def main() -> int:
 
     stages["dynamics"] = dynamics_stage(arm, SPEC)
     stages["pinocchio"] = pinocchio_cross_check(arm, SPEC)
-    stages["drivetrain"] = drivetrain_stage(stages["dynamics"], SPEC)
+    from physics.dynamics import mass_matrix
+    from projects.manipulator.arm import stretched_pose as _pose
+    inertia_matrix = mass_matrix(arm, _pose(SPEC),
+                                 get_material(arm.material_id).density_kg_m3)
+    load_inertias = {joint.name: float(inertia_matrix[i, i])
+                     for i, joint in enumerate(arm.actuated_joints())}
+    stages["drivetrain"] = drivetrain_stage(stages["dynamics"], SPEC,
+                                            load_inertias)
     stages["inertia"] = reflected_inertia_stage(arm, stages["drivetrain"], SPEC)
+    stages["comparison"] = drive_comparison_stage(stages["drivetrain"], SPEC)
+    stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
     print("dynamics and drivetrain done", flush=True)
 
     if not args.skip_links:
@@ -148,6 +158,9 @@ def main() -> int:
         section("2b. The same dynamics in Pinocchio", stages["pinocchio"]),
         section("3. Drive selection from the sourced catalogue", stages["drivetrain"]),
         section("3b. Reflected inertia and the matched ratio", stages["inertia"]),
+        section("3c. Direct drive against geared, per joint", stages["comparison"]),
+        section("3d. Joint compliance and backlash, from the gear data",
+                stages["compliance"]),
     ]
     if "links" in stages:
         document.append(section("4. Each link through both design paths",

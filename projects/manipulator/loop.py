@@ -163,7 +163,11 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
             row["rms_trapezoidal_nm"] = abs(row["rms_trapezoidal_nm"]) + abs(added)
             row["rms_s_curve_nm"] = abs(row["rms_s_curve_nm"]) + abs(added)
 
-        drives = drivetrain_stage(dynamics, spec)
+        from physics.dynamics import mass_matrix
+        inertia_matrix = mass_matrix(arm, q, get_material(arm.material_id).density_kg_m3)
+        load_inertias = {joint.name: float(inertia_matrix[index, index])
+                         for index, joint in enumerate(arm.actuated_joints())}
+        drives = drivetrain_stage(dynamics, spec, load_inertias)
         actuator_masses = {row["joint"]: row.get("mass_kg", 0.0)
                            for row in drives.rows
                            if row.get("status") == "selected"}

@@ -27,7 +27,7 @@ Everything here is SIMULATED or a rule set. No part has been made and no number 
 | tip_deflection_limit_m | 0.001 |
 | torque_margin | 1.3 |
 
-Structure mass 0.914 kg, actuators 1.960 kg, total 2.874 kg. The whole run takes 1.1 minutes.
+Structure mass 0.914 kg, actuators 3.383 kg, total 4.297 kg. The whole run takes 1.1 minutes.
 
 ## 1. The policy layer: sentences to problems
 
@@ -48,9 +48,9 @@ Structure mass 0.914 kg, actuators 1.960 kg, total 2.874 kg. The whole run takes
 
 | actuator_mass_kg | forearm_height_mm | iteration | joints_without_a_drive | shoulder_peak_nm | structure_mass_kg | total_mass_kg | upper_arm_height_mm |
 |---|---|---|---|---|---|---|---|
-| 1.96 | 70 | 0 | 2 | 22.19 | 2.21 | 4.17 | 80 |
-| 1.96 | 20 | 1 | 2 | 27.59 | 0.9141 | 2.874 | 20 |
-| 1.96 | 20 | 2 | 2 | 27.59 | 0.9141 | 2.874 | 20 |
+| 3.743 | 70 | 0 | 0 | 22.19 | 2.21 | 5.953 | 80 |
+| 3.383 | 20 | 1 | 0 | 28.36 | 0.9141 | 4.297 | 20 |
+| 3.383 | 20 | 2 | 0 | 28.36 | 0.9141 | 4.297 | 20 |
 
 Note: converged after 3 iterations: the total mass moved less than 1 g.
 
@@ -85,38 +85,80 @@ Note: two simulations agreeing is a cross validation, not evidence.
 
 ## 3. Drive selection from the sourced catalogue
 
-| joint | kind | mass_kg | note | peak_margin | peak_nm | rated_nm | ratio | required_peak_nm | required_rms_nm | rms_margin | selected | status | why |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| j1_base_yaw | integrated actuator | 0.49 | ratings are at the output of its own 9:1 stage; no further gearbox may be stacked on it | 122.8 | 22 | 9 | 9 | 0.1792 | 0.1111 | 81.03 | cubemars_ak80_9_v3 | selected |  |
-| j2_shoulder |  |  |  |  |  |  |  | 25.59 | 16.46 |  | None | CANNOT SELECT | cubemars_ak80_9_v3: rated 9.0 N m and peak 22.0 against required 16.5 and 25.6; maxon_ec_i_40_100w_48v: maxon_ec_i_40_100w_48v: peak_torque_nm is not printed on any document this entry cites, and a value that was not published will not be invented here |
-| j3_elbow |  |  |  |  |  |  |  | 12.98 | 9.875 |  | None | CANNOT SELECT | cubemars_ak80_9_v3: rated 9.0 N m and peak 22.0 against required 9.9 and 13.0; maxon_ec_i_40_100w_48v: maxon_ec_i_40_100w_48v: peak_torque_nm is not printed on any document this entry cites, and a value that was not published will not be invented here |
-| j4_wrist_roll | integrated actuator | 0.49 | ratings are at the output of its own 9:1 stage; no further gearbox may be stacked on it | 11.41 | 22 | 9 | 9 | 1.928 | 1.07 | 8.414 | cubemars_ak80_9_v3 | selected |  |
-| j5_wrist_pitch | integrated actuator | 0.49 | ratings are at the output of its own 9:1 stage; no further gearbox may be stacked on it | 11.41 | 22 | 9 | 9 | 1.929 | 1.279 | 7.035 | cubemars_ak80_9_v3 | selected |  |
-| j6_tool_roll | integrated actuator | 0.49 | ratings are at the output of its own 9:1 stage; no further gearbox may be stacked on it | 3.582e+05 | 22 | 9 | 9 | 6.142e-05 | 3.337e-05 | 2.697e+05 | cubemars_ak80_9_v3 | selected |  |
+| backlash_arcmin | inertia_ratio | joint | mass_kg | note | path | peak_margin | peak_nm | rated_nm | ratio | required_peak_nm | required_rms_nm | required_speed_rad_s | rms_margin | selected | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 15 | 8.404 | j1_base_yaw | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 122.8 | 22 | 9 | 9 | 0.1792 | 0.1111 | 1.178 | 81.03 | cubemars_ak80_9_v3 | selected |
+| 10.8 | 0.3193 | j2_shoulder | 0.85 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 4.689 | 120 | 48 | 64 | 25.59 | 16.46 | 1.178 | 2.916 | cubemars_ak80_64_kv80 | selected |
+| 10.8 | 0.04671 | j3_elbow | 0.85 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 9.248 | 120 | 48 | 64 | 12.98 | 9.875 | 1.178 | 4.861 | cubemars_ak80_64_kv80 | selected |
+| 15 | 0.002549 | j4_wrist_roll | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 11.41 | 22 | 9 | 9 | 1.928 | 1.07 | 1.178 | 8.414 | cubemars_ak80_9_v3 | selected |
+| 15 | 0.004368 | j5_wrist_pitch | 0.49 | ratings are at the output of its own stage; no further gearbox may be stacked on it | integrated actuator | 11.41 | 22 | 9 | 9 | 1.929 | 1.279 | 1.178 | 7.035 | cubemars_ak80_9_v3 | selected |
+| 0 | 0.3816 | j6_tool_roll | 0.213 | motor and gear unit, sized on the smaller of the motor side and the gear unit rating | direct drive | 2.23e+04 | 1.37 | 0.413 | 1 | 6.142e-05 | 3.337e-05 | 1.178 | 1.238e+04 | kollmorgen_tbm_6013_a | selected |
 
-Note: the reflected inertia and the matched ratio below are computed for the joints that a drive was found for; a joint with no drive has no ratio to report.
+Note: the geared path is considered first and the lightest feasible candidate of any path wins; every candidate, feasible or not, is kept so the comparison table can show why the others lost.
 
-**Could not:** The geared path cannot be selected at all from the sourced catalogue. The maxon page prints no peak torque, so the motor entry refuses to become a selectable spec, and the Harmonic Drive pages print no moment of inertia or efficiency, so the gear units refuse too. Filling either in would be inventing a rating.
+**Could not:** The Harmonic Drive units still cannot be paired: their catalogue gives efficiency as curves against ambient temperature for each ratio and input speed at rated torque, with a compensation coefficient below rated torque, so there is no single number to multiply by and collapsing the curve would be inventing an operating point. The maxon motor still prints no peak torque.
 
 ## 3b. Reflected inertia and the matched ratio
 
-| inertia_ratio | joint | load_inertia_kg_m2 | matched_ratio | ratio | reflected_load_inertia_kg_m2 | rotor_inertia_kg_m2 | status |
-|---|---|---|---|---|---|---|---|
-| 8.404 | j1_base_yaw | 0.07613 | 26.09 | 9 | 0.0009398 | 0.0001118 |  |
-|  | j2_shoulder |  |  |  |  |  | CANNOT SELECT |
-|  | j3_elbow |  |  |  |  |  | CANNOT SELECT |
-| 0.002549 | j4_wrist_roll | 2.309e-05 | 0.4544 | 9 | 2.851e-07 | 0.0001118 |  |
-| 0.004368 | j5_wrist_pitch | 3.957e-05 | 0.5948 | 9 | 4.885e-07 | 0.0001118 |  |
-| 0.0005939 | j6_tool_roll | 5.38e-06 | 0.2193 | 9 | 6.642e-08 | 0.0001118 |  |
+| inertia_ratio | joint | load_inertia_kg_m2 | matched_ratio | ratio | reflected_load_inertia_kg_m2 | rotor_inertia_kg_m2 |
+|---|---|---|---|---|---|---|
+| 8.404 | j1_base_yaw | 0.07613 | 26.09 | 9 | 0.0009398 | 0.0001118 |
+| 0.3193 | j2_shoulder | 0.07384 | 36.17 | 64 | 1.803e-05 | 5.645e-05 |
+| 0.04671 | j3_elbow | 0.0108 | 13.83 | 64 | 2.637e-06 | 5.645e-05 |
+| 0.002549 | j4_wrist_roll | 2.309e-05 | 0.4544 | 9 | 2.851e-07 | 0.0001118 |
+| 0.004368 | j5_wrist_pitch | 3.957e-05 | 0.5948 | 9 | 4.885e-07 | 0.0001118 |
+| 0.3816 | j6_tool_roll | 5.38e-06 | 0.6177 | 1 | 5.38e-06 | 1.41e-05 |
 
 Note: the load inertia is the diagonal of the mass matrix at the rated pose, which is the inertia that joint sees with the others held.
+
+## 3c. Direct drive against geared, per joint
+
+| backlash_arcmin | best | feasible | inertia_ratio | joint | mass_kg | path | ratio | rms_margin | stiffness_nm_rad | why_not |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | kollmorgen_tbm_6013_a | False | 5399 | j1_base_yaw | 0.213 | direct drive | 1 | 3.719 | None | inertia ratio 5399 against a limit of 10: this is the argument for a reduction, in a numbe |
+| 15 | cubemars_ak80_9_v3 | True | 8.404 | j1_base_yaw | 0.49 | integrated actuator | 9 | 81.03 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio50 | True | 2.16 | j1_base_yaw | 1.013 | motor and gearbox | 50 | 174.8 | 1.031e+04 |  |
+| 0 | kollmorgen_tbm_6013_a | False | 5237 | j2_shoulder | 0.213 | direct drive | 1 | 0.02509 | None | continuous 0.41 N m against 16.5 required; peak 1.37 N m; inertia ratio 5237 against a lim |
+| 10.8 | cubemars_ak80_64_kv80 | True | 0.3193 | j2_shoulder | 0.85 | integrated actuator | 64 | 2.916 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio50 | True | 2.095 | j2_shoulder | 1.013 | motor and gearbox | 50 | 1.179 | 1.031e+04 |  |
+| 0 | kollmorgen_tbm_6013_a | False | 765.9 | j3_elbow | 0.213 | direct drive | 1 | 0.04182 | None | continuous 0.41 N m against 9.9 required; peak 1.37 N m; inertia ratio 766 against a limit |
+| 10.8 | cubemars_ak80_64_kv80 | True | 0.04671 | j3_elbow | 0.85 | integrated actuator | 64 | 4.861 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio50 | True | 0.3064 | j3_elbow | 1.013 | motor and gearbox | 50 | 1.966 | 1.031e+04 |  |
+| 0 | kollmorgen_tbm_6051_a | True | 0.4862 | j4_wrist_roll | 0.55 | direct drive | 1 | 1.085 | None |  |
+| 15 | cubemars_ak80_9_v3 | True | 0.002549 | j4_wrist_roll | 0.49 | integrated actuator | 9 | 8.414 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio20 | True | 0.004095 | j4_wrist_roll | 1.013 | motor and gearbox | 20 | 7.259 | 1.031e+04 |  |
+| 0 | kollmorgen_tbm_6013_a | False | 2.806 | j5_wrist_pitch | 0.213 | direct drive | 1 | 0.3228 | None | continuous 0.41 N m against 1.3 required; peak 1.37 N m |
+| 15 | cubemars_ak80_9_v3 | True | 0.004368 | j5_wrist_pitch | 0.49 | integrated actuator | 9 | 7.035 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio20 | True | 0.007016 | j5_wrist_pitch | 1.013 | motor and gearbox | 20 | 6.069 | 1.031e+04 |  |
+| 0 | kollmorgen_tbm_6013_a | True | 0.3816 | j6_tool_roll | 0.213 | direct drive | 1 | 1.238e+04 | None |  |
+| 15 | cubemars_ak80_9_v3 | True | 0.0005939 | j6_tool_roll | 0.49 | integrated actuator | 9 | 2.697e+05 | None |  |
+| 5 | kollmorgen_tbm_6013_a + apex_af042_ratio20 | True | 0.0009539 | j6_tool_roll | 1.013 | motor and gearbox | 20 | 2.327e+05 | 1.031e+04 |  |
+
+Note: the inertia ratio column is the reflected load inertia over the rotor inertia; the design refuses anything above 10, which is a stated choice and not a measurement.
+
+## 3d. Joint compliance and backlash, from the gear data
+
+| backlash_arcmin | drive | joint | lever_m | note | stiffness_nm_rad | tool_error_from_backlash_m | tool_error_from_twist_m | torque_nm | twist_under_load_rad |
+|---|---|---|---|---|---|---|---|---|---|
+| 15 | cubemars_ak80_9_v3 | j1_base_yaw | 0.6 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.002618 | None | 0.08544 | None |
+| 10.8 | cubemars_ak80_64_kv80 | j2_shoulder | 0.6 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.001885 | None | 12.66 | None |
+| 10.8 | cubemars_ak80_64_kv80 | j3_elbow | 0.32 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.001005 | None | 7.597 | None |
+| 15 | cubemars_ak80_9_v3 | j4_wrist_roll | 0.08 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.0003491 | None | 0.8228 | None |
+| 15 | cubemars_ak80_9_v3 | j5_wrist_pitch | 0.05 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None | 0.0002182 | None | 0.9841 | None |
+|  | kollmorgen_tbm_6013_a | j6_tool_roll | 0.025 | no torsional stiffness is printed for this drive, so its compliance is not modelled | None |  | None | 2.567e-05 | None |
+
+Note: backlash is a position uncertainty, not a deflection: the tool can sit anywhere inside it and the number below is the width of that band at the tool, not an error that a controller can remove.
+
+**Could not:** Bearing and seal friction are still not modelled and still refused: the gear unit efficiency covers the losses inside the reduction and says nothing about the joint bearings, and no source in this repository gives their breakaway or viscous coefficients.
+
+**Could not:** The integrated actuators print a backlash and no torsional stiffness, so joints driven by them have a position uncertainty here and no compliance figure at all.
 
 ## 4. Each link through both design paths
 
 | comparability_note | comparable | deflection_limit_m | family_deflection_m | family_feasible | family_mass_kg | family_material | family_seconds | family_shape | freeform_deflection_m | freeform_feasible | freeform_grey | freeform_mass_kg | freeform_seconds | link | load_n |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004667 | 1.571e-05 | True | 0.5735 | al_6061_t6 | 4.002 | hollow_rect | 1.012e-05 | True | 0.1703 | 1.101 | 14.92 | upper_arm | 47.03 |
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004 | 0.0003096 | True | 0.1623 | al_6061_t6 | 5.343 | box | 7.992e-06 | True | 0.2281 | 0.6798 | 8.295 | forearm | 44.59 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004667 | 1.758e-05 | True | 0.5735 | al_6061_t6 | 4.033 | hollow_rect | 1.132e-05 | True | 0.1703 | 1.101 | 15.03 | upper_arm | 52.65 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0004 | 0.0002908 | True | 0.1623 | al_6061_t6 | 5.163 | box | 7.505e-06 | True | 0.2281 | 0.6798 | 8.329 | forearm | 41.87 |
 
 **Could not:** The free form path is not sized to the requirement: it takes a volume fraction. Comparing its mass with the family search's is only meaningful when its extracted part happens to meet the same limit, which the row above states one way or the other.
 
@@ -125,17 +167,17 @@ Note: the load inertia is the diagonal of the mass matrix at the rated pose, whi
 | evidence | label | mesh_sensitivity | method | part | unit | value |
 |---|---|---|---|---|---|---|
 | simulated | mass_kg | withheld: the two meshes ended up within 1.25 of each other | brep_volume_times_density | upper_arm (family search) | kg | 0.5735 |
-| simulated | tip_deflection_m | 0.002156 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | m | -1.571e-05 |
-| simulated | max_displacement_m | 0.002565 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | m | 1.603e-05 |
-| simulated | max_von_mises_pa | 0.04081 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | Pa | 1.142e+06 |
+| simulated | tip_deflection_m | 0.002156 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | m | -1.758e-05 |
+| simulated | max_displacement_m | 0.002565 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | m | 1.794e-05 |
+| simulated | max_von_mises_pa | 0.04081 | calculix This is Version 2.17 C3D10 | upper_arm (family search) | Pa | 1.278e+06 |
 | simulated | mass_kg | withheld: the two meshes ended up within 1.25 of each other | brep_volume_times_density | forearm (family search) | kg | 0.1623 |
-| simulated | tip_deflection_m | 0.00224 | calculix This is Version 2.17 C3D10 | forearm (family search) | m | -0.0003096 |
-| simulated | max_displacement_m | 0.002279 | calculix This is Version 2.17 C3D10 | forearm (family search) | m | 0.0003104 |
-| simulated | max_von_mises_pa | 0.1168 | calculix This is Version 2.17 C3D10 | forearm (family search) | Pa | 9.819e+06 |
-| simulated | tip_deflection_m | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | upper_arm (free form) | m | 1.012e-05 |
-| simulated | max_von_mises_pa | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | upper_arm (free form) | Pa | 2.164e+06 |
-| simulated | tip_deflection_m | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | forearm (free form) | m | 7.992e-06 |
-| simulated | max_von_mises_pa | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | forearm (free form) | Pa | 1.287e+06 |
+| simulated | tip_deflection_m | 0.00224 | calculix This is Version 2.17 C3D10 | forearm (family search) | m | -0.0002908 |
+| simulated | max_displacement_m | 0.002279 | calculix This is Version 2.17 C3D10 | forearm (family search) | m | 0.0002915 |
+| simulated | max_von_mises_pa | 0.1168 | calculix This is Version 2.17 C3D10 | forearm (family search) | Pa | 9.22e+06 |
+| simulated | tip_deflection_m | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | upper_arm (free form) | m | 1.132e-05 |
+| simulated | max_von_mises_pa | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | upper_arm (free form) | Pa | 2.423e+06 |
+| simulated | tip_deflection_m | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | forearm (free form) | m | 7.505e-06 |
+| simulated | max_von_mises_pa | not computed: the free form path solves one mesh, not two | calculix This is Version 2.17 C3D4 | forearm (free form) | Pa | 1.209e+06 |
 
 Note: a label with no mesh sensitivity is not a better label; it is one whose two meshes were too close to check each other.
 
@@ -199,7 +241,9 @@ Sourced parts, whose numbers come from a vendor page:
 
 | count | item | mass_kg | source |
 |---|---|---|---|
+| 1 | cubemars_ak80_64_kv80 | None | vendor datasheet |
 | 1 | cubemars_ak80_9_v3 | None | vendor datasheet |
+| 1 | kollmorgen_tbm_6013_a | None | vendor datasheet |
 
 Parts designed here, which are not purchasable and carry no vendor data:
 
@@ -218,7 +262,7 @@ Parts designed here, which are not purchasable and carry no vendor data:
 |---|---|---|---|---|---|---|---|
 | 0.1 g scale, 0.02 mm caliper | the mass and volume labels of that part to PHYSICAL_TEST | print one forearm in PA12 and weigh and measure it | the geometry and density path end to end: the analyzer volume, the density in the table and the mass label | it costs one print and no fixture, and every later comparison inherits its error, cubed for deflection |  |  |  |
 | 0.01 mm dial gauge, known masses | the deflection label of that part, and nothing else | clamp the printed forearm and hang 500 g at 150 mm | one statement: this shape, this material, this load case, this direction |  |  | a printed plastic bar deflects about fifty times more than the aluminium one for the same load, so the gauge resolves it to a tenth of a percent |  |
-| 0.01 mm dial gauge | nothing until the fixture is characterised | the aluminium upper arm on the same fixture at 5 kg | the solver's prediction of 3.096e-04 m for the forearm shape scaled to this load |  |  |  | the aluminium part is stiff, so the fixture compliance is a larger share of the reading than the part is; measure the fixture first or the result is the fixture |
+| 0.01 mm dial gauge | nothing until the fixture is characterised | the aluminium upper arm on the same fixture at 5 kg | the solver's prediction of 2.908e-04 m for the forearm shape scaled to this load |  |  |  | the aluminium part is stiff, so the fixture compliance is a larger share of the reading than the part is; measure the fixture first or the result is the fixture |
 | the drive's own current reading, a torque constant from the motor page | the torque table, if the current to torque constant is trusted, which is itself a datasheet value | hold the assembled arm at the rated pose and measure the holding current of each drive | the joint torques, which is the number the whole drivetrain selection rests on |  | it needs the arm built and two joints have no drive at all, so it cannot be run on this design as it stands |  |  |
 
 **Could not:** Nothing in this plan can be run by this project. Every row is work for the person with the printer and the bench, and until a record in the format of docs/measurement_guideline.md comes back, every number in this document stays SIMULATED.

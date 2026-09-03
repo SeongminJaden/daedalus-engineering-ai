@@ -82,6 +82,15 @@ class ManipulatorSpec:
     #: friction, which this project refuses to model without data.
     torque_margin: float = 1.3
 
+    #: The largest reflected load inertia, as a multiple of the rotor
+    #: inertia, that this design will accept. CHOSEN at 10: a joint whose
+    #: load inertia is hundreds of times its rotor inertia is hard to control
+    #: and its drivetrain is compliant against the load, which is the standard
+    #: argument for a reduction. The number is a design choice, not a
+    #: measurement, and the drive comparison table prints the ratio for every
+    #: candidate so a reader can apply a different one.
+    max_inertia_ratio: float = 10.0
+
     materials: dict[str, str] = field(default_factory=lambda: {
         "link": "al_6061_t6",
         "link_alternative": "al_7075_t6",

@@ -123,24 +123,47 @@ def test_the_policy_cannot_decompose_an_arm_and_reports_that():
 
 
 @pytest.mark.slow
-def test_two_joints_cannot_be_driven_from_the_sourced_catalogue():
-    """The result the catalogue actually supports. The shoulder needs more
-    peak torque than the one integrated actuator has, and the geared path
-    cannot be built because the pages print no peak torque for the motor and
-    no inertia or efficiency for the gear units."""
+def test_every_joint_is_driven_once_the_catalogue_is_wide_enough():
+    """With one actuator in the catalogue the shoulder and the elbow could not
+    be driven at all. Four sourced actuators later every joint has one, and
+    the selection is still only from printed values: the geared path remains
+    unbuildable because no efficiency is printed for the gear units."""
     arm = build_arm()
     dynamics = dynamics_stage(arm, SPEC, samples=60)
     drives = drivetrain_stage(dynamics, SPEC)
     unselected = [row["joint"] for row in drives.rows
                   if row.get("status") != "selected"]
-    assert "j2_shoulder" in unselected
+    assert unselected == [], unselected
     for row in drives.rows:
-        if row.get("status") == "selected":
-            assert row["kind"] == "integrated actuator"
+        assert row["path"] in ("integrated actuator", "motor and gearbox",
+                               "direct drive")
+        if row["path"] == "integrated actuator":
             assert "no further gearbox" in row["note"]
-        else:
-            assert "not printed" in row["why"] or "against required" in row["why"]
-    assert any("cannot be selected" in gap for gap in drives.could_not)
+        assert row["rated_nm"] >= row["required_rms_nm"]
+        assert row["peak_nm"] >= row["required_peak_nm"]
+    assert any("cannot be paired" in gap for gap in drives.could_not)
+
+
+def test_the_selection_checks_speed_as_well_as_torque():
+    """The 64:1 actuator has torque to spare and turns at 48 rpm. A joint that
+    must turn faster cannot use it, and the selection says so rather than
+    choosing on torque alone."""
+    from drivetrain.sourced import sourced_motor
+    from projects.manipulator.stages import StageResult, drivetrain_stage
+
+    slow = sourced_motor("cubemars_ak80_64_kv80")
+    assert slow.nominal_speed_rad_s < 6.0
+    fast_move = SPEC.__class__(move_time_s=0.2)
+    dynamics = StageResult(name="fake", rows=[{
+        "joint": "j2_shoulder", "peak_trapezoidal_nm": 30.0,
+        "peak_s_curve_nm": 30.0, "rms_trapezoidal_nm": 20.0,
+        "rms_s_curve_nm": 20.0}])
+    drives = drivetrain_stage(dynamics, fast_move, {"j2_shoulder": 0.2})
+    candidates = drives.data["candidates"]["j2_shoulder"]
+    slow_row = next(c for c in candidates
+                    if c["candidate"] == "cubemars_ak80_64_kv80")
+    assert not slow_row["feasible"]
+    assert "rated speed" in slow_row["why"]
 
 
 @pytest.mark.slow

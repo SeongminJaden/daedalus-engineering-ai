@@ -245,6 +245,45 @@ HD_CSF_25_50 = SourceDocument(
     url="https://www.harmonicdrive.net/products/gear-units/gear-units/csf-2uh/csf-25-50-2uh",
     read_on="2026-09-03")
 
+CUBEMARS_AK10_9 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK10-9 V2.0 KV60 actuator product page, goods 1141",
+    url="https://www.cubemars.com/goods-1141-AK10-9+V20+KV60.html",
+    read_on="2026-09-04")
+
+CUBEMARS_AK70_10 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK70-10 KV100 actuator product page",
+    url="https://www.cubemars.com/product/ak70-10-kv100-robotic-actuator.html",
+    read_on="2026-09-04")
+
+CUBEMARS_AK80_64 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK80-64 KV80 actuator product page, goods 1143",
+    url="https://www.cubemars.com/goods-1143-AK80-64.html",
+    read_on="2026-09-04")
+
+KOLLMORGEN_TBM = SourceDocument(
+    publisher="Kollmorgen",
+    title="TBM(S) frameless motor selection guide, TBM 60 series performance "
+          "data and motor parameters",
+    url="https://www.electromate.com/media/assets/catalog-library/pdfs/kollmorgen/Kollmorgen_TBM(S)_Motor_Catalog.pdf",
+    read_on="2026-09-04")
+
+APEX_AF = SourceDocument(
+    publisher="Apex Dynamics",
+    title="AF and AFR series high precision planetary gearbox catalogue, "
+          "gearbox performance and gearbox inertia tables",
+    url="https://apexdynamicsusa.com/pub/media/sebwite/productdownloads//a/f/afafr_catalog.pdf",
+    read_on="2026-09-04")
+
+HD_CSF_CATALOGUE = SourceDocument(
+    publisher="Harmonic Drive LLC",
+    title="CSF and CSG cup type component sets and housed units catalogue, "
+          "CSF rating table 1",
+    url="https://www.harmonicdrive.net/_hd/content/catalogs/pdf/csf-csg.pdf",
+    read_on="2026-09-04")
+
 NABTESCO_RV_42N = SourceDocument(
     publisher="Nabtesco Precision Europe",
     title="RV-42N cycloidal gearbox kit product page",
@@ -316,6 +355,184 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "OUTPUT of its own 9:1 planetary stage, so it is not a bare "
                "motor and must not be paired with another gearbox in the "
                "selection without dividing them back out.")),
+    SourcedMotor(
+        id="cubemars_ak10_9_v2_kv60",
+        manufacturer="CubeMars", part_number="AK10-9 V2.0 KV60",
+        documents=[CUBEMARS_AK10_9],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=18.0,
+        peak_torque_nm=48.0,
+        no_load_speed_rad_s=320.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=228.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=1002.0 * GCM2_TO_KG_M2,
+        torque_constant_nm_a=0.198,
+        mass_kg=0.960,
+        gear_ratio=9.0,
+        backlash_arcmin=0.33 * 60.0,
+        rated_current_a=10.6,
+        peak_current_a=29.8,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Rated Voltage 24/48 V", CUBEMARS_AK10_9.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 18 Nm", CUBEMARS_AK10_9.title),
+            ValueSource("peak_torque_nm", "Peak Torque 48 Nm", CUBEMARS_AK10_9.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 160/320 rpm", CUBEMARS_AK10_9.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 109/228 rpm", CUBEMARS_AK10_9.title),
+            ValueSource("rotor_inertia_kg_m2", "Rotor Inertia 1002 gcm2", CUBEMARS_AK10_9.title),
+            ValueSource("torque_constant_nm_a", "Kt 0.198 Nm/A", CUBEMARS_AK10_9.title),
+            ValueSource("mass_kg", "Weight 960 g", CUBEMARS_AK10_9.title),
+            ValueSource("gear_ratio", "Reduction Ratio 9:1", CUBEMARS_AK10_9.title),
+            ValueSource("backlash_arcmin", "Backlash 0.33 degrees", CUBEMARS_AK10_9.title),
+            ValueSource("rated_current_a", "Rated Current 10.6 A", CUBEMARS_AK10_9.title),
+            ValueSource("peak_current_a", "Peak Current 29.8 A", CUBEMARS_AK10_9.title),
+        ],
+        notes=("Integrated actuator: the torques and speeds are at the output "
+               "of its own 9:1 stage, so no further gearbox may be stacked on "
+               "it. The two speed figures are the 24 V and 48 V values and "
+               "the 48 V one is stored. Backlash is printed in degrees and "
+               "stored in arc minutes.")),
+    # --- frameless motors for the geared path -------------------------------
+    # These print a continuous AND a peak torque, which is what a motor needs
+    # to be selectable; the maxon page above prints a stall torque instead and
+    # is refused for it.
+    SourcedMotor(
+        id="kollmorgen_tbm_6013_a",
+        manufacturer="Kollmorgen", part_number="TBM(S)-6013-A",
+        documents=[KOLLMORGEN_TBM],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=0.413,
+        peak_torque_nm=1.37,
+        nominal_speed_rad_s=4300.0 * RPM_TO_RAD_S,
+        no_load_speed_rad_s=4300.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=1.41e-05,
+        mass_kg=0.213,
+        rated_current_a=5.70,
+        peak_current_a=19.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Design Voltage Vbus 48.0 Vdc", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_torque_nm", "Continuous Stall Torque Tc 0.413 N-m", KOLLMORGEN_TBM.title),
+            ValueSource("peak_torque_nm", "Peak Stall Torque Tp 1.37 N-m at 25 C winding", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_speed_rad_s", "Speed at Rated Power 4300 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("no_load_speed_rad_s", "Speed at Rated Power 4300 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("rotor_inertia_kg_m2", "Inertia Jm 1.41E-05 Kg-m2", KOLLMORGEN_TBM.title),
+            ValueSource("mass_kg", "Weight Wt 213 grams", KOLLMORGEN_TBM.title),
+            ValueSource("rated_current_a", "Continuous Current Ic 5.70 Adc", KOLLMORGEN_TBM.title),
+            ValueSource("peak_current_a", "Peak Current Ip 19.0 Adc", KOLLMORGEN_TBM.title),
+        ],
+        notes=("Frameless: the mass and inertia are the rotor and stator "
+               "only, with no housing, bearings, shaft or encoder, so a "
+               "built joint weighs more than this by parts nobody here has "
+               "sourced. The no load speed is not printed; the speed at rated "
+               "power is stored in its place and named as such, which makes "
+               "the speed check conservative.")),
+    SourcedMotor(
+        id="kollmorgen_tbm_6025_a",
+        manufacturer="Kollmorgen", part_number="TBM(S)-6025-A",
+        documents=[KOLLMORGEN_TBM],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=0.706,
+        peak_torque_nm=2.56,
+        nominal_speed_rad_s=2900.0 * RPM_TO_RAD_S,
+        no_load_speed_rad_s=2900.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=2.52e-05,
+        mass_kg=0.377,
+        rated_current_a=5.70,
+        peak_current_a=21.3,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Design Voltage Vbus 48.0 Vdc", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_torque_nm", "Continuous Stall Torque Tc 0.706 N-m", KOLLMORGEN_TBM.title),
+            ValueSource("peak_torque_nm", "Peak Stall Torque Tp 2.56 N-m at 25 C winding", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_speed_rad_s", "Speed at Rated Power 2900 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("no_load_speed_rad_s", "Speed at Rated Power 2900 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("rotor_inertia_kg_m2", "Inertia Jm 2.52E-05 Kg-m2", KOLLMORGEN_TBM.title),
+            ValueSource("mass_kg", "Weight Wt 377 grams", KOLLMORGEN_TBM.title),
+            ValueSource("rated_current_a", "Continuous Current Ic 5.70 Adc", KOLLMORGEN_TBM.title),
+            ValueSource("peak_current_a", "Peak Current Ip 21.3 Adc", KOLLMORGEN_TBM.title),
+        ],
+        notes="Frameless, same caveat as the 6013."),
+    SourcedMotor(
+        id="kollmorgen_tbm_6051_a",
+        manufacturer="Kollmorgen", part_number="TBM(S)-6051-A",
+        documents=[KOLLMORGEN_TBM],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=1.16,
+        peak_torque_nm=4.53,
+        nominal_speed_rad_s=2130.0 * RPM_TO_RAD_S,
+        no_load_speed_rad_s=2130.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=4.75e-05,
+        mass_kg=0.550,
+        rated_current_a=7.00,
+        peak_current_a=30.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Design Voltage Vbus 48.0 Vdc", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_torque_nm", "Continuous Stall Torque Tc 1.16 N-m", KOLLMORGEN_TBM.title),
+            ValueSource("peak_torque_nm", "Peak Stall Torque Tp 4.53 N-m at 25 C winding", KOLLMORGEN_TBM.title),
+            ValueSource("nominal_speed_rad_s", "Speed at Rated Power 2130 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("no_load_speed_rad_s", "Speed at Rated Power 2130 RPM", KOLLMORGEN_TBM.title),
+            ValueSource("rotor_inertia_kg_m2", "Inertia Jm 4.75E-05 Kg-m2", KOLLMORGEN_TBM.title),
+            ValueSource("mass_kg", "Weight Wt 550 grams", KOLLMORGEN_TBM.title),
+            ValueSource("rated_current_a", "Continuous Current Ic 7.00 Adc", KOLLMORGEN_TBM.title),
+            ValueSource("peak_current_a", "Peak Current Ip 30.0 Adc", KOLLMORGEN_TBM.title),
+        ],
+        notes="Frameless, same caveat as the 6013."),
+    SourcedMotor(
+        id="cubemars_ak80_64_kv80",
+        manufacturer="CubeMars", part_number="AK80-64 KV80",
+        documents=[CUBEMARS_AK80_64],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=48.0,
+        peak_torque_nm=120.0,
+        no_load_speed_rad_s=75.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=48.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=564.5 * GCM2_TO_KG_M2,
+        torque_constant_nm_a=0.136,
+        mass_kg=0.850,
+        gear_ratio=64.0,
+        backlash_arcmin=0.18 * 60.0,
+        rated_current_a=7.0,
+        peak_current_a=19.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Rated Voltage 24/48 V", CUBEMARS_AK80_64.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 48 Nm", CUBEMARS_AK80_64.title),
+            ValueSource("peak_torque_nm", "Peak Torque 120 Nm", CUBEMARS_AK80_64.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 37/75 rpm", CUBEMARS_AK80_64.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 23/48 rpm", CUBEMARS_AK80_64.title),
+            ValueSource("rotor_inertia_kg_m2", "Inertia 564.5 gcm2", CUBEMARS_AK80_64.title),
+            ValueSource("torque_constant_nm_a", "Kt 0.136 Nm/A", CUBEMARS_AK80_64.title),
+            ValueSource("mass_kg", "Weight 850 g", CUBEMARS_AK80_64.title),
+            ValueSource("gear_ratio", "Reduction Ratio 64:1", CUBEMARS_AK80_64.title),
+            ValueSource("backlash_arcmin", "Backlash 0.18 degrees", CUBEMARS_AK80_64.title),
+            ValueSource("rated_current_a", "Rated Current 7 ADC", CUBEMARS_AK80_64.title),
+            ValueSource("peak_current_a", "Peak Current 19 ADC", CUBEMARS_AK80_64.title),
+        ],
+        notes=("Integrated actuator with a 64:1 stage, so it is slow: 48 rpm "
+               "rated at 48 V. A joint that must turn faster than that cannot "
+               "use it whatever its torque, and the selection checks speed as "
+               "well as torque for exactly this reason.")),
+    SourcedMotor(
+        id="cubemars_ak70_10_kv100",
+        manufacturer="CubeMars", part_number="AK70-10 KV100",
+        documents=[CUBEMARS_AK70_10],
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=8.3,
+        peak_torque_nm=24.8,
+        no_load_speed_rad_s=480.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=310.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=753.4788 * GCM2_TO_KG_M2,
+        mass_kg=0.521,
+        gear_ratio=10.0,
+        backlash_arcmin=0.2 * 60.0,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Rated Voltage 24/48 V", CUBEMARS_AK70_10.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 8.3 Nm", CUBEMARS_AK70_10.title),
+            ValueSource("peak_torque_nm", "Peak Torque 24.8 Nm", CUBEMARS_AK70_10.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 240/480 rpm", CUBEMARS_AK70_10.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 148/310 rpm", CUBEMARS_AK70_10.title),
+            ValueSource("rotor_inertia_kg_m2", "Rotor Inertia 753.4788 gcm2", CUBEMARS_AK70_10.title),
+            ValueSource("mass_kg", "Weight 521 g", CUBEMARS_AK70_10.title),
+            ValueSource("gear_ratio", "Gear Ratio 10:1", CUBEMARS_AK70_10.title),
+            ValueSource("backlash_arcmin", "Backlash 0.2 degrees", CUBEMARS_AK70_10.title),
+        ],
+        notes="Integrated actuator, same rule as the other two."),
 ]
 
 
@@ -324,13 +541,18 @@ SOURCED_MOTORS: list[SourcedMotor] = [
 SOURCED_GEARBOXES: list[SourcedGearbox] = [
     SourcedGearbox(
         id="harmonic_csf_17_50_2uh", manufacturer="Harmonic Drive",
-        part_number="CSF-17-50-2UH", documents=[HD_CSF_17_50],
+        part_number="CSF-17-50-2UH", documents=[HD_CSF_17_50, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=50.0,
         rated_torque_nm=16.0, repeated_peak_torque_nm=34.0,
         momentary_peak_torque_nm=70.0,
         average_input_speed_rad_s=3500.0 * RPM_TO_RAD_S,
         torsional_stiffness_nm_rad=1.3e4, mass_kg=0.68,
+        input_inertia_kg_m2=0.079e-4,
         value_sources=[
+            ValueSource("input_inertia_kg_m2",
+                        "CSF rating table 1, size 17: moment of inertia "
+                        "0.079 x10-4 kg m2, reflected to the wave generator",
+                        HD_CSF_CATALOGUE.title),
             ValueSource("ratio", "CSF-17-50", HD_CSF_17_50.title),
             ValueSource("rated_torque_nm", "Rated Torque L10: 16 Nm", HD_CSF_17_50.title),
             ValueSource("repeated_peak_torque_nm", "Limit for Repeated Peak Torque: 34 Nm", HD_CSF_17_50.title),
@@ -340,20 +562,31 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
             ValueSource("mass_kg", "Mass: 0.68 kg", HD_CSF_17_50.title),
             ValueSource("family", "cup type harmonic gear unit", HD_CSF_17_50.title),
         ],
-        notes=("Backlash, efficiency and moment of inertia are not printed on "
-               "this page. K3 is the stiffness above the second torque "
+        notes=("The moment of inertia comes from the catalogue rating table "
+               "and is per SIZE, not per ratio, and is reflected to the wave "
+               "generator. Backlash is not printed. EFFICIENCY IS NOT A "
+               "NUMBER in this catalogue: it is a family of curves against "
+               "ambient temperature for each ratio and input speed at rated "
+               "torque, with about 3 percent scatter and a separate "
+               "compensation coefficient below rated torque, so no single "
+               "value is stored. K3 is the stiffness above the second torque "
                "breakpoint; K1 (0.81e4) and K2 (1.1e4) are lower and apply at "
                "smaller torques.")),
     SourcedGearbox(
         id="harmonic_csf_17_100_2uh", manufacturer="Harmonic Drive",
-        part_number="CSF-17-100-2UH", documents=[HD_CSF_17_100],
+        part_number="CSF-17-100-2UH", documents=[HD_CSF_17_100, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=100.0,
         rated_torque_nm=24.0, repeated_peak_torque_nm=54.0,
         momentary_peak_torque_nm=108.0,
         average_input_speed_rad_s=3500.0 * RPM_TO_RAD_S,
         torsional_stiffness_nm_rad=1.6e4, mass_kg=0.68,
         starting_torque_nm=3.4e-2, backdriving_torque_nm=3.3,
+        input_inertia_kg_m2=0.079e-4,
         value_sources=[
+            ValueSource("input_inertia_kg_m2",
+                        "CSF rating table 1, size 17: moment of inertia "
+                        "0.079 x10-4 kg m2, reflected to the wave generator",
+                        HD_CSF_CATALOGUE.title),
             ValueSource("ratio", "CSF-17-100", HD_CSF_17_100.title),
             ValueSource("rated_torque_nm", "Rated Torque L10: 24 Nm", HD_CSF_17_100.title),
             ValueSource("repeated_peak_torque_nm", "Limit for Repeated Peak Torque: 54 Nm", HD_CSF_17_100.title),
@@ -367,14 +600,19 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
         ]),
     SourcedGearbox(
         id="harmonic_csf_25_50_2uh", manufacturer="Harmonic Drive",
-        part_number="CSF-25-50-2UH", documents=[HD_CSF_25_50],
+        part_number="CSF-25-50-2UH", documents=[HD_CSF_25_50, HD_CSF_CATALOGUE],
         family=GearboxFamily.HARMONIC, ratio=50.0,
         rated_torque_nm=39.0, repeated_peak_torque_nm=98.0,
         momentary_peak_torque_nm=186.0,
         average_input_speed_rad_s=3500.0 * RPM_TO_RAD_S,
         torsional_stiffness_nm_rad=4.4e4, mass_kg=1.5,
         starting_torque_nm=15.0e-2, backdriving_torque_nm=9.0,
+        input_inertia_kg_m2=0.413e-4,
         value_sources=[
+            ValueSource("input_inertia_kg_m2",
+                        "CSF rating table 1, size 25: moment of inertia "
+                        "0.413 x10-4 kg m2, reflected to the wave generator",
+                        HD_CSF_CATALOGUE.title),
             ValueSource("ratio", "CSF-25-50", HD_CSF_25_50.title),
             ValueSource("rated_torque_nm", "Rated Torque L10: 39 Nm", HD_CSF_25_50.title),
             ValueSource("repeated_peak_torque_nm", "Limit for Repeated Peak Torque: 98 Nm", HD_CSF_25_50.title),
@@ -386,6 +624,89 @@ SOURCED_GEARBOXES: list[SourcedGearbox] = [
             ValueSource("backdriving_torque_nm", "Backdriving Torque: 9 Nm", HD_CSF_25_50.title),
             ValueSource("family", "cup type harmonic gear unit", HD_CSF_25_50.title),
         ]),
+    # --- planetary units whose catalogue prints everything a pairing needs ---
+    SourcedGearbox(
+        id="apex_af042_ratio50", manufacturer="Apex Dynamics",
+        part_number="AF042, 2 stage, ratio 50", documents=[APEX_AF],
+        family=GearboxFamily.PLANETARY, ratio=50.0,
+        rated_torque_nm=22.0,
+        repeated_peak_torque_nm=0.6 * 3.0 * 22.0,
+        momentary_peak_torque_nm=3.0 * 22.0,
+        average_input_speed_rad_s=5000.0 * RPM_TO_RAD_S,
+        torsional_stiffness_nm_rad=3.0 / (math.pi / (180.0 * 60.0)),
+        backlash_arcmin=5.0, input_inertia_kg_m2=0.03e-4,
+        efficiency=0.94, mass_kg=0.8,
+        value_sources=[
+            ValueSource("ratio", "AF042, 2 stage, ratio 50", APEX_AF.title),
+            ValueSource("rated_torque_nm", "Nominal Output Torque T2N, ratio 50, AF042: 22 Nm", APEX_AF.title),
+            ValueSource("momentary_peak_torque_nm", "Emergency Stop Torque T2NOTB = 3 times of Nominal Output Torque", APEX_AF.title),
+            ValueSource("repeated_peak_torque_nm", "Max. acceleration torque T2B = 60% of T2NOT", APEX_AF.title),
+            ValueSource("average_input_speed_rad_s", "Nominal Input Speed n1N 5,000 rpm", APEX_AF.title),
+            ValueSource("torsional_stiffness_nm_rad", "Torsional Rigidity 3 Nm/arcmin", APEX_AF.title),
+            ValueSource("backlash_arcmin", "Reduced Backlash P1, 2 stage: <= 5 arcmin", APEX_AF.title),
+            ValueSource("input_inertia_kg_m2", "Mass Moments of Inertia J1, ratio 50, AF042: 0.03 kg cm2", APEX_AF.title),
+            ValueSource("efficiency", "Efficiency, 2 stage 12~100: >= 94%", APEX_AF.title),
+            ValueSource("mass_kg", "Weight, 2 stage, AF042: 0.8 kg", APEX_AF.title),
+            ValueSource("family", "high precision planetary gearbox", APEX_AF.title),
+        ],
+        notes=("Efficiency is printed as a floor for the whole two stage "
+               "range rather than a curve, so 0.94 is the catalogue's own "
+               "lower bound and not a reading off a graph. The repeated peak "
+               "is the catalogue's maximum acceleration torque, 60 percent of "
+               "the emergency stop value, which is a different quantity from "
+               "a harmonic drive's repeated peak and is named as such. "
+               "Backlash is the reduced backlash grade P1; standard P2 is "
+               "7 arcmin.")),
+    SourcedGearbox(
+        id="apex_af060_ratio50", manufacturer="Apex Dynamics",
+        part_number="AF060, 2 stage, ratio 50", documents=[APEX_AF],
+        family=GearboxFamily.PLANETARY, ratio=50.0,
+        rated_torque_nm=60.0,
+        repeated_peak_torque_nm=0.6 * 3.0 * 60.0,
+        momentary_peak_torque_nm=3.0 * 60.0,
+        average_input_speed_rad_s=5000.0 * RPM_TO_RAD_S,
+        torsional_stiffness_nm_rad=7.0 / (math.pi / (180.0 * 60.0)),
+        backlash_arcmin=5.0, input_inertia_kg_m2=0.03e-4,
+        efficiency=0.94, mass_kg=1.5,
+        value_sources=[
+            ValueSource("ratio", "AF060, 2 stage, ratio 50", APEX_AF.title),
+            ValueSource("rated_torque_nm", "Nominal Output Torque T2N, ratio 50, AF060: 60 Nm", APEX_AF.title),
+            ValueSource("momentary_peak_torque_nm", "Emergency Stop Torque T2NOTB = 3 times of Nominal Output Torque", APEX_AF.title),
+            ValueSource("repeated_peak_torque_nm", "Max. acceleration torque T2B = 60% of T2NOT", APEX_AF.title),
+            ValueSource("average_input_speed_rad_s", "Nominal Input Speed n1N 5,000 rpm", APEX_AF.title),
+            ValueSource("torsional_stiffness_nm_rad", "Torsional Rigidity 7 Nm/arcmin", APEX_AF.title),
+            ValueSource("backlash_arcmin", "Reduced Backlash P1, 2 stage: <= 5 arcmin", APEX_AF.title),
+            ValueSource("input_inertia_kg_m2", "Mass Moments of Inertia J1, ratio 50, AF060: 0.03 kg cm2", APEX_AF.title),
+            ValueSource("efficiency", "Efficiency, 2 stage 12~100: >= 94%", APEX_AF.title),
+            ValueSource("mass_kg", "Weight, 2 stage, AF060: 1.5 kg", APEX_AF.title),
+            ValueSource("family", "high precision planetary gearbox", APEX_AF.title),
+        ],
+        notes="Same catalogue and the same caveats as the AF042 entry."),
+    SourcedGearbox(
+        id="apex_af042_ratio20", manufacturer="Apex Dynamics",
+        part_number="AF042, 2 stage, ratio 20", documents=[APEX_AF],
+        family=GearboxFamily.PLANETARY, ratio=20.0,
+        rated_torque_nm=19.0,
+        repeated_peak_torque_nm=0.6 * 3.0 * 19.0,
+        momentary_peak_torque_nm=3.0 * 19.0,
+        average_input_speed_rad_s=5000.0 * RPM_TO_RAD_S,
+        torsional_stiffness_nm_rad=3.0 / (math.pi / (180.0 * 60.0)),
+        backlash_arcmin=5.0, input_inertia_kg_m2=0.03e-4,
+        efficiency=0.94, mass_kg=0.8,
+        value_sources=[
+            ValueSource("ratio", "AF042, 2 stage, ratio 20", APEX_AF.title),
+            ValueSource("rated_torque_nm", "Nominal Output Torque T2N, ratio 20, AF042: 19 Nm", APEX_AF.title),
+            ValueSource("momentary_peak_torque_nm", "Emergency Stop Torque T2NOTB = 3 times of Nominal Output Torque", APEX_AF.title),
+            ValueSource("repeated_peak_torque_nm", "Max. acceleration torque T2B = 60% of T2NOT", APEX_AF.title),
+            ValueSource("average_input_speed_rad_s", "Nominal Input Speed n1N 5,000 rpm", APEX_AF.title),
+            ValueSource("torsional_stiffness_nm_rad", "Torsional Rigidity 3 Nm/arcmin", APEX_AF.title),
+            ValueSource("backlash_arcmin", "Reduced Backlash P1, 2 stage: <= 5 arcmin", APEX_AF.title),
+            ValueSource("input_inertia_kg_m2", "Mass Moments of Inertia J1, ratio 20, AF042: 0.03 kg cm2", APEX_AF.title),
+            ValueSource("efficiency", "Efficiency, 2 stage 12~100: >= 94%", APEX_AF.title),
+            ValueSource("mass_kg", "Weight, 2 stage, AF042: 0.8 kg", APEX_AF.title),
+            ValueSource("family", "high precision planetary gearbox", APEX_AF.title),
+        ],
+        notes="Same catalogue and the same caveats as the ratio 50 entry."),
     SourcedGearbox(
         id="nabtesco_rv_42n", manufacturer="Nabtesco",
         part_number="RV-42N", documents=[NABTESCO_RV_42N],
