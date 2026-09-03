@@ -144,3 +144,32 @@ def test_a_high_threshold_drops_islands_and_says_how_many(op, tmp_path):
         return
     assert outcome.detail["island_elements_dropped"] >= 0
     assert outcome.detail["surface"]["n_components"] == 1
+
+
+def test_the_method_applies_only_where_both_a_grid_and_a_part_are_wanted():
+    """The routing mistake this condition pair exists to prevent.
+
+    Registered with the CAD family condition alone, this method took every
+    family problem from the family search. Registered with the voxel condition
+    alone, it took every field problem from the topology methods. It needs
+    both: an envelope to discretise, and a caller who wants a part rather than
+    a density field.
+    """
+    from core.registry import ProblemContext
+
+    method = DEFAULT_REGISTRY.get(METHOD)
+    family_only = ProblemContext(geometry="cad_family",
+                                 representations=("cad_family",),
+                                 slenderness=5.0, material_class="isotropic",
+                                 has_stress_constraint=True)
+    voxel_only = ProblemContext(geometry="prismatic_beam",
+                                representations=("prismatic_beam", "voxel_domain"),
+                                slenderness=5.0, material_class="isotropic",
+                                has_stress_constraint=True)
+    both = ProblemContext(geometry="cad_family",
+                          representations=("cad_family", "voxel_domain"),
+                          slenderness=5.0, material_class="isotropic",
+                          has_stress_constraint=True)
+    assert not all(c.holds(family_only) for c in method.conditions)
+    assert not all(c.holds(voxel_only) for c in method.conditions)
+    assert all(c.holds(both) for c in method.conditions)

@@ -9,7 +9,10 @@ repository is SIMULATED or below; nothing has been physically tested.
 - Branch `master`, remote `origin/main`. Commit after every unit of work, push
   after every commit.
 - Capabilities registered: 57 (`nodes.roster.build_roster`, `len`). Nodes: 13.
-- Tests collected: 1757, all passing, no xfail (Code_Aster contact fixed 2026-09-02).
+- Tests collected: 1905, all passing, no xfail. The full suite now takes about
+  50 minutes rather than 13: the topology, free form, dynamics and mesh retry
+  tests are solver bound, and the deeper retry ladder made the labelling ones
+  slower on purpose.
 - Last full suite run: see the bottom of this file.
 
 ## Generative design track (the order is fixed)

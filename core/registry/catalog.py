@@ -123,7 +123,14 @@ def build_default_registry() -> MethodRegistry:
         inputs=("engineering_ir", "voxel_domain"),
         outputs=("part_record", "stl_file"),
         fidelity=Fidelity.FEM3D, cost=Cost.HEAVY,
-        conditions=(_cad_family,),
+        # BOTH conditions, and the pair is the point. This method needs the
+        # envelope discretised into a voxel grid, like the topology methods,
+        # AND it is only worth its cost when the caller wants a part rather
+        # than a field. Registered with the family condition alone it stole
+        # every family problem from the family search; with the voxel
+        # condition alone it stole every field problem from the topology
+        # methods. Two loop tests caught the two mistakes in turn.
+        conditions=(_voxel, _cad_family),
         implementation="agent.execution.freeform.run",
         evidence="SIMULATED",
         notes="The only generator here that is not a family search: the "
