@@ -320,8 +320,8 @@ def cantilever_labels(step_path: str | Path, volume_m3: float,
     mesh_note = (f"quadratic tetrahedra, target {fine_used * 1e3:.2f} mm, "
                  f"{fine_mesh.n_nodes} nodes; coarse control at "
                  f"{coarse_used * 1e3:.2f} mm, {coarse_mesh.n_nodes} nodes"
-                 + ("; the solver rejected the first mesh and a finer one "
-                    "was used" if retried else ""))
+                 + ("; the mesher or the solver rejected the first mesh and "
+                    "a finer one was used" if retried else ""))
 
     primary_name, primary_unit, primary_scaling = PRIMARY_LABEL[case.kind]
     primary_note = {

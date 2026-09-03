@@ -49,10 +49,26 @@ def initial_design(n_elements: int, target_volume: float,
     return np.full(n_elements, 0.5 * (low + high))
 
 
+def _measured_volume(physical: np.ndarray, problem_passive) -> float:
+    """Mean physical density with the passive regions written in, which is the
+    volume the part will actually have."""
+    if problem_passive is None:
+        return float(physical.mean())
+    return float(problem_passive(physical).mean())
+
+
 def _volume_projected_step(design: np.ndarray, direction: np.ndarray,
                            move_limit: float, target_volume: float,
-                           transform: DesignTransform) -> np.ndarray:
-    """Move-limited step whose PHYSICAL volume lands on the target."""
+                           transform: DesignTransform,
+                           apply_passive=None) -> np.ndarray:
+    """Move-limited step whose PHYSICAL volume lands on the target.
+
+    With passive regions the volume that must land on the target is the one
+    including them: the free elements have to make room for the elements held
+    solid, or the run quietly delivers a heavier part than was asked for. That
+    happened and was measured (0.50 against a requested 0.40) before this
+    argument existed.
+    """
     lower = np.maximum(design - 2.0 * move_limit, 0.0)
     upper = np.minimum(design + 2.0 * move_limit, 1.0)
 
@@ -63,7 +79,7 @@ def _volume_projected_step(design: np.ndarray, direction: np.ndarray,
     low, high = -10.0, 10.0
     for _ in range(100):
         middle = 0.5 * (low + high)
-        if transform.physical(at(middle)).mean() > target_volume:
+        if _measured_volume(transform.physical(at(middle)), apply_passive) > target_volume:
             low = middle
         else:
             high = middle
@@ -73,7 +89,7 @@ def _volume_projected_step(design: np.ndarray, direction: np.ndarray,
 
 
 def restore_volume(design: np.ndarray, target_volume: float,
-                   transform: DesignTransform) -> np.ndarray:
+                   transform: DesignTransform, apply_passive=None) -> np.ndarray:
     """Shift a design uniformly so its physical volume is back on the target.
 
     Sharpening beta changes the map from design variable to physical density,
@@ -90,7 +106,7 @@ def restore_volume(design: np.ndarray, target_volume: float,
     for _ in range(80):
         middle = 0.5 * (low + high)
         shifted = np.clip(design + middle, 0.0, 1.0)
-        if transform.physical(shifted).mean() < target_volume:
+        if _measured_volume(transform.physical(shifted), apply_passive) < target_volume:
             low = middle
         else:
             high = middle
@@ -136,17 +152,27 @@ def optimize_projected(problem: SimpProblem, max_iterations: int = 120,
     if schedule is None:
         schedule = BetaSchedule()
 
+    passive = problem.apply_passive if problem.free_mask is not None else None
     design = initial_design(mesh.n_elements, problem.volume_fraction, transform)
-    result = ThreeFieldResult(design=design, density=transform.physical(design))
+    if passive is not None:
+        design = restore_volume(design, problem.volume_fraction, transform, passive)
+    free = problem.free_mask
+    result = ThreeFieldResult(design=design,
+                              density=problem.apply_passive(transform.physical(design)))
 
     for iteration in range(1, max_iterations + 1):
         previous_beta = transform.beta
         beta = schedule.apply(transform, iteration)
         if beta != previous_beta:
-            design = restore_volume(design, problem.volume_fraction, transform)
-        density = transform.physical(design)
+            design = restore_volume(design, problem.volume_fraction, transform,
+                                    passive)
+        # Passive elements are written into the density the solver sees and
+        # their sensitivity is dropped, so the projection never moves them.
+        density = problem.apply_passive(transform.physical(design))
         compliance, d_physical, _ = compliance_and_sensitivity(problem, density,
                                                                device=device)
+        if free is not None:
+            d_physical = np.where(free, d_physical, 0.0)
         result.compliance_history.append(float(compliance))
         result.volume_history.append(float(density.mean()))
         result.grey_history.append(_grey(density))
@@ -158,9 +184,10 @@ def optimize_projected(problem: SimpProblem, max_iterations: int = 120,
         gradient = transform.chain(d_physical, design)
         direction = gradient / max(np.abs(gradient).max(), 1e-30)
         design = _volume_projected_step(design, direction, move_limit,
-                                        problem.volume_fraction, transform)
+                                        problem.volume_fraction, transform,
+                                        passive)
 
-    density = transform.physical(design)
+    density = problem.apply_passive(transform.physical(design))
     compliance, _, _ = compliance_and_sensitivity(problem, density, device=device)
     result.compliance_history.append(float(compliance))
     result.volume_history.append(float(density.mean()))

@@ -45,6 +45,8 @@ architecture diagram replaced). Not started.
 | item | what | state |
 |---|---|---|
 | 8 | surrogate and embeddings retrained on the generated run | DONE, numbers in docs/dataset_spec.md |
+| 11a | topology extraction re-verified in CalculiX, passive regions added, `docs/topology_design.md` | DONE |
+| 11b to 11g | smoothing to a designable surface, manufacturing constraints in the optimiser, multi load, stress constraint measurement, demo, docs | next |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
 | 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
 

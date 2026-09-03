@@ -50,9 +50,48 @@ class SimpProblem:
     penalty: float = PENALTY
     min_density: float = MIN_DENSITY
     filter_radius_elements: float = 1.5
+    #: Elements held solid throughout the run, and elements held empty. A
+    #: point load applied to elements the optimiser is free to empty leaves a
+    #: field whose thresholded part has no load path at all; that was measured
+    #: (see optimization/topology/verify.py) before this was added. Both
+    #: default to absent, so a problem that states neither behaves exactly as
+    #: it did before.
+    passive_solid: np.ndarray | None = None
+    passive_void: np.ndarray | None = None
 
     def n_elements(self) -> int:
         return self.mesh.n_elements
+
+    def apply_passive(self, density: np.ndarray) -> np.ndarray:
+        """Densities with the passive regions written back in."""
+        if self.passive_solid is not None:
+            density = np.where(self.passive_solid, 1.0, density)
+        if self.passive_void is not None:
+            density = np.where(self.passive_void, self.min_density, density)
+        return density
+
+    @property
+    def free_mask(self) -> np.ndarray | None:
+        """Elements the optimiser may move, or None when all of them are."""
+        if self.passive_solid is None and self.passive_void is None:
+            return None
+        free = np.ones(self.mesh.n_elements, dtype=bool)
+        if self.passive_solid is not None:
+            free &= ~np.asarray(self.passive_solid, dtype=bool)
+        if self.passive_void is not None:
+            free &= ~np.asarray(self.passive_void, dtype=bool)
+        return free
+
+    def free_volume_fraction(self) -> float:
+        """The volume fraction the OC step should hit over the free elements
+        so that the whole domain lands on `volume_fraction`."""
+        free = self.free_mask
+        if free is None:
+            return self.volume_fraction
+        n = self.mesh.n_elements
+        solid = 0.0 if self.passive_solid is None else float(np.sum(self.passive_solid))
+        target = self.volume_fraction * n - solid
+        return float(np.clip(target / max(free.sum(), 1), self.min_density, 1.0))
 
 
 def stiffness_scale(density: np.ndarray, penalty: float = PENALTY,
@@ -249,7 +288,9 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
     still improving faster than that honestly reports `converged=False`.
     """
     n = problem.n_elements()
-    density = np.full(n, problem.volume_fraction, dtype=np.float64)
+    density = problem.apply_passive(
+        np.full(n, problem.volume_fraction, dtype=np.float64))
+    free = problem.free_mask
     rows = weights = None
     if use_filter:
         rows, weights = build_filter_weights(problem.mesh,
@@ -263,9 +304,20 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
             sensitivity = apply_sensitivity_filter(
                 sensitivity, density, rows, weights, problem.min_density)
 
-        updated = oc_update(density, sensitivity, problem.volume_fraction,
-                            problem.min_density, move_limit=move_limit,
-                            damping=damping)
+        if free is None:
+            updated = oc_update(density, sensitivity, problem.volume_fraction,
+                                problem.min_density, move_limit=move_limit,
+                                damping=damping)
+        else:
+            # The OC step runs on the free elements only, aiming at the
+            # fraction that leaves the whole domain at the requested one; the
+            # passive elements are written back afterwards and never move.
+            updated = density.copy()
+            updated[free] = oc_update(density[free], sensitivity[free],
+                                      problem.free_volume_fraction(),
+                                      problem.min_density,
+                                      move_limit=move_limit, damping=damping)
+            updated = problem.apply_passive(updated)
         change = float(np.abs(updated - density).max())
         density = updated
 
