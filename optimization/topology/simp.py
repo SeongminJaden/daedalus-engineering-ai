@@ -65,6 +65,11 @@ class SimpProblem:
     #: the sensitivity, so it is a projection rather than a fully consistent
     #: constraint and the result is measured afterwards, never assumed.
     density_projection: Callable[[np.ndarray], np.ndarray] | None = None
+    #: The projection's vector-Jacobian product, when it has one: given
+    #: dJ/d(projected density) it returns dJ/d(design density). Without it the
+    #: optimiser follows the unprojected gradient, which was measured paying
+    #: 5.07 times the compliance for a support constraint it could not steer.
+    projection_vjp: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None
 
     def n_elements(self) -> int:
         return self.mesh.n_elements
@@ -323,8 +328,11 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
 
     result = SimpResult(density=density)
     for iteration in range(1, max_iterations + 1):
+        physical = problem.apply_passive(density)
         compliance, sensitivity, _ = compliance_and_sensitivity(
-            problem, problem.apply_passive(density), device)
+            problem, physical, device)
+        if problem.projection_vjp is not None:
+            sensitivity = problem.projection_vjp(density, sensitivity)
         if use_filter:
             sensitivity = apply_sensitivity_filter(
                 sensitivity, density, rows, weights, problem.min_density)

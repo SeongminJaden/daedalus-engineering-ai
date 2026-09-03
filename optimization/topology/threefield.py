@@ -171,6 +171,9 @@ def optimize_projected(problem: SimpProblem, max_iterations: int = 120,
         density = problem.apply_passive(transform.physical(design))
         compliance, d_physical, _ = compliance_and_sensitivity(problem, density,
                                                                device=device)
+        if problem.projection_vjp is not None:
+            d_physical = problem.projection_vjp(transform.physical(design),
+                                                d_physical)
         if free is not None:
             d_physical = np.where(free, d_physical, 0.0)
         result.compliance_history.append(float(compliance))

@@ -51,7 +51,9 @@ architecture diagram replaced). Not started.
 | 11e | stress constraint measured against CalculiX; the peak does not converge and the check says so | DONE |
 | 11d | weighted multi load compliance and the cross evaluation table | DONE |
 | 11f and 10 | end to end demo, both paths, `docs/demo_end_to_end.md`, `scripts/demo_end_to_end.py` | DONE |
-| 11g | README and DESIGN wording brought to the measurements | partly done, README and KR updated in 11a |
+| 11g | README and DESIGN wording brought to the measurements | README and KR done in 11a, DESIGN section open |
+| 11'-1 | bisection on the volume fraction so the topology path answers a deflection limit, judged on the extracted part not the field | OPEN, raised by the demo |
+| 11'-2 | chain rule through the additive support filter | DONE, cost 5.07x to 1.15x, unsupported elements 0.025 to 0 |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
 | 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
 

@@ -121,7 +121,8 @@ three-field projection, 100 iterations, volume fraction 0.35 throughout.
 | symmetry about the width | 3.582e-1 | 1.00 | 0.23 | 0.41 | 13.7 |
 | symmetry about the height | 4.144e-1 | 1.16 | 0.28 | 0.50 | 15.7 |
 | symmetry about the length | 1.316e0 | 3.67 | 0.20 | 0.45 | 13.1 |
-| additive support filter | 1.817e0 | 5.07 | 0.25 | 0.42 | 11.3 |
+| additive support filter, no chain rule | 1.817e0 | 5.07 | 0.25 | 0.42 | 11.3 |
+| additive support filter, with chain rule | 4.131e-1 | 1.15 | 0.26 | 0.34 | 13.8 |
 | casting pull direction | 1.588e0 | 4.43 | 0.15 | 0.00 | 8.8 |
 
 Three things in that table are worth saying plainly.
@@ -135,14 +136,26 @@ The casting constraint does what it claims: the undercut fraction goes from
 0.41 to exactly zero, and the price is a factor of 4.4 in compliance. That is
 the honest trade for a part that can leave a mould along one axis.
 
-The additive support filter does not. It costs a factor of 5.1 and leaves the
-measured overhang area where it was, 0.25 against 0.23. The filter constrains
-the field (nothing floats above nothing) but the gradient the optimiser follows
-is the unfiltered one, since the chain rule through the layer maximum is not
-applied, so the run pays for a constraint it cannot steer with. It is left in
-the module with this paragraph attached rather than removed, because the
-measurement is the useful part; anyone reaching for it should know it currently
-buys nothing.
+The additive support filter took two passes to get right, and both are in the
+table because the difference is the lesson.
+
+Without the chain rule it cost a factor of 5.07 and the optimiser could not
+steer with it: the filter constrained the field while the gradient described
+an unfiltered one. Adding the chain rule through the layer recursion brings the
+cost to 1.15. The derivative had to be right to matter: the first attempt used
+the softmax weights as the derivative of the smooth maximum, which is wrong
+because the weights depend on the arguments too, and a difference quotient put
+it 26 percent off. The correct form is w_i (1 + p (x_i - m)), and the test now
+checks the whole vector-Jacobian product against a difference quotient to ten
+digits.
+
+Judge that constraint by what it enforces. The fraction of solid elements with
+nothing underneath goes from 0.025 unconstrained to exactly zero, at both
+settings. The surface overhang area does not improve, 0.26 against 0.23, and
+that is not a failure of the filter: it is measured on the smoothed marching
+cubes surface, where a supported staircase becomes a face steeper than the
+staircase was. Two measures, two questions, and the module says which belongs
+to which.
 
 ### Filter radius and the thinnest member
 
