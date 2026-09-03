@@ -112,6 +112,20 @@ def test_the_s_curve_covers_the_distance_and_bounds_the_jerk():
     assert np.abs(np.diff(profile.acceleration_rad_s2)).max() < 0.2
 
 
+def test_the_s_curve_integration_drift_falls_with_the_sample_count():
+    """The cap on the drift is a measurement, not a preference: on a 90 degree
+    move the raw drift is 0.89 percent at 40 samples, 0.55 at 60, 0.167 at
+    120, 0.0233 at 240 and 0.0095 at 480. The one percent cap is therefore
+    cleared from 40 samples up and trips below 32, and the refusal names the
+    count that failed."""
+    with pytest.raises(UnreachableMove, match="above 32"):
+        s_curve(1.5708, 1.178, 1.767, 40.0, samples=32)
+    assert s_curve(1.5708, 1.178, 1.767, 40.0, samples=40) is not None
+    for samples in (120, 240):
+        profile = s_curve(1.5708, 1.178, 1.767, 40.0, samples=samples)
+        assert profile.position_rad[-1] == pytest.approx(1.5708, rel=1e-6)
+
+
 def test_the_s_curve_takes_longer_than_the_trapezoid_for_the_same_move():
     fast = trapezoidal(1.0, 2.0, 4.0, samples=2000)
     smooth = s_curve(1.0, 2.0, 4.0, 40.0, samples=2000)
