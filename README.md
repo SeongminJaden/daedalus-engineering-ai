@@ -465,6 +465,15 @@ seconds. The topology path returns a 5.3 kg part whose extracted compliance is
 masses are not comparable: a fixed volume compliance minimisation answers a
 different question from a deflection limited mass minimisation.
 
+**Real drivetrain parts, where the pages print enough.** `drivetrain/sourced.py`
+holds a maxon EC-i 40, a CubeMars AK80-9, three Harmonic Drive CSF gear units
+and a Nabtesco RV-42N, every value carrying the document, the printed figure
+and the date it was read. What the pages do not print is absent and reported,
+not estimated: the maxon page has no peak torque, so that entry refuses to
+become a selectable motor, and the Harmonic Drive pages have no inertia or
+efficiency, so those refuse until a caller supplies them with a source of their
+own.
+
 **Validation ladder (roadmap).** Simulation verification is where the project
 is. Hardware comes next: a part manufactured from an exported STEP file.
 Measurement comes last: a physical test whose evidence is the only thing that

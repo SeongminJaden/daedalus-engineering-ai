@@ -25,6 +25,9 @@ from drivetrain.motors.catalog import PartStatus
 class GearboxFamily(str, Enum):
     PLANETARY = "planetary"
     HARMONIC = "harmonic"
+    #: Cycloidal units, added with the first sourced entry (Nabtesco RV). No
+    #: archetype exists for this family: the only members are real parts.
+    CYCLOIDAL = "cycloidal"
 
 
 class GearboxSpec(BaseModel):
