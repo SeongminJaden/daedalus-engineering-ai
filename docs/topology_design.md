@@ -189,6 +189,43 @@ refinement will produce the number the constraint was supposed to bound.
 Using this to certify a part against a stress allowable would be wrong. Using
 it to compare two designs on the same discretisation is what it is for.
 
+## More than one load case, and what one case costs
+
+`optimization/topology/multiload.py` minimises the weighted sum of the
+compliances, every case solved separately at every iteration, weights
+normalised to one, sensitivity the same weighted sum. Nothing is aggregated
+and there is nothing to tune.
+
+Four cases on the cantilever: a transverse load in each of the two directions,
+an axial load, and a couple on the tip face. Each row is a design, each column
+a case, each entry that case's compliance on that design with the ratio to the
+best design for that column.
+
+| design | bending y | bending z | axial x | torsion |
+|---|---|---|---|---|
+| only bending y | 7.50e-1 (1.00x) | 3.33e0 (1.90x) | 7.17e-1 (3.21x) | 6.27e-1 (2.28x) |
+| only bending z | 6.98e0 (9.30x) | 1.75e0 (1.00x) | 4.24e-1 (1.90x) | 7.37e-1 (2.68x) |
+| only axial x | 5.34e0 (7.12x) | 2.34e0 (1.33x) | 2.23e-1 (1.00x) | 5.17e-1 (1.88x) |
+| only torsion | 2.48e0 (3.30x) | 1.04e1 (5.92x) | 8.96e-1 (4.01x) | 2.75e-1 (1.00x) |
+| all four, equal weight | 1.19e0 (1.58x) | 2.32e0 (1.33x) | 4.05e-1 (1.82x) | 5.10e-1 (1.86x) |
+
+Every single case design is an honest optimum of what it was given and is
+between 1.9 and 9.3 times worse under a case it never saw. The compromise
+design is never worse than 1.86 times the best design for any of the four.
+This is the strongest argument in this document for not treating a topology
+result as a part until the load cases are complete.
+
+The thermal case of the part dataset has no counterpart here. The structured
+solver carries no expansion term, and adding one to make the table look
+complete would be inventing physics rather than adding a load.
+
+Two corrections came out of building this. The optimisers now start on the
+volume constraint: with passive elements a uniform field at the requested
+fraction is above it once they are written in, so the first reported
+compliance belonged to a heavier structure than every iterate after it and the
+history appeared to get worse. And a couple is applied as an explicit nodal
+force vector with zero net force, checked against the torque it claims.
+
 ## What this does not fix
 
 The part is still a voxel body. It is blocky, its surface is non-manifold

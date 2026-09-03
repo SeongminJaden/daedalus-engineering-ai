@@ -309,8 +309,12 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
     still improving faster than that honestly reports `converged=False`.
     """
     n = problem.n_elements()
+    # Start ON the volume constraint. With passive elements a uniform field at
+    # the requested fraction is above it once they are written in, and the
+    # first reported compliance then belongs to a heavier structure than every
+    # iterate after it.
     density = problem.apply_passive(
-        np.full(n, problem.volume_fraction, dtype=np.float64))
+        np.full(n, problem.free_volume_fraction(), dtype=np.float64))
     free = problem.free_mask
     rows = weights = None
     if use_filter:
