@@ -45,7 +45,7 @@ architecture diagram replaced). Not started.
 | item | what | state |
 |---|---|---|
 | 8 | surrogate and embeddings retrained on the generated run | DONE, numbers in docs/dataset_spec.md |
-| 9 | generative CAD loop widened to 13 families, 5 load cases, 19 materials, DFM as a preference axis | next |
+| 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
 | 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
 
 - Item 8 code: `core/part_dataset/industrial_surrogate.py`,

@@ -98,14 +98,22 @@ def build_default_registry() -> MethodRegistry:
         conditions=(_cad_family,),
         implementation="agent.execution.cad.run",
         evidence="SIMULATED",
-        notes="Three parametric families with the problem's length imposed: "
-              "box, hollow rectangle, plate with holes. Not free-form; "
-              "nothing learned proposes geometry. A ranker (beam-theory proxy "
-              "or a trained shape surrogate, both below SIMULATED) orders the "
-              "candidates and the CalculiX label decides. Deflection is the "
-              "constraint; the peak stress is reported and not judged, since "
-              "it sits on a clamped-edge singularity. Every part's volume is "
-              "checked against a closed form before it is labelled."))
+        notes="Eleven parametric families with the problem's length imposed. "
+              "The flange and the gear blank are refused by name: their axial "
+              "extent is a thickness, not a cantilever span. Five load cases "
+              "(bending, axial, torsion, combined, thermal gradient); the "
+              "problem states only the deflection limit, so any other case "
+              "needs its limit from the caller. Materials are read across by "
+              "exact scaling and the winner is solved again in its own "
+              "material, so the reported labels are never derived ones. Not "
+              "free-form; nothing learned proposes geometry. A ranker "
+              "(beam-theory proxy or a trained shape surrogate, both below "
+              "SIMULATED) orders the candidates and the CalculiX label "
+              "decides. Manufacturability rules, when a process is named, are "
+              "a preference among parts that already passed, never a verdict. "
+              "The peak stress is reported and not judged, since it sits on a "
+              "clamped-edge singularity. Every part's volume is checked "
+              "against a closed form before it is labelled."))
 
     registry.register(Method(
         name="topology_stress",

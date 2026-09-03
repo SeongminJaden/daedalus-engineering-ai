@@ -22,6 +22,13 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
+#: The primary response labels the part labeller writes, one per load kind.
+#: Named here rather than imported so this module keeps no dependency on the
+#: dataset package.
+SOLVER_RESPONSES = frozenset({"tip_deflection_m", "elongation_m", "twist_rad",
+                              "thermal_tip_deflection_m"})
+
+
 @dataclass
 class DesignOutcome:
     """One design, its performance, and its provenance."""
@@ -55,10 +62,15 @@ class DesignOutcome:
             self.density_field = np.asarray(self.density_field, dtype=float)
         else:
             labels = getattr(self.cad_record, "labels", None)
-            if not labels or "tip_deflection_m" not in labels:
+            # One of the labeller's primary responses, not the bending one
+            # only: a torsion search produces a twist and a thermal search a
+            # thermal deflection, and both are solver labels. The check is
+            # still that a solver labelled the part.
+            if not labels or not (set(labels) & SOLVER_RESPONSES):
                 raise ValueError(
                     "a CAD outcome must carry a part record the solver has "
-                    "labelled; an unlabelled record is a shape, not a design")
+                    "labelled with one of " + ", ".join(sorted(SOLVER_RESPONSES))
+                    + "; an unlabelled record is a shape, not a design")
 
     @property
     def representation(self) -> str:

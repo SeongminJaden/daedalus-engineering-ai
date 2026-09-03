@@ -429,7 +429,7 @@ so".
 | P6 | surface point clouds from the B-rep, a D2 distance histogram that needs no learning, and a 32-dimensional PointNet embedding graded `SURROGATE`; measured: nearest-neighbour family retrieval 1.00 for the descriptors, 0.88 for the embedding, 0.64 for the histogram | done |
 | P7 | a shape surrogate that predicts CalculiX deflection from descriptors plus a beam-theory proxy; held-out R² 0.94 on 40 parts, p95 error near 0.5, so it ranks candidates and the solver verifies the shortlist; every prediction grades `SURROGATE` and cannot become a verdict | done |
 | P8 | design intent as a claim with provenance, checked by ablation through CalculiX: supported, refuted, or inconclusive when the effect sits inside the mesh noise; recorded in the Brain as evidence or counterexample, never above `SIMULATED` | done |
-| P9 | the agent loop runs a `generative_cad` strategy: candidates from three part families with the problem's length imposed, ranked by the proxy or the shape surrogate, verified by CalculiX, and the winner's STEP path lands in the episode; not free-form, and the docs say so | done, as far as it goes |
+| P9 | the agent loop runs a `generative_cad` strategy: candidates from eleven part families with the problem's length imposed, under any of the five load cases, across the isotropic materials by exact scaling with the winner solved again in its own material, ranked by the proxy or the shape surrogate, verified by CalculiX, with manufacturability rules as a preference and never a verdict; the winner's STEP path lands in the episode; not free-form, and the docs say so | done, as far as it goes |
 
 **Second work list (2026-09-02 to 03), all first passes and all SIMULATED or lower:**
 
