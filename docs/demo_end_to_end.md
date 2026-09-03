@@ -36,6 +36,34 @@ percent below the field's. Manufacturability for milling: 1 of 2 measurable
 rules fails, six-axis inaccessibility, which is what an organic shape does to
 a mill.
 
+## Searching the volume fraction, and where it stops
+
+The obvious repair is to bisect the volume fraction until the extracted part
+meets the deflection limit, and `search_volume_fraction` does exactly that: one
+full optimisation per step, and every step tested by solving the thresholded
+body in CalculiX, because the field's compliance is not the part's.
+
+| volume fraction | extracted mass kg | tip displacement m | meets the 1 mm limit |
+|---|---|---|---|
+| 0.4500 | 6.934 | 2.247e-5 | yes |
+| 0.2500 | 3.750 | 6.316e-5 | yes |
+| 0.1500 | disconnected | | no |
+| 0.2000 | disconnected | | no |
+| 0.2250 | 3.366 | 6.939e-5 | yes |
+| 0.2125 | disconnected | | no |
+
+Six runs, 757 seconds, and the answer is 0.225 at 3.366 kg. The interesting
+part is why it stops there. The deflection at that point is 6.9e-5 m, fourteen
+times inside the 1 mm limit, so the requirement is nowhere near binding. What
+binds is connectivity: below about 0.22 the thresholded structure falls apart
+on this mesh and there is no part to solve. The search bottoms out on the
+discretisation, not on the physics.
+
+So the topology path still cannot answer this requirement at this resolution,
+and now the reason is a measurement rather than an omission. A finer mesh moves
+the connectivity floor down, at eight times the cost per run for a halving of
+the cell, and that run has not been made.
+
 ## The two paths are not comparable, and that is the result
 
 The family part weighs 0.590 kg and meets a deflection limit. The topology
@@ -45,8 +73,11 @@ envelope is a great deal of aluminium. Reading the two masses side by side as
 if they answered the same question would be the mistake this demo exists to
 make visible: a compliance minimisation at fixed volume answers "the stiffest
 shape for this much material", and the requirement asked "the lightest shape
-under this deflection". Turning the second into the first needs a bisection on
-the volume fraction, which is another run per step and is not in this demo.
+under this deflection". The bisection above turns the second into the first and
+gets to 3.366 kg, still 5.7 times the family part, and stops at connectivity
+rather than at the requirement. The comparison the demo cannot make is
+therefore not a missing feature; it is a statement about what this mesh can
+represent.
 
 ## Downstream, identically for both
 

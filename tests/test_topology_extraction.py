@@ -268,3 +268,72 @@ def test_the_end_to_end_demo_runs_both_paths(tmp_path):
     assert fasteners["screw"]["head_diameter_mm"] == 10.0
     assert fasteners["screw"]["material"][0] == "steel_scm440"
     assert "nearest" in fasteners["screw"]["material"][2]
+
+
+# --- searching the volume fraction against the requirement -------------------
+
+@requires_ccx
+def test_the_volume_search_judges_the_extracted_part_not_the_field(tmp_path):
+    """The bisection has to test what the requirement is about.
+
+    The field's compliance is not the part's, so every step solves the
+    thresholded body in CalculiX and compares its loaded-face displacement with
+    the limit. A step whose part falls apart is recorded as infeasible with the
+    reason, not skipped.
+    """
+    from optimization.topology.verify import (format_search, search_volume_fraction,
+                                              tip_displacement_of_extracted)
+
+    mesh = solid_box_mesh(0.4, 0.1, 0.05, 14, 6, 3)
+    fixed, tip = mesh.nodes_at_x(0.0), mesh.nodes_at_x(0.4)
+    passive = elements_touching(mesh, tip) | elements_touching(mesh, fixed)
+
+    def build(fraction):
+        return SimpProblem(mesh=mesh, youngs_modulus_pa=MATERIAL.youngs_modulus_pa,
+                           poisson_ratio=MATERIAL.poisson_ratio, fixed_nodes=fixed,
+                           load_nodes=tip, total_load_n=-800.0, load_direction=1,
+                           volume_fraction=fraction, filter_radius_elements=2.0,
+                           passive_solid=passive)
+
+    search = search_volume_fraction(build, optimize_projected, limit_m=1e-3,
+                                    density_kg_m3=MATERIAL.density_kg_m3,
+                                    low=0.1, high=0.5, steps=3, iterations=25)
+    assert search.steps, "the search reported nothing"
+    assert "|" in format_search(search)
+    if search.best is not None:
+        assert search.best.tip_displacement_m <= search.limit_m
+        assert search.best.mass_kg > 0.0
+        assert search.density is not None
+        # The reported displacement is the extracted part's, recomputed here.
+        again = tip_displacement_of_extracted(build(search.best.volume_fraction),
+                                              search.density,
+                                              search.best.threshold)
+        assert again == pytest.approx(search.best.tip_displacement_m, rel=1e-9)
+    for step in search.steps:
+        if not step.feasible and np.isnan(step.mass_kg):
+            assert step.note, "an infeasible step must say why"
+
+
+@requires_ccx
+def test_a_limit_the_envelope_cannot_meet_stops_the_search_at_once():
+    """An impossible requirement is one run, not six: if the largest volume
+    fraction fails, bisecting below it cannot succeed."""
+    from optimization.topology.verify import search_volume_fraction
+
+    mesh = solid_box_mesh(0.4, 0.1, 0.05, 14, 6, 3)
+    fixed, tip = mesh.nodes_at_x(0.0), mesh.nodes_at_x(0.4)
+
+    def build(fraction):
+        return SimpProblem(mesh=mesh, youngs_modulus_pa=MATERIAL.youngs_modulus_pa,
+                           poisson_ratio=MATERIAL.poisson_ratio, fixed_nodes=fixed,
+                           load_nodes=tip, total_load_n=-800.0, load_direction=1,
+                           volume_fraction=fraction, filter_radius_elements=2.0,
+                           passive_solid=(elements_touching(mesh, tip)
+                                          | elements_touching(mesh, fixed)))
+
+    search = search_volume_fraction(build, optimize_projected, limit_m=1e-12,
+                                    density_kg_m3=MATERIAL.density_kg_m3,
+                                    low=0.1, high=0.4, steps=4, iterations=20)
+    assert len(search.steps) == 1
+    assert search.best is None
+    assert "no volume fraction" in search.summary()

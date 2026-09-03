@@ -323,3 +323,131 @@ def stress_check(stress_problem, result, density_kg_m3: float,
                        p_norm=float(result.final_p_norm),
                        design_max_relaxed_pa=float(result.final_max_stress_pa),
                        extracted_peak_pa=peaks)
+
+
+@dataclass
+class VolumeSearchStep:
+    volume_fraction: float
+    threshold: float
+    mass_kg: float
+    tip_displacement_m: float
+    feasible: bool
+    note: str = ""
+
+    def row(self) -> dict:
+        return self.__dict__.copy()
+
+
+@dataclass
+class VolumeSearch:
+    """The lightest volume fraction whose EXTRACTED part meets a displacement
+    limit, and every step that got there."""
+
+    limit_m: float
+    steps: list[VolumeSearchStep] = field(default_factory=list)
+    best: VolumeSearchStep | None = None
+    density: np.ndarray | None = None
+    seconds: float = 0.0
+
+    def summary(self) -> str:
+        if self.best is None:
+            return (f"no volume fraction in the bracket produced an extracted "
+                    f"part under {self.limit_m:.4g} m after {len(self.steps)} "
+                    f"runs")
+        return (f"volume fraction {self.best.volume_fraction:.4f}, extracted "
+                f"part {self.best.mass_kg:.4f} kg at {self.best.tip_displacement_m:.4e} m "
+                f"against a limit of {self.limit_m:.4g} m, {len(self.steps)} runs")
+
+
+def tip_displacement_of_extracted(problem, density: np.ndarray, threshold: float,
+                                  element_type=None) -> float:
+    """Mean displacement of the loaded face on the extracted part, in the load
+    direction. The same quantity the part labeller reports, so it can be
+    compared with a deflection requirement."""
+    from nodes import calculix as ccx
+
+    element_type = element_type or ccx.ElementType.C3D8I
+    sub, _report = retained_submesh(problem.mesh, density, threshold,
+                                    problem.fixed_nodes, problem.load_nodes)
+    fixed = sub.local_nodes(problem.fixed_nodes)
+    loaded = sub.local_nodes(problem.load_nodes)
+    result = ccx.solve(sub, problem.youngs_modulus_pa, problem.poisson_ratio,
+                       fixed, loaded, total_load_n=problem.total_load_n,
+                       load_direction=problem.load_direction,
+                       element_type=element_type)
+    if not result.converged:
+        raise RuntimeError("CalculiX reported an error on the extracted part")
+    return abs(float(np.mean(result.displacements[loaded, problem.load_direction])))
+
+
+def search_volume_fraction(build_problem, runner, limit_m: float,
+                           density_kg_m3: float, low: float = 0.05,
+                           high: float = 0.6, steps: int = 6,
+                           threshold: float = 0.5, iterations: int = 100
+                           ) -> VolumeSearch:
+    """Bisect the volume fraction against the EXTRACTED part's displacement.
+
+    The field's compliance is not the part's, which was measured before this
+    existed, so the test at every step is a CalculiX solve of the thresholded
+    body rather than anything the optimiser reports. `build_problem` takes a
+    volume fraction and returns a SimpProblem, so the caller owns the mesh,
+    the loads, the passive regions and any manufacturing projection.
+
+    One full optimisation per step. Six steps on a 1536 element cantilever is
+    about five minutes.
+    """
+    import time
+
+    started = time.perf_counter()
+    search = VolumeSearch(limit_m=float(limit_m))
+
+    def evaluate(fraction: float) -> VolumeSearchStep:
+        problem = build_problem(fraction)
+        result = runner(problem, max_iterations=iterations)
+        try:
+            displacement = tip_displacement_of_extracted(problem, result.density,
+                                                         threshold)
+        except (DisconnectedAtThreshold, RuntimeError) as exc:
+            step = VolumeSearchStep(volume_fraction=fraction, threshold=threshold,
+                                    mass_kg=float("nan"),
+                                    tip_displacement_m=float("nan"),
+                                    feasible=False, note=str(exc)[:120])
+            search.steps.append(step)
+            return step
+        kept = int((result.density >= threshold).sum())
+        mass = kept * problem.mesh.element_volume * density_kg_m3
+        step = VolumeSearchStep(volume_fraction=fraction, threshold=threshold,
+                                mass_kg=mass, tip_displacement_m=displacement,
+                                feasible=displacement <= limit_m)
+        search.steps.append(step)
+        if step.feasible and (search.best is None
+                              or step.mass_kg < search.best.mass_kg):
+            search.best = step
+            search.density = result.density
+        return step
+
+    top = evaluate(high)
+    if not top.feasible:
+        search.seconds = time.perf_counter() - started
+        return search                      # the envelope cannot meet the limit
+    lower, upper = low, high
+    for _ in range(steps - 1):
+        middle = 0.5 * (lower + upper)
+        if evaluate(middle).feasible:
+            upper = middle
+        else:
+            lower = middle
+    search.seconds = time.perf_counter() - started
+    return search
+
+
+def format_search(search: VolumeSearch) -> str:
+    lines = ["| volume fraction | extracted mass kg | tip displacement m | meets the limit |",
+             "|" + "---|" * 4]
+    for step in search.steps:
+        mass = "disconnected" if np.isnan(step.mass_kg) else f"{step.mass_kg:.4f}"
+        displacement = ("" if np.isnan(step.tip_displacement_m)
+                        else f"{step.tip_displacement_m:.4e}")
+        lines.append(f"| {step.volume_fraction:.4f} | {mass} | {displacement} | "
+                     f"{'yes' if step.feasible else 'no'} |")
+    return "\n".join(lines)
