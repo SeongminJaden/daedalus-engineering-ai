@@ -51,7 +51,9 @@ architecture diagram replaced). Not started.
 | 11e | stress constraint measured against CalculiX; the peak does not converge and the check says so | DONE |
 | 11d | weighted multi load compliance and the cross evaluation table | DONE |
 | 11f and 10 | end to end demo, both paths, `docs/demo_end_to_end.md`, `scripts/demo_end_to_end.py` | DONE |
-| 11g | README and DESIGN wording brought to the measurements | README and KR done in 11a, DESIGN section open |
+| 11g | README, KR and DESIGN brought to the measurements | DONE |
+| 12 | trajectories, torque profiles, friction that refuses defaults, gear ratio, three engine cross check | DONE |
+| 13, 17, 14, 15, 16, 18 | motor catalogue, curved mesh refusals, manufacturing STEP, free form, LLM policy, material limits | next, in that order |
 | 11'-1 | bisection on the volume fraction, judged on the extracted part | DONE, stops at connectivity (0.225, 3.366 kg) not at the limit |
 | 11'-2 | chain rule through the additive support filter | DONE, cost 5.07x to 1.15x, unsupported elements 0.025 to 0 |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |

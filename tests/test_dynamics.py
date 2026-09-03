@@ -241,14 +241,25 @@ def test_kinetic_energy_is_non_negative(arm):
     assert kinetic_energy_j(arm, [0.3, 0.4], [0.0, 0.0], RHO) == 0.0
 
 
-def test_friction_is_zero_and_documented_as_such(arm):
-    """The term exists and returns zero. It must not quietly contribute a made
-    up value to a torque that an actuator gets selected from."""
+def test_friction_is_zero_unless_it_was_measured(arm):
+    """The term must not quietly contribute a made up value to a torque that
+    an actuator gets selected from. Without measured parameters it is zero and
+    the docstring says that is optimistic; with them it is real, and a joint
+    whose parameters are missing is refused rather than zeroed."""
+    from physics.dynamics.friction import FrictionDataMissing, JointFriction
+
     torques = friction_torques(arm, [1.0, 1.0])
     assert torques.shape == (arm.dof,)
     assert np.all(torques == 0.0)
     assert np.all(friction_torques(arm, [0.0, 0.0]) == 0.0)
-    assert friction_torques.__doc__.lstrip().startswith("Zero.")
+    assert "zero unless measured" in friction_torques.__doc__
+
+    measured = JointFriction(coulomb_nm=0.3, viscous_nm_s_rad=0.01,
+                             breakaway_nm=0.5, source="bench, 2026-09-03")
+    real = friction_torques(arm, [1.0, -1.0], frictions=[measured, measured])
+    assert real[0] > 0.0 > real[1]
+    with pytest.raises(FrictionDataMissing):
+        friction_torques(arm, [1.0, 1.0], frictions=[measured, None])
 
 
 # =========================================================================== #

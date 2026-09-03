@@ -117,14 +117,20 @@ def gravity_torques(assembly: Assembly, q, density_kg_m3: float) -> np.ndarray:
                          include_gravity=True)
 
 
-def friction_torques(assembly: Assembly, qd) -> np.ndarray:
-    """Zero. The term exists so the interface does not change later.
+def friction_torques(assembly: Assembly, qd, frictions=None) -> np.ndarray:
+    """Friction torque per joint, zero unless measured parameters are given.
 
     Real friction needs breakaway torque, a viscous coefficient and gearbox
-    efficiency per joint. None of that is available here, and inventing it
-    would put fabricated numbers into a torque that a motor gets selected from.
+    efficiency per joint. None of that ships with this repository, and
+    inventing it would put fabricated numbers into a torque that a motor gets
+    selected from. A caller who has measured them passes a JointFriction per
+    joint (see physics.dynamics.friction) and gets a real term; a caller who
+    has not gets zero, which is optimistic and is documented as such.
     """
-    return np.zeros(assembly.dof, dtype=np.float64)
+    if frictions is None:
+        return np.zeros(assembly.dof, dtype=np.float64)
+    from .friction import friction_torques as measured_friction
+    return measured_friction(frictions, qd)
 
 
 def inverse_dynamics(
@@ -134,8 +140,14 @@ def inverse_dynamics(
     qdd,
     density_kg_m3: float,
     tip_force_n=None,
+    frictions=None,
 ) -> np.ndarray:
-    """Joint torques for a commanded motion, including an external tip force."""
+    """Joint torques for a commanded motion, including an external tip force.
+
+    `frictions` is one JointFriction per joint when they have been measured.
+    Without it the friction term is zero, which under-states the torque a
+    motor must supply.
+    """
     q = np.asarray(q, dtype=np.float64).reshape(-1)
     qd = np.asarray(qd, dtype=np.float64).reshape(-1)
     qdd = np.asarray(qdd, dtype=np.float64).reshape(-1)
@@ -143,7 +155,7 @@ def inverse_dynamics(
     tau = (mass_matrix(assembly, q, density_kg_m3) @ qdd
            + coriolis_matrix(assembly, q, qd, density_kg_m3) @ qd
            + gravity_torques(assembly, q, density_kg_m3)
-           + friction_torques(assembly, qd))
+           + friction_torques(assembly, qd, frictions))
 
     if tip_force_n is not None:
         from core.assembly.kinematics import position_jacobian
