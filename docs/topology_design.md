@@ -108,6 +108,57 @@ for an organic shape: six-axis inaccessibility, overhang fraction above the
 45 and 50 degree rules, and no draft anywhere. Smoothing raises the minimum
 wall from 5.3 mm to 13.7 mm and leaves the overhang fraction where it was.
 
+## Manufacturing constraints inside the loop, and what each costs
+
+`optimization/topology/manufacturing.py` supplies projections that `SimpProblem`
+applies to the density the solver sees, so the compliance a run reports belongs
+to a field that already obeys the constraint. Same cantilever, 1536 elements,
+three-field projection, 100 iterations, volume fraction 0.35 throughout.
+
+| constraint | compliance J | against none | overhang area 45 deg | undercut fraction | min wall mm |
+|---|---|---|---|---|---|
+| none | 3.582e-1 | 1.00 | 0.23 | 0.41 | 13.7 |
+| symmetry about the width | 3.582e-1 | 1.00 | 0.23 | 0.41 | 13.7 |
+| symmetry about the height | 4.144e-1 | 1.16 | 0.28 | 0.50 | 15.7 |
+| symmetry about the length | 1.316e0 | 3.67 | 0.20 | 0.45 | 13.1 |
+| additive support filter | 1.817e0 | 5.07 | 0.25 | 0.42 | 11.3 |
+| casting pull direction | 1.588e0 | 4.43 | 0.15 | 0.00 | 8.8 |
+
+Three things in that table are worth saying plainly.
+
+Symmetry about the width is free because the unconstrained optimum is already
+symmetric about that plane, to 1e-16. A constraint that costs nothing is not
+evidence that constraints are cheap; the same projection about the length,
+where the cantilever is genuinely asymmetric, costs a factor of 3.7.
+
+The casting constraint does what it claims: the undercut fraction goes from
+0.41 to exactly zero, and the price is a factor of 4.4 in compliance. That is
+the honest trade for a part that can leave a mould along one axis.
+
+The additive support filter does not. It costs a factor of 5.1 and leaves the
+measured overhang area where it was, 0.25 against 0.23. The filter constrains
+the field (nothing floats above nothing) but the gradient the optimiser follows
+is the unfiltered one, since the chain rule through the layer maximum is not
+applied, so the run pays for a constraint it cannot steer with. It is left in
+the module with this paragraph attached rather than removed, because the
+measurement is the useful part; anyone reaching for it should know it currently
+buys nothing.
+
+### Filter radius and the thinnest member
+
+| filter radius, cells | compliance J | min wall mm | overhang 45 | undercut |
+|---|---|---|---|---|
+| 1.5 | 3.726e-1 | 0.5 | 0.31 | 0.49 |
+| 2.5 | 3.582e-1 | 13.7 | 0.23 | 0.41 |
+| 3.5 | 4.066e-1 | 15.6 | 0.21 | 0.24 |
+
+The cell is 15.6 mm. At radius 1.5 the extracted body has half-millimetre
+slivers, which is the filter failing to impose any member size at all; at 2.5
+and above the thinnest wall is about one cell and stops growing with the
+radius. So on this grid the minimum member size is set by the discretisation
+rather than by the filter, and a real minimum-thickness requirement needs a
+mesh several cells finer than the member, not a larger radius.
+
 ## What this does not fix
 
 The part is still a voxel body. It is blocky, its surface is non-manifold

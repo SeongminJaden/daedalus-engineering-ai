@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from typing import Callable
+
 from physics.fem.mesh import Mesh
 from physics.fem.solver import solve_linear_elasticity
 
@@ -58,12 +60,25 @@ class SimpProblem:
     #: it did before.
     passive_solid: np.ndarray | None = None
     passive_void: np.ndarray | None = None
+    #: A manufacturing projection applied to the density the solver sees, from
+    #: optimization.topology.manufacturing. Its chain rule is not applied to
+    #: the sensitivity, so it is a projection rather than a fully consistent
+    #: constraint and the result is measured afterwards, never assumed.
+    density_projection: Callable[[np.ndarray], np.ndarray] | None = None
 
     def n_elements(self) -> int:
         return self.mesh.n_elements
 
     def apply_passive(self, density: np.ndarray) -> np.ndarray:
-        """Densities with the passive regions written back in."""
+        """Densities with the manufacturing projection applied and the passive
+        regions written back in.
+
+        The passive regions come last on purpose: a load patch that a
+        manufacturing projection would carve away is still where the load is
+        applied, and a field without it cannot be solved at all.
+        """
+        if self.density_projection is not None:
+            density = self.density_projection(density)
         if self.passive_solid is not None:
             density = np.where(self.passive_solid, 1.0, density)
         if self.passive_void is not None:
@@ -72,8 +87,14 @@ class SimpProblem:
 
     @property
     def free_mask(self) -> np.ndarray | None:
-        """Elements the optimiser may move, or None when all of them are."""
-        if self.passive_solid is None and self.passive_void is None:
+        """Elements the optimiser may move, or None when all of them are.
+
+        A density projection makes every element's physical value depend on
+        others, so the projection path is taken whenever one is set even if no
+        element is passive.
+        """
+        if (self.passive_solid is None and self.passive_void is None
+                and self.density_projection is None):
             return None
         free = np.ones(self.mesh.n_elements, dtype=bool)
         if self.passive_solid is not None:
@@ -299,7 +320,7 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
     result = SimpResult(density=density)
     for iteration in range(1, max_iterations + 1):
         compliance, sensitivity, _ = compliance_and_sensitivity(
-            problem, density, device)
+            problem, problem.apply_passive(density), device)
         if use_filter:
             sensitivity = apply_sensitivity_filter(
                 sensitivity, density, rows, weights, problem.min_density)
@@ -339,5 +360,5 @@ def optimize(problem: SimpProblem, max_iterations: int = 80,
             result.converged = True
             break
 
-    result.density = density
+    result.density = problem.apply_passive(density)
     return result

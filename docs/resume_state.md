@@ -47,7 +47,8 @@ architecture diagram replaced). Not started.
 | 8 | surrogate and embeddings retrained on the generated run | DONE, numbers in docs/dataset_spec.md |
 | 11a | topology extraction re-verified in CalculiX, passive regions added, `docs/topology_design.md` | DONE |
 | 11b | marching cubes, Taubin smoothing, STL, re-solve with linear tets, DFM on the surface | DONE |
-| 11c to 11g | manufacturing constraints in the optimiser, multi load, stress constraint measurement, demo, docs | next |
+| 11c | manufacturing projections (symmetry, support, pull) with the price of each measured | DONE |
+| 11d to 11g | multi load, stress constraint measurement, demo, docs | next |
 | 9 | generative CAD loop widened to 11 searchable families (2 discs refused by name), 5 load cases, materials by scaling with the winner re-solved, DFM as a preference | DONE |
 | 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
 
