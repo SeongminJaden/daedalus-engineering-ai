@@ -33,12 +33,30 @@ architecture diagram replaced). Not started.
 | item | what | state |
 |---|---|---|
 | 1 | sourced materials table with per-value citations, temperature ranges, optional fatigue | DONE: 19 materials, `sources` and `value_sources` on MaterialSpec, MatWeb values kept but graded secondary, 718 modulus curve |
-| 2 | dataset spec (`docs/dataset_spec.md`), 5 load cases, 13 families, material scaling, resumable batch | DONE; generation at scale not run, user's call (about 45 min at 8 workers, mount family retries a quarter of its parts) |
+| 2 | dataset spec (`docs/dataset_spec.md`), 5 load cases, 13 families, material scaling, resumable batch | DONE; run 1 generated 2026-09-03, 113,152 records, numbers in docs/dataset_spec.md |
 | 3 | form score (B) and per-process DFM rules (C), grade rule_based_dfm_guideline | DONE |
 | 4 | Code_Aster contact xfail | DONE: sign of LIAISON_UNIL; contact registered |
 | 5 | standard parts: ISO 4762, ISO 4032, GT2, heat-set inserts, with material links | DONE |
 | 6 | Gazebo spring-hold statics cross-check (0.03 percent) and envelope interference; Isaac Sim not installed, machine below its requirements | DONE |
 | 7 | `docs/measurement_guideline.md` | DONE |
+
+## Third work list (2026-09-03), items 8 to 10
+
+| item | what | state |
+|---|---|---|
+| 8 | surrogate and embeddings retrained on the generated run | DONE, numbers in docs/dataset_spec.md |
+| 9 | generative CAD loop widened to 13 families, 5 load cases, 19 materials, DFM as a preference axis | next |
+| 10 | end to end demo: requirement, generation, solve, DFM, assembly, Gazebo statics | after 9 |
+
+- Item 8 code: `core/part_dataset/industrial_surrogate.py`,
+  `scripts/train_industrial_surrogate.py`,
+  `scripts/measure_industrial_embeddings.py`,
+  `tests/test_industrial_surrogate.py`. Artefacts (not in git):
+  `data/generated/surrogate_v1`, `data/generated/embedding_v1`.
+- The measured result that changed a belief: with 90,574 rows the closed form
+  proxies are no longer needed (0.997 Spearman with or without them), the
+  opposite of the 40-part finding. The proxy-alone baseline (0.878) is
+  reported next to every model number.
 
 ## Second work list, as built (2026-09-03)
 
@@ -59,10 +77,10 @@ architecture diagram replaced). Not started.
 - Gazebo: `integration/simulation/gazebo.py` (spring hold, envelope
   interference). Runs need `ign` and real time; about 15 s per test file.
 - Guideline: `docs/measurement_guideline.md`. Dataset spec: `docs/dataset_spec.md`.
-- Generation run started 2026-09-03 08:12 KST: `scripts/generate_industrial_dataset.py`
-  --workers 8 --samples 100 into `data/generated/industrial_v1` (ignored by git),
-  log at `data/generated/industrial_v1.log`. When it finishes, copy the
-  manifest numbers into docs/dataset_spec.md and report them.
+- Generation run 1 finished 2026-09-03 09:26 KST: 6,430 labelled of 6,500, 70 refused
+  (all nonpositive Jacobian), 113,152 records with scaling, 440 MB JSONL in
+  `data/generated/industrial_v1` (ignored by git; manifest numbers and md5 in
+  docs/dataset_spec.md). 74 min on 8 workers, 1.67 times the serial per-part cost.
 - Not done: classifier rules for the eight new
   families; Isaac Sim (hardware below requirements); anything physical.
 

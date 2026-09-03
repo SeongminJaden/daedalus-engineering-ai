@@ -436,12 +436,22 @@ so".
 | item | what | state |
 |---|---|---|
 | materials | 19 sourced materials, per-value citations, temperature curve for INCONEL 718, fatigue absent where no sheet gives it | done |
-| dataset | 13 part families, 5 load cases each checked against a closed form, exact material scaling with a measured Poisson residual per case, resumable batch generation; spec and cost in `docs/dataset_spec.md` | done, generation at scale left to the user |
+| dataset | 13 part families, 5 load cases each checked against a closed form, exact material scaling with a measured Poisson residual per case, resumable batch generation; spec and cost in `docs/dataset_spec.md` | done; run 1 generated 2026-09-03: 6,430 solved parts, 113,152 records with scaling, numbers in the spec |
 | form and manufacturability | form targets consumed into a preference score off the ladder; per-process DFM rules (CNC, sheet, FDM, SLS, SLM, die casting, injection) from cited design guides, measured on the tessellated part, graded rule-based and never evidence | done |
 | Code_Aster contact | the xfail was a reversed inequality; fixed, verified to 2 percent, registered | done |
 | catalogue parts | ISO 4762 screws, ISO 4032 nuts, GT2 pulleys and belts, heat-set inserts as solids with cited dimensions and material links; pulleys are envelopes without teeth | done |
 | Gazebo cross-check | Gazebo Fortress holds the assembly with preloaded joint springs and its equilibrium agrees with this project's statics to 0.03 percent; envelope interference by kinematics; Isaac Sim not installed, machine below its requirements | done |
 | measurement guideline | `docs/measurement_guideline.md`: what to measure, with what, to what tolerance, and the record format that alone can raise a grade | written |
+
+**Surrogate and embeddings on the generated run (2026-09-03).** Trained on
+90,574 rows from 6,430 solved parts and measured on 22,578 held out: rank
+correlation 0.997 on the primary response, median error 7 percent, p95 38
+percent. The closed-form proxy alone on the same rows is 0.878 and 36 percent,
+which is the baseline that makes the first number mean something. With this
+much data the proxy features are no longer needed (0.997 without them), the
+opposite of the 40-part result. The CAD embedding on thirteen families reaches
+0.95 precision at 1 against 0.99 for the plain descriptors. Everything here is
+SURROGATE and cannot decide anything.
 
 **Validation ladder (roadmap).** Simulation verification is where the project
 is. Hardware comes next: a part manufactured from an exported STEP file.
