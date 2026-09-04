@@ -69,6 +69,17 @@ check in this repository.
 | mass | 8.312 kg of links at a volume fraction of 0.3, which is a fraction OF A DOMAIN and the domains grew. Meaningless until the per link search finishes |
 | not done | the volume fraction search, covers, wiring, bearings beyond a seat tolerance, the spigot fit (no boss tolerance is printed), the AK80-9 dowel angles (not published and not measurable on its model) |
 
+EVERY DEFLECTION IN THIS DESIGN IS LINK ELASTICITY ONLY. Six actuators sit
+between the links and all six are treated as rigid, because no integrated
+actuator in this catalogue prints a torsional stiffness. The missing term
+ADDS to the modelled one, so the real tool deflection is larger than any
+number here. Asked in reverse, the way the friction grip was: to hold 1 mm
+with the joints taking half the budget, the shoulder would need 205,000
+N m/rad against the 10,313 to 44,000 this catalogue prints for gear units of
+the same size, and the elbow 87,000. The limit therefore cannot be met by
+stiffening the links, and no deflection result here should be read as a tip
+deflection.
+
 WITHDRAWN RESULT. Every statement in this repository before 2026-09-05 that
 a link "meets its deflection limit" was measuring the wrong quantity, and
 the numbers behind those statements should not be quoted. Each link was

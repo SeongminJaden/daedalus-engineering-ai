@@ -1580,3 +1580,98 @@ def mount_stage(spec: ManipulatorSpec = SPEC,
         "weight it holds: the arm stretched out puts 31.8 N m on it against "
         "76 N of weight, and the payload alone at full reach is 17.6 of that")
     return result
+
+
+#: CHOSEN. How much of the tip deflection budget the joints may have. The
+#: links and the joints are in series and both consume it, and nothing says
+#: how to divide it, so half each is the least arbitrary split available and
+#: it is stated rather than buried.
+JOINT_SHARE_OF_BUDGET = 0.5
+
+#: The torsional stiffnesses this catalogue actually prints, for gear units
+#: of roughly this size. They are a REFERENCE RANGE and not a design input:
+#: they belong to units this design has already refused to pair, for a
+#: separate reason. What they are good for is knowing whether a required
+#: stiffness is ordinary or absurd.
+PRINTED_STIFFNESS_RANGE_NM_RAD = (10_313.0, 44_000.0)
+
+
+def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
+                          arm: Assembly, spec: ManipulatorSpec = SPEC,
+                          margin: float = 0.8) -> StageResult:
+    """What joint stiffness this arm would NEED, since none is published.
+
+    THE DEFLECTION NUMBERS IN THIS DESIGN ARE LINK ELASTICITY ONLY. Six
+    actuators sit between the links and every one of them has been treated as
+    rigid, because not one of the integrated actuators in this catalogue
+    prints a torsional stiffness. In a real arm that term is usually the
+    larger of the two: a joint twisting by torque over stiffness swings the
+    whole remaining reach, and the shoulder's reach is 600 mm.
+
+    No stiffness is assumed. The question is turned round the way it was for
+    the friction grip, which needed a coefficient nobody prints: this reports
+    the stiffness each joint would HAVE to have. That needs no source, and
+    the answer can be read against the values this catalogue does print for
+    gear units of the same size, which run 10,313 to 44,000 N m/rad.
+    """
+    import numpy as np
+
+    from core.assembly.kinematics import forward_kinematics
+
+    result = StageResult(name="the joint stiffness this arm would need")
+    pose = forward_kinematics(arm, stretched_pose(spec))
+    tool = pose.tool_position()
+    statics = {row["joint"]: abs(float(row["static_nm"]))
+               for row in dynamics.rows}
+    selected = [row for row in drivetrain.rows if row.get("status") == "selected"]
+    if not selected:
+        result.could_not.append("no drive was selected, so nothing to size")
+        return result
+
+    budget = spec.tip_deflection_limit_m * margin
+    allowance = budget * JOINT_SHARE_OF_BUDGET / len(selected)
+    low, high = PRINTED_STIFFNESS_RANGE_NM_RAD
+    for row in selected:
+        joint = row["joint"]
+        torque = statics.get(joint, 0.0)
+        lever = float(np.linalg.norm(tool - pose.joint_origins[joint]))
+        required = torque * lever / allowance if allowance > 0 else None
+        result.rows.append({
+            "joint": joint, "drive": row.get("selected"),
+            "static_torque_nm": torque, "lever_m": lever,
+            "allowance_m": allowance,
+            "required_stiffness_nm_rad": required,
+            "published": None,
+            "against_printed_range": (
+                None if not required else
+                "inside the range this catalogue prints" if required <= high
+                else f"{required / high:.1f} times the stiffest unit this "
+                     f"catalogue prints")})
+
+    needed = [r["required_stiffness_nm_rad"] for r in result.rows
+              if r["required_stiffness_nm_rad"]]
+    if needed:
+        worst = max(needed)
+        result.notes.append(
+            f"the stiffest joint would need {worst:,.0f} N m/rad, against "
+            f"{low:,.0f} to {high:,.0f} for the gear units this catalogue "
+            f"prints. That is {worst / high:.1f} times the stiffest of them")
+    result.notes.append(
+        "the torque used is the STATIC one at full reach, because the "
+        "deflection limit is a static condition. Three joints read zero "
+        "there: the base yaw and the two roll axes carry no gravity moment "
+        "in this pose. That is a property of the pose and not of the joints, "
+        "and under acceleration they carry torque like any other")
+    result.notes.append(
+        f"the joints are given {JOINT_SHARE_OF_BUDGET:.0%} of the "
+        f"{budget * 1000:.2f} mm budget, split equally, which is a CHOSEN "
+        f"split: links and joints are in series and nothing says how to "
+        f"divide it")
+    result.could_not.append(
+        "NO TORSIONAL STIFFNESS IS PUBLISHED for any integrated actuator in "
+        "this catalogue, so no joint compliance is modelled and every "
+        "deflection reported by this design is LINK ELASTICITY ONLY. It is "
+        "not a conservative simplification: the missing term adds to the one "
+        "that is modelled, so the real tool deflection is larger than any "
+        "number here by an amount nobody in this design knows.")
+    return result

@@ -33,6 +33,7 @@ from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # 
                                          measurement_plan_stage,
                                          mount_stage,
                                          pinocchio_cross_check, policy_stage,
+                                         joint_stiffness_stage,
                                          reflected_inertia_stage,
                                          spigot_stage,
                                          verification_stage)
@@ -100,6 +101,8 @@ def main() -> int:
     stages["inertia"] = reflected_inertia_stage(arm, stages["drivetrain"], SPEC)
     stages["comparison"] = drive_comparison_stage(stages["drivetrain"], SPEC)
     stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
+    stages["joint_stiffness"] = joint_stiffness_stage(
+        stages["dynamics"], stages["drivetrain"], arm, SPEC)
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
     stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
     # The two mounts are designed in this repository now, so the gap list
@@ -181,6 +184,8 @@ def main() -> int:
         section("3c. Direct drive against geared, per joint", stages["comparison"]),
         section("3d. Joint compliance and backlash, from the gear data",
                 stages["compliance"]),
+        section("3d2. The joint stiffness this arm would need, since none is "
+                "published", stages["joint_stiffness"]),
         section("3e. What the bus voltage costs", stages["bus"]),
         section("3f. Does each joint contain its own drive", stages["envelope"]),
         section("3g. What each link bolts to", stages["interfaces"]),

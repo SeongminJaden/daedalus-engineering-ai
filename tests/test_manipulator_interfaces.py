@@ -769,3 +769,44 @@ def test_the_narrowest_bolt_ring_clears_its_floor_and_only_just():
     assert widths[tightest] - MINIMUM_RING_WIDTH_M < 0.001, (
         "the narrowest ring has more margin than expected, so either a drive "
         "changed or the floor did; re-read both")
+
+
+def test_the_arm_needs_more_joint_stiffness_than_this_catalogue_prints():
+    """The deflection limit cannot be met by stiffening the links.
+
+    Every deflection this design computes is link elasticity only, because
+    six actuators sit between the links and not one of them publishes a
+    torsional stiffness. Turning the question round the way the friction grip
+    was turned round asks what the joints would have to be, and needs no
+    source to answer: giving the joints half of the budget, the shoulder
+    needs 205,000 N m/rad against the 10,313 to 44,000 this catalogue prints
+    for gear units of the same size.
+
+    So this is not a term to add later and find small. Stiffening every link
+    to infinity leaves the arm outside its limit, and the design says so
+    rather than reporting a number that measures half the problem.
+    """
+    from projects.manipulator.arm import build_arm
+    from projects.manipulator.loop import run_loop
+    from projects.manipulator.stages import (PRINTED_STIFFNESS_RANGE_NM_RAD,
+                                             drivetrain_stage, dynamics_stage,
+                                             joint_stiffness_stage,
+                                             reflected_inertia_stage)
+
+    loop = run_loop()
+    arm = build_arm(loop.data["final_sections"], SPEC)
+    dynamics = dynamics_stage(arm, SPEC, samples=40)
+    first = drivetrain_stage(dynamics, SPEC, {})
+    inertias = {row["joint"]: row.get("load_inertia_kg_m2")
+                for row in reflected_inertia_stage(arm, first, SPEC).rows}
+    stage = joint_stiffness_stage(dynamics, drivetrain_stage(
+        dynamics, SPEC, inertias), arm, SPEC)
+
+    needed = {row["joint"]: row["required_stiffness_nm_rad"]
+              for row in stage.rows}
+    assert needed["j2_shoulder"] == pytest.approx(205_000, rel=0.05)
+    assert needed["j3_elbow"] == pytest.approx(87_000, rel=0.05)
+    stiffest = PRINTED_STIFFNESS_RANGE_NM_RAD[1]
+    assert needed["j2_shoulder"] > 4.0 * stiffest
+    # And the design refuses to call its own deflection a tip deflection.
+    assert any("LINK ELASTICITY ONLY" in item for item in stage.could_not)

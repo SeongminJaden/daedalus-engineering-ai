@@ -151,7 +151,16 @@ class ManipulatorSpec:
 
     #: Deflection limit at the tool under the payload at full reach. Chosen at
     #: 1 mm, which is 1/600 of the reach; the task states a tip deflection
-    #: constraint without a number.
+    #: constraint without a number, so there is no safety factor inside it and
+    #: any margin has to be taken explicitly elsewhere.
+    #:
+    #: EVERY DEFLECTION THIS DESIGN COMPUTES IS LINK ELASTICITY ONLY. Six
+    #: actuators sit between the links and all six are treated as rigid,
+    #: because no integrated actuator in this catalogue prints a torsional
+    #: stiffness. That term ADDS to the one that is modelled, so the real
+    #: deflection is larger than any number here, and `joint_stiffness_stage`
+    #: reports what the joints would have to be for the limit to hold: the
+    #: shoulder needs 4.7 times the stiffest gear unit this catalogue prints.
     tip_deflection_limit_m: float = 1.0e-3
 
     #: Torque margin a joint must keep against its actuator's continuous
