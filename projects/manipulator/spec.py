@@ -59,29 +59,25 @@ class ManipulatorSpec:
     #: measurement; a real gripper's inertia tensor would replace it.
     payload_extent_m: float = 0.100
 
-    #: CHOSEN, and it costs nothing. Where two consecutive joints turn about
-    #: the SAME axis, their actuators face opposite ways. Without that rule
-    #: the arm is impossible rather than merely awkward: the link between
-    #: them bolts to the first drive's output face and the second drive's
-    #: housing face, and if both drives face the same way those two planes
-    #: are on the same side of the link and it would have to be in two places
-    #: at once. Facing them apart puts the link exactly between them, and its
-    #: thickness follows from the drawings rather than from a preference: the
-    #: AK80-64's two mounting faces are 42.7 mm apart, so the upper arm is
-    #: 42.7 mm thick along the shoulder axis.
+    #: NOT CHOSEN, and it needed no rule in the end. Every drive's output
+    #: face lies in the arm's z = 0 plane, and every link sits on the far
+    #: side of whichever faces it bolts to: above an output face it is driven
+    #: by, below a housing face it carries, centred on a coaxial axis it
+    #: turns about. A link under two of those at once gets the UNION of them,
+    #: which is a C or a crank, and which is what a real shoulder casting and
+    #: a real wrist body are.
     #:
-    #: THE KINEMATICS DO NOT CHANGE. A joint axis is a line, and moving the
-    #: mounting planes along that line does not move it. Nothing in the
-    #: dynamics or the Pinocchio cross check has to be re-derived. The
+    #: The alternative was to face consecutive drives opposite ways so that
+    #: no link needs a union. It removes the crank and it makes the arm climb
+    #: 140 mm in z at every pitch joint and never come back, which is a
+    #: staircase no arm has. It was written, measured and taken out again.
+    #:
+    #: THE KINEMATICS DO NOT CHANGE either way. A joint axis is a line, and
+    #: moving the mounting planes along it does not move it, so nothing in
+    #: the dynamics or the Pinocchio cross check has to be re-derived. The
     #: INERTIA does change, because the links no longer sit symmetrically
-    #: about the plane of the arm, and that has to be recomputed from the
-    #: generated bodies.
-    #:
-    #: The alternative was to give the joints z offsets, which every
-    #: industrial arm also has. It was not taken because every one of those
-    #: offsets would be a number no source prints, while this rule adds none.
-    #: It stays available if packaging ever demands it.
-    alternate_facing_on_shared_axes: bool = True
+    #: about the plane of the arm, and it has to be recomputed from the
+    #: generated bodies rather than assumed away.
     reach_m: float = 0.600
     degrees_of_freedom: int = 6
     move_angle_rad: float = 1.5707963267948966      # 90 degrees per joint

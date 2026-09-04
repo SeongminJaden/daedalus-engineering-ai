@@ -758,26 +758,39 @@ def domain_extent(spec: ManipulatorSpec, link_index: int,
     separation = (face_separation_m(str(drives.get(following.name, "")))
                   if carries_across and following is not None else None)
 
+    # EVERY DRIVE'S OUTPUT FACE IS THE ARM'S z = 0 PLANE, and the links
+    # reach around them. This is not a rule that had to be chosen: it falls
+    # out of putting each link on the far side of the face it bolts to.
+    #
+    #   driven by a crossing axis  the link is above that output face
+    #   carries a crossing axis    the link is below that housing face,
+    #                              which is the drive's face separation down
+    #   driven by a coaxial axis   the link is centred on that axis
+    #
+    # A link can be under two of those at once and then its domain is the
+    # UNION, which is a C or a crank, and which is what a real shoulder
+    # casting and a real wrist body are. The alternative was to face
+    # consecutive drives opposite ways, which removes the union but makes the
+    # arm climb in z at every pitch joint and never come back.
+    boxes = []
+    reasons = []
     if driven_across:
-        low, high = 0.0, width
-        basis = "driven across, so it sits above that output face"
-    elif carries_across:
-        top = -(separation or 0.0)
-        # THE UNION OF THE TWO BOXES, not one of them. A link driven by a
-        # coaxial joint has to be centred on that axis and a link carrying a
-        # crossing joint has to sit clear of that drive's housing face. Where
-        # a link does both, the design domain is everything either rule
-        # allows, and the optimiser finds the crank between them. Taking the
-        # bounding box of both is the whole point: taking either one alone
-        # asks for a shape that cannot exist.
-        low, high = min(top - width, -0.5 * width), max(top, 0.5 * width)
-        basis = (f"carries a crossing axis {abs(top) * 1000:.1f} mm to one "
-                 f"side AND is driven by a coaxial one, so its domain is the "
-                 f"union of the centred box and the offset box and the "
-                 f"optimiser finds the crank")
-    else:
-        low, high = -0.5 * width, 0.5 * width
-        basis = "both its joints are coaxial with it, so it is centred"
+        boxes.append((0.0, width))
+        reasons.append("driven across, so above that output face")
+    if carries_across:
+        drop = separation or 0.0
+        boxes.append((-drop - width, -drop))
+        reasons.append(f"carries a crossing axis, so below that housing face "
+                       f"{drop * 1000:.1f} mm down")
+    if not driven_across:
+        boxes.append((-0.5 * width, 0.5 * width))
+        reasons.append("driven coaxially, so centred on that axis")
+    low = min(b[0] for b in boxes)
+    high = max(b[1] for b in boxes)
+    basis = " AND ".join(reasons)
+    if len(boxes) > 1:
+        basis += (f". Its domain is the UNION of those, {(high - low) * 1000:.1f}"
+                  f" mm across, and the shape between them is the optimiser's")
     return (span, height, low, high, basis), ""
 
 

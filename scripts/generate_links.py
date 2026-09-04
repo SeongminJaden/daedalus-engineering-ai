@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from projects.manipulator.arm import build_arm
-from projects.manipulator.links import EXPORT_SCALE
+from projects.manipulator.links import EXPORT_SCALE, world_boxes
 from projects.manipulator.loop import run_loop
 from projects.manipulator.spec import SPEC
 from projects.manipulator.stages import dynamics_stage
@@ -89,6 +89,43 @@ def searched_fractions(path: Path) -> dict:
             if row.get("best_volume_fraction") is not None}
 
 
+def joint_rows(drives: dict) -> list[dict]:
+    """Every joint's world origin, axis, drive and dowel clock.
+
+    Enough for an assembly script to stand the arm up from the file instead
+    of from a message. The origin accumulates the joint offsets, so it is the
+    same arithmetic the arm model does rather than a second copy of it.
+    """
+    from projects.manipulator.interfaces import face_for
+
+    origin = [0.0, 0.0, 0.0]
+    rows = []
+    for joint in SPEC.joints():
+        origin = [origin[0] + joint.origin_x_m, origin[1] + joint.origin_y_m,
+                  0.0]
+        part = str(drives.get(joint.name, ""))
+        face = face_for(part, "output")
+        across = abs(float(joint.axis[0])) <= 0.5
+        rows.append({
+            "tag": joint.name,
+            "origin_mm": [v * 1000.0 for v in origin],
+            "axis": list(joint.axis),
+            "actuator": part,
+            # Every drive's output face is the arm's z = 0 plane and its body
+            # is on the far side of it from the link it drives.
+            "output_face_world_z_mm": 0.0,
+            "output_faces": list(joint.axis),
+            "dowel_angles_deg": (
+                [90.0, 270.0] if across else [0.0, 180.0]),
+            "dowel_basis": (
+                "on the bending neutral axis, so the pins take shear and the "
+                "bolts take the bending's axial part" if across else
+                "no bending about this axis, so the angle is free"),
+            "dowels_cut": bool(face is not None and face.dowel_angles_deg),
+        })
+    return rows
+
+
 def main(iterations: int = 60, volume_fraction: float = 0.3,
          workers: int = 1, threads_per_worker: int = 4,
          search: str = "data/generated/manipulator_volume_search/search.json"
@@ -138,6 +175,23 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
         rows.append(row)
         print(json.dumps(row, default=str), flush=True)
 
+    # WHERE EACH PART GOES, IN THE ARM'S FRAME, SO NOBODY HAS TO GUESS.
+    # Standing these links up used to mean guessing the frame origin and
+    # where the joint axis sits inside it, and half the placement errors so
+    # far came from that transcription. The box is a number this generator
+    # already has: it is the domain, and it is what the body is clipped to,
+    # so a reader can fit the STEP's bounding box to it exactly. If the two
+    # disagree the clip did not run, which makes this an independent check on
+    # it rather than only a convenience.
+    boxes = {box["link"]: box for box in world_boxes(SPEC, drives, sections)}
+    for row in rows:
+        box = boxes.get(row["link"])
+        if box and box.get("placed"):
+            row["domain_box_world_mm"] = {
+                "min": [float(v) * 1000.0 for v in box["low"]],
+                "max": [float(v) * 1000.0 for v in box["high"]],
+                "basis": box["basis"]}
+
     generated = [r for r in rows if r["generated"]]
     summary = {
         "units": "millimetre",
@@ -153,10 +207,7 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
         "links": rows,
         "generated_count": len(generated),
         "total_mass_kg": sum(r["mass_kg"] for r in generated),
-        "joints_mm": [{"joint": j.name, "axis": list(j.axis),
-                       "origin_x_mm": j.origin_x_m * 1000.0,
-                       "origin_y_mm": j.origin_y_m * 1000.0}
-                      for j in SPEC.joints()],
+        "joints": joint_rows(drives),
     }
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
