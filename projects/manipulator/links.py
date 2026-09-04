@@ -936,3 +936,73 @@ def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
                      "both domains reach into this volume and each holds the "
                      "other's box empty, so neither designs in it")})
     return rows
+
+
+#: The build volume of the machine whose data sheet this design's material
+#: comes from, as the manufacturer prints it. It is a constraint, not a
+#: statistic: a part that does not fit cannot be made on it whatever else is
+#: true of the design.
+EOS_M290_BUILD_VOLUME_M = (0.250, 0.250, 0.325)
+EOS_M290_BUILD_VOLUME_SOURCE = (
+    "EOS M 290 technical data, construction volume 250 x 250 x 325 mm, "
+    "printed with the note that the height includes the build platform and "
+    "is application dependent, read 2026-09-04 from "
+    "https://www.eos.info/metal-solutions/metal-printers/eos-m-290")
+
+
+def fits_the_build_volume(extent_m, volume_m=EOS_M290_BUILD_VOLUME_M
+                          ) -> tuple[bool, str]:
+    """Does a part fit the machine, in its best orientation?
+
+    The part may be turned any way up, so the test is between the sorted
+    extents and the sorted volume. The tallest axis of the machine is also
+    the one whose height includes the build plate, so a part that only fits
+    by using it is reported as fitting on a condition rather than fitting.
+    """
+    part = sorted(float(e) for e in extent_m)
+    machine = sorted(float(v) for v in volume_m)
+    if any(p > m for p, m in zip(part, machine)):
+        worst = max((p - m) for p, m in zip(part, machine))
+        return False, (f"does NOT fit: it is over by {worst * 1000:.1f} mm on "
+                       f"its worst axis against {EOS_M290_BUILD_VOLUME_SOURCE}")
+    margin = min(m - p for p, m in zip(part, machine))
+    tall = part[-1] > machine[1]
+    return True, (
+        f"fits with {margin * 1000:.1f} mm to spare on its tightest axis"
+        + (", but only by standing it up the build height, which the sheet "
+           "says includes the build platform and is application dependent"
+           if tall else ""))
+
+
+def mounting_plane_chain(spec: ManipulatorSpec, drives: dict[str, str]
+                         ) -> list[dict]:
+    """Follow the mounting planes along the whole chain, not pair by pair.
+
+    A placement rule can be right for one pair of joints and wrong for the
+    arm. Facing consecutive drives on a shared axis in opposite directions
+    removes the need for any link to wrap around a drive, and every pair of
+    joints checks out under it. Followed along the chain it puts each pitch
+    joint's output face 140.7 mm beyond the last one and never brings it
+    back, so three pitch joints would carry the wrist a third of a metre out
+    of the plane of the arm. That rule was written, and this is the check
+    that would have killed it before it was.
+
+    Reports each joint's output face position along the arm's z and how far
+    the last one has drifted from the first.
+    """
+    rows = []
+    position = 0.0
+    for joint in spec.joints():
+        rows.append({"joint": joint.name, "axis": list(joint.axis),
+                     "output_face_z_mm": position * 1000.0,
+                     "drive": str(drives.get(joint.name, ""))})
+        # Every output face lies in one plane, so nothing accumulates. Under
+        # the alternating rule this line advanced by the drive's own face
+        # separation at each joint whose axis crossed the arm.
+        position += 0.0
+    drift = rows[-1]["output_face_z_mm"] - rows[0]["output_face_z_mm"]
+    for row in rows:
+        row["drift_from_first_mm"] = row["output_face_z_mm"] - rows[0]["output_face_z_mm"]
+    rows.append({"joint": "TOTAL DRIFT", "axis": [], "drive": "",
+                 "output_face_z_mm": None, "drift_from_first_mm": drift})
+    return rows

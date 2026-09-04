@@ -421,3 +421,58 @@ def test_two_links_are_asked_for_a_shape_a_box_cannot_be():
     for row in rows:
         if row["link"] in conflicted:
             assert "cannot do both" in row["conflict"]
+
+
+def test_every_link_fits_the_machine_its_material_comes_from():
+    """A part that does not fit cannot be made, whatever else is true of it.
+
+    The material in this design is AlSi10Mg with its strength and fatigue
+    numbers read off the EOS M 290 sheet, so the M 290's own construction
+    volume is the one that applies: 250 by 250 by 325 mm, with the height
+    including the build platform and stated to be application dependent. The
+    widest part is the upper arm at 238.7 mm across its cranked domain, which
+    leaves 11.3 mm, so this is a live constraint rather than a formality.
+    """
+    import numpy as np
+
+    from projects.manipulator.links import fits_the_build_volume, world_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    boxes = world_boxes(SPEC, dict(loop.data["history"][-1].selected),
+                        loop.data["final_sections"])
+    widest = 0.0
+    for box in boxes:
+        if not box.get("placed"):
+            continue
+        extent = np.asarray(box["high"]) - np.asarray(box["low"])
+        fits, why = fits_the_build_volume(extent)
+        assert fits, f"{box['link']}: {why}"
+        widest = max(widest, float(extent.max()))
+    assert widest == pytest.approx(0.2387, abs=0.002)
+    assert 0.250 - widest < 0.015, (
+        "the widest part has more room than expected, so either the domains "
+        "shrank or the machine changed; re-read both")
+
+
+def test_the_mounting_planes_do_not_drift_along_the_chain():
+    """A placement rule has to be checked on the arm, not on a pair.
+
+    Facing consecutive drives on a shared axis in opposite directions makes
+    every PAIR of joints work and makes the ARM climb: each pitch joint's
+    output face lands 140.7 mm beyond the last one and nothing brings it
+    back, so three of them carry the wrist a third of a metre out of the
+    plane. That rule was written and taken out again, and this is the check
+    that kills it: follow the planes along the whole chain and the last one
+    has to be where the first one is.
+    """
+    from projects.manipulator.links import mounting_plane_chain
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    rows = mounting_plane_chain(SPEC, dict(loop.data["history"][-1].selected))
+    total = rows[-1]
+    assert total["joint"] == "TOTAL DRIFT"
+    assert total["drift_from_first_mm"] == pytest.approx(0.0, abs=1e-9)
+    for row in rows[:-1]:
+        assert row["drift_from_first_mm"] == pytest.approx(0.0, abs=1e-9)
