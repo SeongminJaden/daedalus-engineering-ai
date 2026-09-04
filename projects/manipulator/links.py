@@ -262,6 +262,8 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
     if not mine["placed"]:
         return None, mine["reason"]
     width = mine["width"]
+    reach_low, joint_span = mine["reach_low"], mine["joint_span"]
+    span = mine["span"]
     thickness_note = mine["basis"]
 
     # KEEP THE CELL SIZE, NOT THE CELL COUNT. A cranked link's domain is
@@ -276,14 +278,28 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
 
     centroids = mesh.element_centroids()
     flange = spec.flange_thickness_m
-    passive_solid = ((centroids[:, 0] <= flange)
-                     | (centroids[:, 0] >= span - flange))
+    # THE FLANGE SITS AT THE JOINT PLANE, not at the edge of the box. Once
+    # the box reaches back past a crossing joint to hold that joint's disc,
+    # the box edge and the joint plane are 49 mm apart, and a slab at the
+    # edge is a slab in mid air. A crossing joint's own flange is the ring
+    # held solid further down, in the plane its bolts are actually in.
+    proximal = reach_low
+    distal = reach_low + joint_span
+    passive_solid = np.zeros(mesh.n_elements, dtype=bool)
+    if abs(float(local_axis(spec, link_index, joint.axis)[0])) > 0.5:
+        passive_solid |= ((centroids[:, 0] >= proximal)
+                          & (centroids[:, 0] <= proximal + flange))
+    if following is None or abs(float(
+            local_axis(spec, link_index, following.axis)[0])) > 0.5:
+        passive_solid |= ((centroids[:, 0] >= distal - flange)
+                          & (centroids[:, 0] <= distal))
 
     passive_void = np.zeros(mesh.n_elements, dtype=bool)
     notes: list[str] = []
     notes.append(thickness_note)
-    for role, at_x, other in (("its own drive", 0.0, joint),
-                              ("the drive it carries", span, following)):
+    for role, at_x, other in (("its own drive", reach_low, joint),
+                              ("the drive it carries",
+                               reach_low + joint_span, following)):
         if other is None:
             notes.append("this link carries no further joint")
             continue
@@ -322,6 +338,44 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         notes.append(f"{role} at x = {at_x * 1000:.0f} mm: {why}")
     void_note = "; ".join(notes)
 
+    # BEYOND ITS OWN JOINT PLANE A LINK IS ONLY A DISC. The domain reaches
+    # back past a crossing joint so the bolt circle in that joint's plane
+    # fits, and that is ALL it is allowed to do there. Everything past the
+    # joint plane that is not within the flange of the mounting plane and
+    # within the disc's radius belongs to the neighbour. Without this the two
+    # links at the elbow both claim a hundred millimetres of each other's
+    # length, and holding one another's whole box empty then deletes both
+    # their flanges.
+    beyond = 0
+    for other, plane_x, outward in ((joint, reach_low, -1.0),
+                                    (following, reach_low + joint_span, +1.0)
+                                    if following is not None else (None, 0.0, 0.0)):
+        if other is None:
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        if abs(float(axis[0])) > 0.5:
+            continue                      # coaxial: nothing reaches past
+        carried = actuator_for(other.name, drives)
+        if carried is None or not carried.outer_diameter_m:
+            continue
+        origin = _drive_face(spec, link_index, other, plane_x, height, width,
+                             mine)
+        if outward > 0:
+            separation = face_separation_m(str(drives.get(other.name, "")))
+            origin = origin - axis * (separation or 0.0)
+        offset = centroids - origin
+        along = offset @ axis
+        radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+        past = ((centroids[:, 0] - plane_x) * outward) > 0.0
+        disc = (radial <= 0.5 * carried.outer_diameter_m) & (
+            np.abs(along) <= spec.flange_thickness_m)
+        cut = past & ~disc
+        beyond += int(cut.sum())
+        passive_void |= cut
+    if beyond:
+        void_note += (f"; {beyond} elements past its own joint planes that "
+                      f"are not part of a mounting disc")
+
     # NOBODY ELSE'S SPACE. Taking the union of the centred box and the
     # offset box is what lets a link be cranked, and it also hands the base
     # column back the 117,649 cubic millimetres of the shoulder that the
@@ -358,9 +412,18 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
     # the face and not the other. That is not an extra rule: it is the same
     # rule that places the link, applied to the volume the drive sweeps
     # rather than only to the volume it occupies.
+    #: CHOSEN, and stronger than assembly needs. A drive does not have to
+    #: pass through a link to be fitted: the column is stood up, the motor
+    #: bolted to it, and the upper arm bolted to the motor, and nothing goes
+    #: through anything. Requiring that a single link never traps its own
+    #: drive is a SERVICE condition, not an assembly one: it is what lets a
+    #: motor be changed without taking the arm apart, and industrial arms are
+    #: built that way. If mass becomes the binding problem this is the first
+    #: condition to relax.
     corridors = 0
-    for other, at_x, driven in ((joint, 0.0, True),
-                                (following, span, False) if following is not None
+    for other, at_x, driven in ((joint, reach_low, True),
+                                (following, reach_low + joint_span, False)
+                                if following is not None
                                 else (None, 0.0, False)):
         if other is None:
             continue
@@ -399,8 +462,10 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
     from .interfaces import drive_profile, face_for
 
     rings = 0
-    for other, at_x, side in ((joint, 0.0, +1.0),
-                              (following, span, -1.0) if following is not None
+    ring_mask = np.zeros(mesh.n_elements, dtype=bool)
+    for other, at_x, side in ((joint, reach_low, +1.0),
+                              (following, reach_low + joint_span, -1.0)
+                              if following is not None
                               else (None, 0.0, 0.0)):
         if other is None:
             continue
@@ -425,7 +490,15 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         ring = ((along >= low) & (along <= high)
                 & (radial >= inner) & (radial <= outer))
         rings += int(ring.sum())
+        ring_mask |= ring
         passive_solid = passive_solid | ring
+    # THE RING WINS OVER A NEIGHBOUR'S BOX. Two links both reach around the
+    # shoulder now, because each needs the disc its own bolt circle sits in,
+    # and holding every neighbour's box empty would delete one of the two
+    # discs. They do not actually collide: the column bolts to the housing
+    # face and the upper arm to the output face, and those planes are 42.7 mm
+    # apart. The boxes overlap, the rings do not.
+    passive_void = passive_void & ~ring_mask
     if rings:
         void_note += (f"; {rings} elements held solid as the bolt rings at "
                       f"the mounting faces")
@@ -577,7 +650,9 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     # is not a preference, so it is subtracted rather than requested.
     envelopes = drive_envelopes(spec, link_index, drives, span, height, width,
                                 mine)
-    holes, unresolved = mounting_holes(spec, link_index, drives, span)
+    holes, unresolved = mounting_holes(spec, link_index, drives, span,
+                                       height_m=height, width_m=width,
+                                       box=mine)
     body, hole_report = cut_holes(body, holes + envelopes, height, width,
                                   scale=EXPORT_SCALE)
     after_mm3 = float(abs(body.volume))
@@ -777,15 +852,35 @@ def clip_to_domain(body, length_m: float, height_m: float, width_m: float,
                  f"extracted volume as marching cubes overshoot")
 
 
+def _across(axis):
+    """Two unit directions perpendicular to `axis`, right handed with it."""
+    axis = np.asarray(axis, dtype=float)
+    axis = axis / np.linalg.norm(axis)
+    seed = np.array([0.0, 1.0, 0.0]) if abs(axis[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    first = seed - axis * float(np.dot(seed, axis))
+    first = first / np.linalg.norm(first)
+    return first, np.cross(axis, first)
+
+
 def mounting_holes(spec: ManipulatorSpec, link_index: int,
                    drives: dict[str, str], span_m: float,
-                   clock_deg: float = 0.0) -> tuple[list[dict], list[str]]:
+                   clock_deg: float = 0.0, height_m: float = 0.098,
+                   width_m: float = 0.098, box=None
+                   ) -> tuple[list[dict], list[str]]:
     """Every hole this link's two end faces need, and what could not be cut.
 
-    A link is bolted to the OUTPUT of the joint that drives it and carries the
-    HOUSING of the joint after it, so its two ends take two different
+    A link is bolted to the OUTPUT of the joint that drives it and carries
+    the HOUSING of the joint after it, so its two ends take two different
     patterns. The last link has no next joint; its far end is a tool plate
     this arm has not specified, and no pattern is invented for it.
+
+    EVERY HOLE FOLLOWS ITS OWN JOINT'S AXIS. That sounds obvious and it was
+    not what happened: the axis was hardcoded along the link, which is right
+    for a roll joint and wrong for every joint whose axis crosses the arm.
+    On the shoulder it drilled the bolt circle sideways through the link and
+    centred it on the section rather than on the drive, so three of the six
+    links had their fastening in a place no bolt could reach. It is the same
+    error as the pocket that sat 140.7 mm from its motor, in a third place.
     """
     from .interfaces import (bolt_holes, dowel_holes, face_for,
                              unresolved_features)
@@ -798,42 +893,60 @@ def mounting_holes(spec: ManipulatorSpec, link_index: int,
     holes: list[dict] = []
     unresolved: list[str] = []
     ends = [("proximal", face_for(drives.get(joint.name, ""), "output"),
-             joint.name, -0.002, flange + 0.002)]
+             joint, joint.name, +1.0)]
     if following is not None:
         ends.append(("distal", face_for(drives.get(following.name, ""), "housing"),
-                     following.name, span_m - flange - 0.002, span_m + 0.002))
+                     following, following.name, -1.0))
     else:
         unresolved.append(
             f"{spec.links()[link_index].name}: its far end is the tool plate "
             f"and this arm specifies no tool, so no pattern was cut there")
 
-    for end, face, joint_name, x0, x1 in ends:
+    for end, face, other, joint_name, side in ends:
         if face is None:
             unresolved.append(
                 f"{joint_name}: no drawing was read for "
                 f"{drives.get(joint_name, 'its drive')}, so its face has no "
                 f"pattern and the {end} end of this link cannot be fastened")
             continue
+        at_x = (box["reach_low"] if end == "proximal"
+                else box["reach_low"] + box["joint_span"]) if box else (
+                    0.0 if end == "proximal" else span_m)
+        axis = local_axis(spec, link_index, other.axis)
+        centre = _drive_face(spec, link_index, other, at_x, height_m, width_m,
+                             box) if box is not None else np.array(
+                                 [at_x, 0.5 * height_m, 0.5 * width_m])
+        if end == "distal" and abs(float(axis[0])) <= 0.5:
+            separation = face_separation_m(str(drives.get(joint_name, "")))
+            centre = centre - axis * (separation or 0.0)
+        # Two directions across the axis, to lay the bolt circle out in the
+        # plane the face actually is. For a roll joint they come out as y and
+        # z, which is what the hardcoded version assumed for every joint.
+        first, second = _across(axis)
+        low, high = (-0.002, flange + 0.002) if side > 0 else (
+            -flange - 0.002, 0.002)
+
+        def _record(kind, thread, diameter, u, v, deep=None):
+            start = centre + axis * side * (low if deep is None else -deep)
+            end_at = centre + axis * side * (high if deep is None else 0.002)
+            offset = first * u + second * v
+            return {"end": end, "kind": kind, "face": face.face,
+                    "thread": thread, "diameter_m": diameter,
+                    "axis": [float(c) for c in axis],
+                    "start_m": [float(c) for c in (start + offset)],
+                    "end_m": [float(c) for c in (end_at + offset)],
+                    "y_m": float(u), "z_m": float(v),
+                    "x0_m": 0.0, "x1_m": 0.0}
+
         for hole in bolt_holes(face, clock_deg):
-            holes.append({"end": end, "kind": "clearance", "face": face.face,
-                          "thread": hole["thread"], "diameter_m": hole["diameter_m"],
-                          "y_m": hole["y_m"], "z_m": hole["z_m"],
-                          "x0_m": x0, "x1_m": x1,
-                          "bolt_circle_m": hole["bolt_circle_m"]})
+            holes.append(_record("clearance", hole["thread"],
+                                 hole["diameter_m"], hole["y_m"], hole["z_m"]))
         for dowel in dowel_holes(face):
-            depth = dowel["depth_m"]
-            x0, x1 = ((-0.001, depth) if end == "proximal"
-                      else (span_m - depth, span_m + 0.001))
-            holes.append({"end": end, "kind": "dowel", "face": face.face,
-                          "thread": "", "diameter_m": dowel["diameter_m"],
-                          "y_m": dowel["y_m"], "z_m": dowel["z_m"],
-                          "x0_m": x0, "x1_m": x1,
-                          "angle_deg": dowel["angle_deg"]})
+            holes.append(_record("dowel", "", dowel["diameter_m"],
+                                 dowel["y_m"], dowel["z_m"],
+                                 deep=dowel["depth_m"]))
         bore = face.central_bore_m or CABLE_BORE_M
-        holes.append({"end": end, "kind": "bore", "face": face.face,
-                      "thread": "", "diameter_m": bore, "y_m": 0.0, "z_m": 0.0,
-                      "x0_m": x0, "x1_m": x1,
-                      "printed": face.central_bore_m is not None})
+        holes.append(_record("bore", "", bore, 0.0, 0.0))
         unresolved.extend(unresolved_features(face))
     return holes, unresolved
 
@@ -905,34 +1018,25 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
 
     if not holes:
         return body, []
-    centre_y, centre_z = 0.5 * height_m * scale, 0.5 * width_m * scale
     cutters = []
     for hole in holes:
-        if hole.get("kind") == "envelope":
-            # An envelope carries its own axis and endpoints, because a drive
-            # does not lie along the link the way a bolt does.
-            start = np.asarray(hole["start_m"], dtype=float) * scale
-            end = np.asarray(hole["end_m"], dtype=float) * scale
-            axis = end - start
-            length = float(np.linalg.norm(axis))
-            if length <= 0.0:
-                continue
-            transform = trimesh.geometry.align_vectors([0.0, 0.0, 1.0],
-                                                       axis / length)
-            transform[:3, 3] = 0.5 * (start + end)
-            cutters.append(trimesh.creation.cylinder(
-                radius=0.5 * hole["diameter_m"] * scale, height=length,
-                sections=sections, transform=transform))
+        # EVERY cutter carries its own axis and endpoints now. Bolt holes
+        # used to be built along the link and offset in y and z, which is
+        # right for a roll joint and puts a shoulder's bolt circle sideways
+        # through the part.
+        start = np.asarray(hole["start_m"], dtype=float) * scale
+        end = np.asarray(hole["end_m"], dtype=float) * scale
+        direction = end - start
+        length = float(np.linalg.norm(direction))
+        if length <= 0.0:
             continue
-        length = (hole["x1_m"] - hole["x0_m"]) * scale
-        transform = trimesh.transformations.rotation_matrix(
-            np.pi / 2.0, [0.0, 1.0, 0.0])
-        transform[:3, 3] = [0.5 * (hole["x0_m"] + hole["x1_m"]) * scale,
-                            centre_y + hole["y_m"] * scale,
-                            centre_z + hole["z_m"] * scale]
+        transform = trimesh.geometry.align_vectors([0.0, 0.0, 1.0],
+                                                   direction / length)
+        transform[:3, 3] = 0.5 * (start + end)
         cutters.append(trimesh.creation.cylinder(
             radius=0.5 * hole["diameter_m"] * scale, height=length,
             sections=sections, transform=transform))
+
     tool = trimesh.util.concatenate(cutters)
     cut = body.difference(tool)
     # DROP THE ZERO VOLUME SHELLS. Cutting twenty four holes out of a
@@ -979,6 +1083,28 @@ def domain_extent(spec: ManipulatorSpec, link_index: int,
     if span <= 0.0:
         return None, (f"{link.name}: its joints are coincident in every "
                       f"direction, so there is no space to design in")
+
+    # A FLANGE AROUND A CROSSING AXIS IS A DISC, NOT AN END FACE. Where a
+    # joint's axis runs along the link, the link bolts to a face across its
+    # own end and everything is inside the span. Where the axis CROSSES the
+    # link, the bolt circle lies in a plane the link runs through, centred on
+    # the drive, so half of it is behind that joint's plane: the shoulder's
+    # 89 mm circle reaches 44.5 mm back past the upper arm's own start. The
+    # span used to stop exactly at the joint, which put those holes outside
+    # the part.
+    reach_low = reach_high = 0.0
+    for other, at_start in ((joint, True), (following, False)):
+        if other is None:
+            continue
+        if abs(float(local_axis(spec, link_index, other.axis)[0])) > 0.5:
+            continue
+        carried = actuator_for(other.name, drives)
+        if carried is None or not carried.outer_diameter_m:
+            continue
+        if at_start:
+            reach_low = max(reach_low, 0.5 * carried.outer_diameter_m)
+        else:
+            reach_high = max(reach_high, 0.5 * carried.outer_diameter_m)
 
     actuator = actuator_for(joint.name, drives)
     section = (sections or {}).get(link.name)
@@ -1031,7 +1157,7 @@ def domain_extent(spec: ManipulatorSpec, link_index: int,
     if len(boxes) > 1:
         basis += (f". Its domain is the UNION of those, {(high - low) * 1000:.1f}"
                   f" mm across, and the shape between them is the optimiser's")
-    return (span, height, low, high, basis), ""
+    return (span, height, low, high, basis, reach_low, reach_high), ""
 
 
 def world_boxes(spec: ManipulatorSpec, drives: dict[str, str],
@@ -1047,19 +1173,22 @@ def world_boxes(spec: ManipulatorSpec, drives: dict[str, str],
         if built is None:
             rows.append({"link": link.name, "placed": False, "reason": reason})
             continue
-        span, height, z_low, z_high, basis = built
+        span, height, z_low, z_high, basis, reach_low, reach_high = built
         following = joints[index + 1] if index + 1 < len(joints) else None
         along = 1 if (following is not None
                       and following.origin_y_m > following.origin_x_m) else 0
         other = 0 if along == 1 else 1
         low = np.array(position, dtype=float)
         high = np.array(position, dtype=float)
-        high[along] += span
+        low[along] -= reach_low
+        high[along] += span + reach_high
         low[other] -= 0.5 * height
         high[other] += 0.5 * height
         low[2], high[2] = z_low, z_high
         rows.append({"link": link.name, "placed": True, "low": low,
-                     "high": high, "span": span, "height": height,
+                     "high": high, "span": span + reach_low + reach_high,
+                     "joint_span": span, "reach_low": reach_low,
+                     "reach_high": reach_high, "height": height,
                      "width": z_high - z_low, "z_low": z_low, "z_high": z_high,
                      "along": along, "basis": basis})
     return rows
