@@ -640,3 +640,79 @@ def test_the_volume_fraction_means_the_same_thing_on_every_link():
     assert made["free"] == pytest.approx(0.3)
     assert made["domain"] != pytest.approx(0.3)
     assert made["domain"] == pytest.approx(0.2583, abs=0.001)
+
+
+def test_the_corridor_and_the_bolt_ring_do_not_contest_the_same_elements():
+    """They look like they must and they do not, and the reason is the plane
+    between them.
+
+    Both live around the same drive axis at similar radii, so the suspicion
+    that one silently deletes the other is a fair one. What separates them is
+    which side of the mounting face they are on: a link's ring is on the
+    link's own side of that face and the corridor is on the drive's side. The
+    drive leaves the way it came, away from the link, so it never has to pass
+    through the ring.
+
+    Measured across all six links: zero elements claimed by both.
+    """
+    import numpy as np
+
+    from projects.manipulator.interfaces import drive_profile, face_for
+    from projects.manipulator.links import (ACTUATOR_RADIAL_CLEARANCE_M,
+                                            _drive_face, actuator_for,
+                                            face_separation_m, local_axis,
+                                            world_boxes)
+    from projects.manipulator.loop import run_loop
+    from physics.fem.mesh import solid_box_mesh
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    boxes = {b["link"]: b for b in world_boxes(SPEC, drives,
+                                               loop.data["final_sections"])}
+    joints = SPEC.joints()
+    flange = SPEC.flange_thickness_m
+    seen_a_corridor = False
+    for index, link in enumerate(SPEC.links()):
+        box = boxes[link.name]
+        nz = max(12, int(round(box["width"] / (0.098 / 12))))
+        mesh = solid_box_mesh(box["span"], box["height"], box["width"],
+                              28, 12, nz)
+        centroids = mesh.element_centroids()
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        corridor = np.zeros(mesh.n_elements, dtype=bool)
+        ring = np.zeros(mesh.n_elements, dtype=bool)
+        ends = [(joints[index], box["reach_low"], True)]
+        if following is not None:
+            ends.append((following, box["reach_low"] + box["joint_span"], False))
+        for other, at_x, driven in ends:
+            axis = local_axis(SPEC, index, other.axis)
+            if abs(float(axis[0])) > 0.5:
+                continue
+            drive = actuator_for(other.name, drives)
+            profile = drive_profile(str(drives.get(other.name, "")))
+            if drive is None or profile is None:
+                continue
+            if face_for(str(drives.get(other.name, "")), "output") is None:
+                continue
+            origin = _drive_face(SPEC, index, other, at_x, box["height"],
+                                 box["width"], box)
+            offset = centroids - origin
+            along = offset @ axis
+            radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+            outer = 0.5 * drive.outer_diameter_m
+            separation = face_separation_m(str(drives.get(other.name, "")))
+            if driven:
+                corridor |= (radial <= outer + ACTUATOR_RADIAL_CLEARANCE_M) & (along <= 0.0)
+                ring |= ((along >= 0.0) & (along <= flange)
+                         & (radial >= profile[-1][2]) & (radial <= outer))
+            else:
+                drop = separation or 0.0
+                corridor |= (radial <= outer + ACTUATOR_RADIAL_CLEARANCE_M) & (along >= -drop)
+                ring |= ((along >= -drop - flange) & (along <= -drop)
+                         & (radial >= profile[0][2]) & (radial <= outer))
+        if corridor.any():
+            seen_a_corridor = True
+        assert not (corridor & ring).any(), (
+            f"{link.name}: {int((corridor & ring).sum())} elements are claimed "
+            f"by both the withdrawal corridor and a bolt ring")
+    assert seen_a_corridor, "no link had a corridor, so nothing was tested"

@@ -165,12 +165,32 @@ def check_link(index: int, spec, drives, sections, path: Path,
                                   "verdict": "not in the published summary, "
                                              "not checked"})
             continue
+        # SWEEP THE DRIVE'S OWN SHAPE, not a cylinder around it. Sliding a
+        # link off its drive and sliding the drive out of the link are the
+        # same relative motion, so only one of them has to be modelled, and
+        # what decides the answer is the shape being swept rather than which
+        # body is imagined to move. A plain full radius cylinder blocks on
+        # the bolt ring, which sits at radius 41 to 49 in the mounting plane
+        # while the drive is only 40 across out there: it reports a joint
+        # trapped by the very material that has to be present for it to be
+        # bolted at all.
+        from projects.manipulator.interfaces import drive_profile
+
+        profile = drive_profile(str(drives.get(joint.name, "")))
         reach = 2.0 * (span + height + width)
         out = {}
         for name, sign in (("forwards", 1.0), ("backwards", -1.0)):
-            tool = _cylinder(0.5 * actuator.outer_diameter_m, reach,
-                             centre + sign * axis * (0.5 * reach), axis)
-            out[name] = _blocked(body, tool)
+            if profile is None:
+                tools = [_cylinder(0.5 * actuator.outer_diameter_m, reach,
+                                   centre + sign * axis * (0.5 * reach), axis)]
+            else:
+                # Each step, extended to infinity the way it is going.
+                tools = []
+                for low, high, radius in profile:
+                    edge = low if sign > 0 else high
+                    middle = centre + axis * edge + sign * axis * (0.5 * reach)
+                    tools.append(_cylinder(radius, reach, middle, axis))
+            out[name] = sum(_blocked(body, tool) for tool in tools)
         clear = [name for name, volume in out.items() if volume == 0.0]
         row["drives"].append({
             "joint": joint.name, "role": role,
