@@ -18,7 +18,7 @@ import os
 import sys
 import time
 import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -153,7 +153,26 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
         context = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=workers,
                                  mp_context=context) as pool:
-            done = sorted(pool.map(_one_link, payloads), key=lambda r: r[0])
+            # SUBMIT AND REPORT AS THEY LAND. Mapping and collecting the
+            # whole list means a run of six links an hour long prints nothing
+            # at all until it is over, and a run that is progressing looks
+            # exactly like one that has hung.
+            # If this script is killed, the SPAWNED WORKERS ARE NOT. They
+            # keep running at full CPU and starve whatever is started next,
+            # which once left two abandoned runs holding most of the machine
+            # while a third crawled. Kill them by PID: they are children of
+            # this process id and their command line says multiprocessing.
+            futures = {pool.submit(_one_link, payload): payload[1]
+                       for payload in payloads}
+            done = []
+            for future in as_completed(futures):
+                result = future.result()
+                done.append(result)
+                print(json.dumps({"finished": futures[future],
+                                  "seconds": round(result[2], 1),
+                                  "of": len(payloads),
+                                  "so_far": len(done)}), flush=True)
+            done.sort(key=lambda r: r[0])
     else:
         done = [_one_link(payload) for payload in payloads]
 

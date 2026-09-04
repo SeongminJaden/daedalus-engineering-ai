@@ -34,8 +34,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 
 #: ISO 4762 socket head cap screw head diameters, and the short arm of the
-#: key that drives them. The head is what has to pass through the counterbore
-#: and the key is what has to reach it.
+#: key that drives them. The head is the binding dimension, not the key: an
+#: M3 head is 5.5 mm across and its key is 2.5, so anywhere the head passes
+#: the key follows.
+#:
+#: THAT ONLY HOLDS FOR SOCKET HEADS. A socket key moves along the bolt axis
+#: and turns inside the space the head already needs. A hexagon head to ISO
+#: 4014 is turned by a spanner that sweeps a circle AROUND the bolt, so it
+#: needs clear space to the side that this check does not look for. If a
+#: joint on this arm ever takes a hexagon head, this test has to be replaced
+#: rather than reused.
 HEAD_DIAMETER_M = {"M3": 0.0055, "M4": 0.0070, "M5": 0.0085, "M8": 0.0130}
 KEY_REACH_M = 0.020
 
