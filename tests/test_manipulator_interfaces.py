@@ -263,3 +263,75 @@ def test_a_link_gets_a_pocket_for_the_drive_it_carries_as_well_as_its_own():
     near = void & (centroids[:, 0] < 0.5 * span)
     far = void & (centroids[:, 0] > 0.5 * span)
     assert near.any() and far.any(), "one end has no pocket"
+
+
+def test_the_housing_clock_relationship_is_per_part_not_a_rule():
+    """The AK80-64's housing ring is half a pitch from its output ring and the
+    AK60-6's is aligned with it. A rule inferred from one part would put every
+    bolt on the other in the wrong place, which is why the relationship is
+    stored per part rather than derived."""
+    from projects.manipulator.interfaces import AK60_6_HOUSING, AK60_6_OUTPUT
+
+    assert AK80_64_HOUSING.patterns[0].clock_deg == 22.5
+    assert AK80_64_OUTPUT.patterns[0].clock_deg == 0.0
+    assert AK60_6_HOUSING.patterns[0].clock_deg == 0.0
+    assert AK60_6_OUTPUT.patterns[0].clock_deg == 0.0
+
+
+def test_the_same_uncertainty_is_absorbed_on_one_circle_and_not_the_other():
+    """What a clock tolerance costs depends on the radius it acts at.
+
+    The AK60-6's model scatters by about a degree. On its 68 mm outer ring
+    that is 0.59 mm of hole movement against the 0.20 mm an M3 clearance hole
+    allows, and on its 20 mm inner ring it is 0.17 mm, which the same hole
+    takes up. One pattern on one part, two different answers.
+    """
+    from projects.manipulator.interfaces import AK60_6_OUTPUT
+
+    rows = clock_uncertainty_check(AK60_6_OUTPUT)
+    outer = next(r for r in rows if r["clock_offset_mm"] > 0.3)
+    inner = next(r for r in rows if r["clock_offset_mm"] < 0.3)
+    assert outer["verdict"] == "NOT ABSORBED"
+    assert inner["verdict"] == "absorbed"
+    assert outer["clock_offset_mm"] == pytest.approx(0.59, abs=0.02)
+    assert inner["clock_offset_mm"] == pytest.approx(0.17, abs=0.02)
+
+
+def test_a_drive_with_no_drawing_cannot_be_selected():
+    """The rule that fixed the tool roll. A frameless motor is the lightest
+    thing in the catalogue and cannot be placed in an assembly or bolted to,
+    so it is not a candidate however well it meets the torque."""
+    from projects.manipulator.arm import build_arm
+    from projects.manipulator.loop import run_loop
+    from projects.manipulator.stages import (drivetrain_stage, dynamics_stage,
+                                             reflected_inertia_stage)
+
+    loop = run_loop()
+    arm = build_arm(loop.data["final_sections"], SPEC)
+    dynamics = dynamics_stage(arm, SPEC, samples=40)
+    first = drivetrain_stage(dynamics, SPEC, {})
+    inertias = {row["joint"]: row.get("load_inertia_kg_m2")
+                for row in reflected_inertia_stage(arm, first, SPEC).rows}
+    drivetrain = drivetrain_stage(dynamics, SPEC, inertias)
+
+    for row in drivetrain.rows:
+        if row.get("selected"):
+            assert face_for(str(row["selected"]), "output") is not None, (
+                f"{row['joint']} selected {row['selected']}, which publishes "
+                f"no mounting pattern")
+
+    # The rule has to actually reject something, or it is decoration. It is
+    # checked by finding the candidates it struck out rather than by naming
+    # one, because which part it catches depends on the arm: at the tool roll
+    # the frameless motor is now excluded on inertia ratio before the drawing
+    # rule is reached, and the rule still stands behind that.
+    struck = [c for rows in drivetrain.data["candidates"].values()
+              for c in rows if "no drawing published" in str(c.get("why"))]
+    assert struck, "no candidate was rejected for having no drawing"
+    assert all(not c["feasible"] for c in struck)
+
+    # And the joint this was found at now takes a part that has a drawing.
+    selected = next(r["selected"] for r in drivetrain.rows
+                    if r["joint"] == "j6_tool_roll")
+    assert selected == "cubemars_ak60_6_v3_kv80"
+    assert face_for(selected, "output") is not None

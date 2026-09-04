@@ -306,6 +306,24 @@ CUBEMARS_AK70_10 = SourceDocument(
     url="https://www.cubemars.com/product/ak70-10-kv100-robotic-actuator.html",
     read_on="2026-09-04")
 
+CUBEMARS_AK60_6 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK60-6 V3.0 KV80 actuator product page",
+    url="https://www.cubemars.com/product/ak60-6-v3-0-kv80-robotic-actuator.html",
+    read_on="2026-09-04")
+
+CUBEMARS_AK60_6_DRAWING = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK60-6 V3.0 Robotic Actuator 2D drawing",
+    url="https://www.cubemars.com/data/cms/202602/ak60-6-v3-0-robotic-actuator-2d-drawing.pdf",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_DATASHEET)
+
+CUBEMARS_AK70_10_DRAWING = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK70-10 Robotic Actuator 2D drawing",
+    url="https://www.cubemars.com/data/cms/202602/ak70-10-robotic-actuator-2d-drawing.pdf",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_DATASHEET)
+
 CUBEMARS_AK80_64 = SourceDocument(
     publisher="CubeMars (T-Motor)",
     title="AK80-64 KV80 actuator product page, goods 1143",
@@ -460,6 +478,45 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "OUTPUT of its own 9:1 planetary stage, so it is not a bare "
                "motor and must not be paired with another gearbox in the "
                "selection without dividing them back out.")),
+    SourcedMotor(
+        id="cubemars_ak60_6_v3_kv80",
+        manufacturer="CubeMars", part_number="AK60-6 V3.0 KV80",
+        documents=[CUBEMARS_AK60_6, CUBEMARS_AK60_6_DRAWING],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
+        peak_torque_condition="printed without a duration or duty",
+        nominal_voltage_v=48.0,
+        nominal_torque_nm=3.0,
+        peak_torque_nm=9.0,
+        no_load_speed_rad_s=640.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=490.0 * RPM_TO_RAD_S,
+        rotor_inertia_kg_m2=243.5 * GCM2_TO_KG_M2,
+        mass_kg=0.380,
+        outer_diameter_m=0.079,
+        axial_length_m=0.043,
+        gear_ratio=6.0,
+        rated_current_a=3.8,
+        peak_current_a=11.2,
+        torque_constant_nm_a=0.135,
+        value_sources=[
+            ValueSource("nominal_voltage_v", "Rated Voltage 24/48V, the 48 V figure", CUBEMARS_AK60_6.title),
+            ValueSource("nominal_torque_nm", "Rated Torque 3 Nm", CUBEMARS_AK60_6.title),
+            ValueSource("peak_torque_nm", "Peak Torque 9 Nm", CUBEMARS_AK60_6.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 320/640 rpm, the 48 V figure", CUBEMARS_AK60_6.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 233/490 rpm, the 48 V figure", CUBEMARS_AK60_6.title),
+            ValueSource("rotor_inertia_kg_m2", "Rotor Inertia 243.5 gcm2", CUBEMARS_AK60_6.title),
+            ValueSource("mass_kg", "Motor Weight 380 g", CUBEMARS_AK60_6.title),
+            ValueSource("outer_diameter_m", "Motor Dimensions 79 x 43 mm, and the drawing prints 79", CUBEMARS_AK60_6_DRAWING.title),
+            ValueSource("axial_length_m", "Motor Dimensions 79 x 43 mm, and the drawing prints 43", CUBEMARS_AK60_6_DRAWING.title),
+            ValueSource("gear_ratio", "Reduction Ratio 6:1", CUBEMARS_AK60_6.title),
+            ValueSource("rated_current_a", "Rated Current 3.8 ADC", CUBEMARS_AK60_6.title),
+            ValueSource("peak_current_a", "Peak Current 10.3/11.2 ADC, the 48 V figure", CUBEMARS_AK60_6.title),
+            ValueSource("torque_constant_nm_a", "Torque Constant KT 0.135 Nm/A, at the motor before the 6:1", CUBEMARS_AK60_6.title),
+        ],
+        notes=("The smallest AK actuator whose drawing prints a full mounting "
+               "interface, which is why it is in this catalogue: 380 g "
+               "against 490 for the AK80-9, and 79 mm across against 98. NO "
+               "BACKLASH IS PUBLISHED for it, so a joint using it cannot have "
+               "its lost motion estimated the way the AK80 joints can.")),
     SourcedMotor(
         id="cubemars_ak10_9_v2_kv60",
         manufacturer="CubeMars", part_number="AK10-9 V2.0 KV60",

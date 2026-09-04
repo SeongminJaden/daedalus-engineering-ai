@@ -48,6 +48,16 @@ class LinkSpec:
 class ManipulatorSpec:
     # --- GIVEN ---
     payload_kg: float = 3.0
+
+    #: CHOSEN. How big the payload is, as the side of a cube. A payload with
+    #: no size has no rotational inertia, and a tool roll axis that runs
+    #: through a point mass sees NO LOAD AT ALL: the tool roll's requirement
+    #: came out as exactly zero newton metres, so any actuator satisfied it
+    #: and the lightest thing in the catalogue won. That is an artefact of the
+    #: model, not a property of the arm. 100 mm is the size of a modest
+    #: two finger gripper holding a part, and it is a choice, not a
+    #: measurement; a real gripper's inertia tensor would replace it.
+    payload_extent_m: float = 0.100
     reach_m: float = 0.600
     degrees_of_freedom: int = 6
     move_angle_rad: float = 1.5707963267948966      # 90 degrees per joint

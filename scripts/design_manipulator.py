@@ -101,7 +101,14 @@ def main() -> int:
     stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
     stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
-    stages["interfaces"] = interface_stage(stages["drivetrain"], SPEC)
+    # The two mounts are designed in this repository now, so the gap list
+    # says designed rather than missing for them. It still says MISSING for
+    # anything that is not, which is the point of keeping the list.
+    designed = {name for name in ("base_mount", "tool_plate")
+                if (Path("data/generated/manipulator_mounts")
+                    / f"{name}.stl").exists()}
+    stages["interfaces"] = interface_stage(stages["drivetrain"], SPEC,
+                                           designed=designed)
     stages["spigot"] = spigot_stage(stages["dynamics"], stages["drivetrain"],
                                     SPEC)
     print("dynamics and drivetrain done", flush=True)

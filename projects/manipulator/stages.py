@@ -115,17 +115,29 @@ def dynamics_stage(arm: Assembly, spec: ManipulatorSpec = SPEC,
 
     static = joint_torques(arm, q0, density, tip_force_n=payload)
     names = [j.name for j in arm.actuated_joints()]
+    # THE PAYLOAD HAS TO BE TURNED, not just held up. The rigid body model
+    # carries it as a force at the tip, which is right for gravity and wrong
+    # for a roll axis: a force through a point has no moment about the line it
+    # lies on, so the tool roll's requirement came out as exactly zero and any
+    # actuator satisfied it. A payload of stated size has an inertia, and
+    # turning it at the profile's peak acceleration takes a torque.
+    cube = spec.payload_kg * spec.payload_extent_m ** 2 / 6.0
+    spin = float(cube * acceleration[0])
     for index, name in enumerate(names):
         trap = profiles["trapezoidal"]
         curve = profiles["s_curve"]
-        peak = float(trap.peak_torque_nm[index])
+        # Every joint turns the payload about its own axis in this move, so
+        # every joint pays the spin torque. It is small next to gravity on
+        # the big joints and it is the ONLY torque on the tool roll.
+        peak = float(trap.peak_torque_nm[index]) + spin
         result.rows.append({
             "joint": name,
             "static_nm": float(static[index]),
+            "payload_spin_nm": spin,
             "peak_trapezoidal_nm": peak,
-            "rms_trapezoidal_nm": float(trap.rms_torque_nm[index]),
-            "peak_s_curve_nm": float(curve.peak_torque_nm[index]),
-            "rms_s_curve_nm": float(curve.rms_torque_nm[index]),
+            "rms_trapezoidal_nm": float(trap.rms_torque_nm[index]) + spin,
+            "peak_s_curve_nm": float(curve.peak_torque_nm[index]) + spin,
+            "rms_s_curve_nm": float(curve.rms_torque_nm[index]) + spin,
             "peak_over_rms": float(trap.peak_to_rms[index]),
             "gravity_share": (abs(float(static[index])) / peak if peak else 0.0),
         })
@@ -136,6 +148,12 @@ def dynamics_stage(arm: Assembly, spec: ManipulatorSpec = SPEC,
         f"joint in {spec.move_time_s} s; the trapezoid takes "
         f"{profiles['trapezoidal'].trajectory.duration_s:.2f} s and the s "
         f"curve {profiles['s_curve'].trajectory.duration_s:.2f} s")
+    result.notes.append(
+        f"the payload is treated as a {spec.payload_extent_m * 1000:.0f} mm "
+        f"cube of {spec.payload_kg} kg, so turning it costs "
+        f"{spin:.3f} N m at the profile's peak acceleration. That number is "
+        f"the whole of the tool roll's requirement, which was zero while the "
+        f"payload was a point")
     result.notes.append(
         "friction is zero because no measured coefficients exist for these "
         "joints, so every torque here is a lower bound")
@@ -184,7 +202,8 @@ GEARBOX_CANDIDATES = ("apex_af042_ratio20", "apex_af042_ratio50",
                       "apex_af060_ratio50", "harmonic_csf_17_50_2uh",
                       "harmonic_csf_17_100_2uh", "harmonic_csf_25_50_2uh",
                       "nabtesco_rv_42n")
-INTEGRATED_CANDIDATES = ("cubemars_ak80_9_v3", "cubemars_ak70_10_kv100",
+INTEGRATED_CANDIDATES = ("cubemars_ak60_6_v3_kv80",
+                         "cubemars_ak80_9_v3", "cubemars_ak70_10_kv100",
                          "cubemars_ak10_9_v2_kv60", "cubemars_ak80_64_kv80",
                          "cubemars_ak80_8_kv60", "robotis_ph54_200_s500_r",
                          "robotis_ph42_020_s300_r", "robotis_xm540_w270",
@@ -363,6 +382,8 @@ def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
     every joint, which is what the design document prints as the direct drive
     against geared comparison.
     """
+    from .interfaces import face_for
+
     result = StageResult(name="drivetrain")
     required_speed = required_joint_speed_rad_s(spec)
     load_inertias = load_inertias or {}
@@ -377,6 +398,24 @@ def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
                                      spec.max_inertia_ratio,
                                      spec.bus_voltage_v)
         result.data.setdefault("candidates", {})[row["joint"]] = candidates
+        # A DRIVE THAT CANNOT BE MOUNTED IS NOT A CANDIDATE. The lightest
+        # feasible part used to win on torque, speed and inertia alone, and
+        # for the tool roll that picked a frameless motor: 213 g of rotor and
+        # stator with no housing, no bearing, no shaft and no published
+        # outline. It cannot be placed in an assembly and nothing can be
+        # bolted to it, which is why the tool flange ended up with no
+        # interface at either end and the arm stopped 23 mm short. Torque is
+        # not the only thing a part has to do.
+        for candidate in candidates:
+            if not candidate.get("feasible"):
+                continue
+            name = str(candidate["candidate"])
+            if face_for(name, "output") is None:
+                candidate["feasible"] = False
+                candidate["why"] = (
+                    (candidate.get("why") or "") +
+                    "; no drawing published for it, so it has no outline and "
+                    "no mounting pattern and cannot be assembled").lstrip("; ")
         feasible = [c for c in candidates if c["feasible"]]
         best = min(feasible, key=lambda c: c["mass_kg"]) if feasible else None
 
@@ -412,6 +451,11 @@ def drivetrain_stage(dynamics: StageResult, spec: ManipulatorSpec = SPEC,
         "the geared path is considered first and the lightest feasible "
         "candidate of any path wins; every candidate, feasible or not, is "
         "kept so the comparison table can show why the others lost")
+    result.notes.append(
+        "a candidate with no published drawing is refused however light it "
+        "is, because an outline and a mounting pattern are what let it be "
+        "placed and fastened. This is what the arm was missing at the tool "
+        "roll, and it is a requirement of the same kind as torque")
     result.could_not.append(
         "The Harmonic Drive units still cannot be paired: their catalogue "
         "gives efficiency as curves against ambient temperature for each "
@@ -1267,7 +1311,8 @@ def bolted_joint_stage(drivetrain: StageResult, sections,
 
 
 def interface_stage(drivetrain: StageResult,
-                    spec: ManipulatorSpec = SPEC) -> StageResult:
+                    spec: ManipulatorSpec = SPEC,
+                    designed: set[str] | None = None) -> StageResult:
     """What each link bolts to, what is measured, and what is missing.
 
     This stage exists because the arm had flanges and no fastening. A 9 mm
@@ -1320,8 +1365,9 @@ def interface_stage(drivetrain: StageResult,
                 unresolved_features(face))
             result.data.setdefault("clock_checks", []).extend(
                 clock_uncertainty_check(face))
-    result.data["gaps"] = assembly_gaps(joints, drives)
+    result.data["gaps"] = assembly_gaps(joints, drives, designed)
 
+    missing = [g for g in result.data["gaps"] if g["status"] == "MISSING"]
     blocked = [c for c in result.data.get("clock_checks", [])
                if c["verdict"] == "NOT ABSORBED"]
     if blocked:
@@ -1333,7 +1379,8 @@ def interface_stage(drivetrain: StageResult,
         f"{len(result.data.get('unresolved', []))} values the sources do not "
         f"give are listed rather than filled in")
     result.notes.append(
-        f"{len(result.data['gaps'])} parts the arm needs and does not have")
+        f"{len(missing)} of {len(result.data['gaps'])} parts the arm needs "
+        f"are still missing; the rest are designed in this repository")
     return result
 
 

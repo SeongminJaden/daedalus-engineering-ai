@@ -225,9 +225,76 @@ AK80_9_OUTPUT = MountingFace(
            "other on these, which is why the face insets are used and the "
            "clock angles are not trusted"))
 
+AK60_6_DRAWING = DrawingSource(
+    id="cubemars_ak60_6_v3_2d",
+    title="AK60-6 V3.0 Robotic Actuator 2D drawing",
+    publisher="CubeMars (Cubemars, T-Motor)",
+    url=("https://www.cubemars.com/data/cms/202602/"
+         "ak60-6-v3-0-robotic-actuator-2d-drawing.pdf"),
+    retrieved="2026-09-04",
+    note=("one sheet, three views, dimensions in millimetres; this drawing "
+          "prints thread depths on BOTH faces, which the AK80-9's does not"))
+
+#: The AK60-6's model, like the AK80-9's, is a converted one, so its angles
+#: carry about a degree of scatter: its two dowels measure 181.93 degrees
+#: apart where they are nominally 180. Its AXIAL dimensions are trustworthy
+#: for the same reason the AK80-9's are, because the drawing's section prints
+#: the same numbers the model measures.
+MODEL_APPROXIMATE_CROSSCHECKED = (
+    "measured on the manufacturer distributed 3D model, which is a converted "
+    "model, with the face insets cross checked against the drawing's own "
+    "section, 2026-09-04")
+
+AK60_6_HOUSING = MountingFace(
+    actuator="cubemars_ak60_6_v3", face="housing", source=AK60_6_DRAWING,
+    outer_diameter_m=0.079,
+    patterns=(BoltPattern("M3", 6, 0.068, 0.0035, "6xM3 depth 3.5, PCD 68",
+                          clock_deg=0.0,
+                          clock_source=MODEL_APPROXIMATE_CROSSCHECKED,
+                          clock_tolerance_deg=1.0),),
+    boss_diameters_m=(0.057,), face_inset_m=0.012,
+    notes=("ITS HOUSING RING IS ALIGNED WITH ITS OUTPUT RING, both on 68 mm "
+           "and both at the same clock. The AK80-64's housing is turned half "
+           "a pitch from its output. So the relationship is a property of the "
+           "part and not a rule, and it is stored per part",
+           "the face inset is 12.0 mm, which the model measures and the "
+           "drawing's section confirms as 43 minus 31",
+           "the drawing marks a 30 degree angular reference on this face and "
+           "which hole it is measured to is not stated; the clock here comes "
+           "from the model instead"))
+
+AK60_6_OUTPUT = MountingFace(
+    actuator="cubemars_ak60_6_v3", face="output", source=AK60_6_DRAWING,
+    outer_diameter_m=0.079,
+    patterns=(BoltPattern("M3", 6, 0.068, 0.006, "6xM3 depth 6, PCD 68",
+                          clock_deg=0.0,
+                          clock_source=MODEL_APPROXIMATE_CROSSCHECKED,
+                          clock_tolerance_deg=1.0),
+              BoltPattern("M3", 6, 0.020, 0.006, "6xM3 depth 6, PCD 20",
+                          clock_deg=8.81,
+                          clock_source=MODEL_APPROXIMATE_CROSSCHECKED,
+                          clock_tolerance_deg=1.0)),
+    boss_diameters_m=(0.049, 0.025), face_inset_m=0.0015,
+    dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=2,
+    dowel_bolt_circle_m=0.020, dowel_angles_deg=(38.81, 220.74),
+    dowel_source=MODEL_APPROXIMATE_CROSSCHECKED,
+    notes=("dowels printed 2x diameter 3.0 +0.02/0 depth 3. The model puts "
+           "them on the 20 mm circle at 38.81 and 220.74 degrees from the "
+           "outer ring, which is 181.93 degrees apart against a nominal 180. "
+           "That 1.93 is the model's own error, so the dowel angles need "
+           "measuring on the part before they are drilled",
+           "the face inset is 1.5 mm, which the model measures and the "
+           "drawing's section prints. The 0.5 in the section is a thin step "
+           "on the output boss and not a mounting face",
+           "no central bore is printed. The 25 in the section is a step, not "
+           "a stated hole",
+           "the inner circle is 6xM3 on a 20 mm circle, which is a smaller "
+           "circle than the AK80 family's 28 and takes M3 rather than M4"))
+
 FACES: dict[tuple[str, str], MountingFace] = {
     (f.actuator, f.face): f for f in
-    (AK80_64_HOUSING, AK80_64_OUTPUT, AK80_9_HOUSING, AK80_9_OUTPUT)}
+    (AK80_64_HOUSING, AK80_64_OUTPUT, AK80_9_HOUSING, AK80_9_OUTPUT,
+     AK60_6_HOUSING, AK60_6_OUTPUT)}
 
 
 def face_for(actuator_id: str, face: str) -> MountingFace | None:
@@ -390,7 +457,8 @@ def clock_uncertainty_check(face: MountingFace) -> list[dict]:
     return rows
 
 
-def assembly_gaps(joint_names: list[str], drives: dict[str, str]) -> list[dict]:
+def assembly_gaps(joint_names: list[str], drives: dict[str, str],
+                  designed: set[str] | None = None) -> list[dict]:
     """Parts this arm needs and does not have.
 
     An arm is not six links. The first joint's HOUSING has to be held by
@@ -399,6 +467,7 @@ def assembly_gaps(joint_names: list[str], drives: dict[str, str]) -> list[dict]:
     here, and neither is a detail: they are the two places the arm meets the
     world, and both carry the whole payload path.
     """
+    designed = designed or set()
     gaps = [{
         "gap": "base mount",
         "where": f"{joint_names[0]} housing",
@@ -407,12 +476,14 @@ def assembly_gaps(joint_names: list[str], drives: dict[str, str]) -> list[dict]:
                 "this design holds its stator. A mount on its 8-M3 85 mm "
                 "circle, and the floor fixing under it, are not designed"),
         "carries": "the entire arm's weight and the base yaw reaction torque",
+        "status": ("designed" if "base_mount" in designed else "MISSING"),
     }, {
         "gap": "tool plate",
         "where": f"{joint_names[-1]} output",
         "why": ("the arm ends at the tool flange and no tool interface is "
                 "specified, so the 3 kg payload has nothing to attach to"),
         "carries": "the 3 kg payload",
+        "status": ("designed" if "tool_plate" in designed else "MISSING"),
     }]
     for joint in joint_names:
         if face_for(drives.get(joint, ""), "housing") is None and \
@@ -423,5 +494,6 @@ def assembly_gaps(joint_names: list[str], drives: dict[str, str]) -> list[dict]:
                 "why": (f"{drives.get(joint, 'its drive')} publishes neither "
                         f"an outline nor a mounting pattern, so the parts on "
                         f"either side of this joint cannot be fastened to it"),
-                "carries": "everything outboard of this joint"})
+                "carries": "everything outboard of this joint",
+                "status": "MISSING"})
     return gaps
