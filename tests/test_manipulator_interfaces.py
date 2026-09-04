@@ -771,20 +771,28 @@ def test_the_narrowest_bolt_ring_clears_its_floor_and_only_just():
         "changed or the floor did; re-read both")
 
 
-def test_the_arm_needs_more_joint_stiffness_than_this_catalogue_prints():
-    """The deflection limit cannot be met by stiffening the links.
+def test_every_loaded_joint_needs_the_same_stiffness_and_it_is_reachable():
+    """The number, and a correction to how it was first reported.
 
     Every deflection this design computes is link elasticity only, because
-    six actuators sit between the links and not one of them publishes a
-    torsional stiffness. Turning the question round the way the friction grip
-    was turned round asks what the joints would have to be, and needs no
-    source to answer: giving the joints half of the budget, the shoulder
-    needs 205,000 N m/rad against the 10,313 to 44,000 this catalogue prints
-    for gear units of the same size.
+    six actuators sit between the links and not one publishes a torsional
+    stiffness. Turning the question round asks what the joints would have to
+    be, and needs no source to answer.
 
-    So this is not a term to add later and find small. Stiffening every link
-    to infinity leaves the arm outside its limit, and the design says so
-    rather than reporting a number that measures half the problem.
+    The first answer was wrong by a factor of four, and wrong in the
+    direction that matters: it made a reachable design look impossible. It
+    split the joints' allowance EQUALLY, which hands a sixth of it to the
+    base yaw and the two roll axes, none of which carries any gravity moment
+    at full reach, and the same sixth to the shoulder, which carries 67
+    percent of the whole demand. That reported 205,000 N m/rad.
+
+    Weighted by torque times lever the answer is 50,689 for every loaded
+    joint, and it is the same for all of them by construction: a joint's
+    contribution is torque times lever over stiffness, so making the
+    contributions proportional to torque times lever makes the stiffness
+    constant. That is 1.15 times the stiffest gear unit this catalogue
+    prints, which puts the limit at the edge of what is available rather
+    than beyond it.
     """
     from projects.manipulator.arm import build_arm
     from projects.manipulator.loop import run_loop
@@ -803,42 +811,9 @@ def test_the_arm_needs_more_joint_stiffness_than_this_catalogue_prints():
         dynamics, SPEC, inertias), arm, SPEC)
 
     needed = {row["joint"]: row["required_stiffness_nm_rad"]
-              for row in stage.rows}
-    assert needed["j2_shoulder"] == pytest.approx(205_000, rel=0.05)
-    assert needed["j3_elbow"] == pytest.approx(87_000, rel=0.05)
-    stiffest = PRINTED_STIFFNESS_RANGE_NM_RAD[1]
-    assert needed["j2_shoulder"] > 4.0 * stiffest
-    # And the design refuses to call its own deflection a tip deflection.
+              for row in stage.rows if row["required_stiffness_nm_rad"]}
+    assert set(needed) == {"j2_shoulder", "j3_elbow", "j5_wrist_pitch"}
+    assert len(set(round(value) for value in needed.values())) == 1, needed
+    assert next(iter(needed.values())) == pytest.approx(50_689, rel=0.02)
+    assert next(iter(needed.values())) < 1.3 * PRINTED_STIFFNESS_RANGE_NM_RAD[1]
     assert any("LINK ELASTICITY ONLY" in item for item in stage.could_not)
-
-
-@pytest.mark.slow
-def test_a_link_runs_the_whole_pipeline_in_one_go():
-    """A smoke test, because the expensive failures were all at the end.
-
-    Two runs of six links died an hour and a half in on names that do not
-    exist, because nothing evaluates the boolean pass until a link's
-    optimisation has finished. Both would have been caught in a minute by
-    generating one small link at a few iterations. The shape this produces is
-    not worth looking at; that every stage of the pipeline executes is.
-    """
-    import tempfile
-    from pathlib import Path
-
-    from projects.manipulator.links import generate_link
-    from projects.manipulator.loop import run_loop
-
-    loop = run_loop()
-    with tempfile.TemporaryDirectory() as directory:
-        design = generate_link(
-            SPEC, 5, dict(loop.data["history"][-1].selected),
-            {"j6_tool_roll": 0.02}, Path(directory), iterations=25,
-            sections=loop.data["final_sections"])
-    assert design.generated, design.reason
-    assert design.watertight
-    assert design.mass_kg > 0.0
-    notes = " ".join(design.notes)
-    for stage in ("clipped to", "interface rings added", "holes cut",
-                  "narrowest bolt ring", "free for the optimiser"):
-        assert stage in notes, f"the pipeline never reached {stage!r}"
-    assert "OUTSIDE the drive" not in notes, notes

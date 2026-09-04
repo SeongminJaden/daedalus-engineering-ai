@@ -126,10 +126,43 @@ def joint_rows(drives: dict) -> list[dict]:
     return rows
 
 
+def undefined_names() -> list[str]:
+    """Names this repository uses and does not have, found without running it.
+
+    Two six link runs died ninety minutes in on exactly this: a variable that
+    exists only inside another function, and two that were never bound in
+    this one. Nothing evaluates the boolean pass until a link's optimisation
+    has finished, so the cost of a misspelt name is a whole run. Pyflakes
+    answers the question in a second and a half across the repository, needs
+    nothing installed but itself, and starts no workers.
+
+    It is a different question from the smoke test, which asks whether a
+    stage actually runs. This one asks whether a name exists at all, and it
+    is the cheaper of the two by four orders of magnitude.
+    """
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    found = subprocess.run(
+        [sys.executable, "-m", "pyflakes",
+         *[str(root / part) for part in
+           ("agent", "core", "drivetrain", "geometry", "nodes",
+            "optimization", "physics", "projects", "scripts")]],
+        capture_output=True, text=True)
+    return [line for line in found.stdout.splitlines()
+            if "undefined name" in line]
+
+
 def main(iterations: int = 60, volume_fraction: float = 0.3,
          workers: int = 1, threads_per_worker: int = 4,
          search: str = "data/generated/manipulator_volume_search/search.json"
          ) -> int:
+    blocking = undefined_names()
+    if blocking:
+        print(json.dumps({"refused": "undefined names in the repository",
+                          "found": blocking}, indent=1))
+        return 1
+
     loop = run_loop()
     drives = dict(loop.data["history"][-1].selected)
     sections = loop.data["final_sections"]

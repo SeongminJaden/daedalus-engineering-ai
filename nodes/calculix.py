@@ -49,12 +49,16 @@ import tempfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from physics.fem.mesh import Mesh
 
 from .descriptor import CapabilityUnavailable, NodeDescriptor, Transport
+
+if TYPE_CHECKING:                       # a tetrahedral mesh, from the mesher
+    from .gmsh_node import TetMesh
 
 CALCULIX_NODE_NAME = "calculix.local"
 CALCULIX_CAPABILITY = "analysis.fea.calculix"

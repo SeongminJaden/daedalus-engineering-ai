@@ -1629,17 +1629,39 @@ def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
         return result
 
     budget = spec.tip_deflection_limit_m * margin
-    allowance = budget * JOINT_SHARE_OF_BUDGET / len(selected)
+    joint_budget = budget * JOINT_SHARE_OF_BUDGET
     low, high = PRINTED_STIFFNESS_RANGE_NM_RAD
+
+    # SPLIT THE ALLOWANCE BY WHAT EACH JOINT ACTUALLY COSTS, not equally.
+    # An equal split gives a sixth of the joint budget to the base yaw and
+    # the two roll axes, which carry no gravity moment at full reach and need
+    # none of it, and the same sixth to the shoulder, which carries 67
+    # percent of the whole. It reported the shoulder needing 205,000 N m/rad
+    # when the honest number is 50,700, a factor of four out, and the wrong
+    # way: it made a reachable design look impossible.
+    #
+    # Weighting by torque times lever has a tidy consequence. Every joint
+    # ends up needing the SAME stiffness, because a joint's contribution is
+    # torque times lever over stiffness, so making the contributions
+    # proportional to torque times lever makes the stiffness constant. One
+    # number describes the whole arm.
+    weights = {row["joint"]: statics.get(row["joint"], 0.0)
+               * float(np.linalg.norm(tool - pose.joint_origins[row["joint"]]))
+               for row in selected}
+    demand = sum(weights.values())
+    uniform = demand / joint_budget if joint_budget > 0 else None
+
     for row in selected:
         joint = row["joint"]
         torque = statics.get(joint, 0.0)
         lever = float(np.linalg.norm(tool - pose.joint_origins[joint]))
-        required = torque * lever / allowance if allowance > 0 else None
+        allowance = (joint_budget * weights[joint] / demand if demand else 0.0)
+        required = uniform if weights[joint] > 0.0 else None
         result.rows.append({
             "joint": joint, "drive": row.get("selected"),
             "static_torque_nm": torque, "lever_m": lever,
             "allowance_m": allowance,
+            "torque_times_lever_nm2": weights[joint],
             "required_stiffness_nm_rad": required,
             "published": None,
             "against_printed_range": (
@@ -1648,14 +1670,20 @@ def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
                 else f"{required / high:.1f} times the stiffest unit this "
                      f"catalogue prints")})
 
-    needed = [r["required_stiffness_nm_rad"] for r in result.rows
-              if r["required_stiffness_nm_rad"]]
-    if needed:
-        worst = max(needed)
+    if uniform:
         result.notes.append(
-            f"the stiffest joint would need {worst:,.0f} N m/rad, against "
-            f"{low:,.0f} to {high:,.0f} for the gear units this catalogue "
-            f"prints. That is {worst / high:.1f} times the stiffest of them")
+            f"every loaded joint needs the same {uniform:,.0f} N m/rad, "
+            f"against {low:,.0f} to {high:,.0f} for the gear units this "
+            f"catalogue prints. That is {uniform / high:.2f} times the "
+            f"stiffest of them, so the limit is near the edge of what this "
+            f"catalogue can do rather than beyond it")
+        result.notes.append(
+            f"with every joint at the stiffest printed unit, {high:,.0f} N "
+            f"m/rad, the joints alone would use "
+            f"{demand / high * 1000:.3f} mm of the "
+            f"{spec.tip_deflection_limit_m * 1000:.1f} mm limit, leaving "
+            f"{(spec.tip_deflection_limit_m - demand / high) * 1000:.3f} mm "
+            f"for the links and any margin")
     result.notes.append(
         "the torque used is the STATIC one at full reach, because the "
         "deflection limit is a static condition. Three joints read zero "
@@ -1664,9 +1692,9 @@ def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
         "and under acceleration they carry torque like any other")
     result.notes.append(
         f"the joints are given {JOINT_SHARE_OF_BUDGET:.0%} of the "
-        f"{budget * 1000:.2f} mm budget, split equally, which is a CHOSEN "
-        f"split: links and joints are in series and nothing says how to "
-        f"divide it")
+        f"{budget * 1000:.2f} mm budget, which is a CHOSEN split: links and "
+        f"joints are in series and nothing says how to divide it. Within the "
+        f"joints it is split by torque times lever, not equally")
     result.could_not.append(
         "NO TORSIONAL STIFFNESS IS PUBLISHED for any integrated actuator in "
         "this catalogue, so no joint compliance is modelled and every "

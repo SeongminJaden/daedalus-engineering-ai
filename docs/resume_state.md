@@ -73,12 +73,23 @@ EVERY DEFLECTION IN THIS DESIGN IS LINK ELASTICITY ONLY. Six actuators sit
 between the links and all six are treated as rigid, because no integrated
 actuator in this catalogue prints a torsional stiffness. The missing term
 ADDS to the modelled one, so the real tool deflection is larger than any
-number here. Asked in reverse, the way the friction grip was: to hold 1 mm
-with the joints taking half the budget, the shoulder would need 205,000
-N m/rad against the 10,313 to 44,000 this catalogue prints for gear units of
-the same size, and the elbow 87,000. The limit therefore cannot be met by
-stiffening the links, and no deflection result here should be read as a tip
-deflection.
+number here.
+
+Asked in reverse, the way the friction grip was: with the joints taking half
+the budget, every loaded joint needs 50,689 N m/rad, and it is the same
+number for all of them because a joint's contribution is torque times lever
+over stiffness. That is 1.15 times the stiffest gear unit this catalogue
+prints, 44,000, so the limit sits at the edge of what is available rather
+than beyond it. With every joint at that 44,000 the joints alone would use
+0.461 mm of the 1 mm limit and leave 0.539 for the links and any margin.
+
+CORRECTION, same day. This was first reported as 205,000 N m/rad and 4.7
+times the stiffest available, and that was wrong by a factor of four in the
+direction that matters: it made a reachable design look impossible. The
+error was splitting the joints' allowance EQUALLY, which gives a sixth of it
+to the base yaw and the two roll axes, none of which carries a gravity
+moment at full reach, and the same sixth to the shoulder, which carries 67
+percent of the demand. The split is by torque times lever now.
 
 WITHDRAWN RESULT. Every statement in this repository before 2026-09-05 that
 a link "meets its deflection limit" was measuring the wrong quantity, and
