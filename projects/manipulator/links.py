@@ -601,7 +601,8 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         fixed_nodes=mesh.nodes_at_x(0.0),
         load_nodes=mesh.nodes_at_x(float(mesh.nx * mesh.dx)),
         total_load_n=-transverse, load_direction=1,
-        volume_fraction=volume_fraction, filter_radius_elements=2.0,
+        volume_fraction=volume_fraction, volume_fraction_of="free",
+        filter_radius_elements=2.0,
         passive_solid=passive_solid, passive_void=passive_void,
         density_projection=projection, projection_vjp=vjp)
 
@@ -709,6 +710,17 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         f"percent of the extracted volume")
     design.unresolved = unresolved
     design.notes.append(void_note)
+    free = int((~(passive_solid | passive_void)).sum())
+    design.notes.append(
+        f"{100.0 * free / mesh.n_elements:.0f} percent of this domain is free "
+        f"for the optimiser to decide; the rest is interfaces, drives and "
+        f"corridors"
+        + ("" if free > 0.4 * mesh.n_elements else
+           ". THE SHAPE OF THIS PART IS SET BY ITS INTERFACES rather than by "
+           "the optimisation, and it should be read that way"))
+    design.notes.append(
+        f"the volume fraction is a fraction of that free region, not of the "
+        f"whole domain, so it means the same thing on every link")
     design.notes.append(
         f"design domain {span * 1000:.0f} by {height * 1000:.0f} by "
         f"{width * 1000:.0f} mm, {mesh.n_elements} elements, "
@@ -1277,33 +1289,79 @@ def link_placements(spec: ManipulatorSpec, drives: dict[str, str],
 
 
 def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
-                    sections: dict | None = None) -> list[dict]:
-    """Where two link domains claim the same space, and what is done about it.
+                    sections: dict | None = None, samples: int = 12
+                    ) -> list[dict]:
+    """Do two links ever hold the SAME element solid?
 
-    A cranked link's domain is the union of a centred box and an offset box,
-    and a union can reach into a neighbour: the base column's does, by 49 mm
-    in every direction at the shoulder. The generator holds every other
-    link's box empty, so the shared volume is designed in by nobody. This
-    reports both numbers, because a shared box that is held empty and a
-    shared box that is not are different things and only one of them is a
-    defect.
+    The invariant used to be that adjacent domain boxes share nothing, and
+    that stopped being the right question. The boxes overlap on purpose now:
+    a flange around a crossing axis is a disc centred on the drive, so half
+    of it lies behind that joint's own plane and inside the neighbour's box.
+    Demanding no shared box would forbid the disc.
+
+    What must never happen is that both links claim the same MATERIAL. Two
+    rules can each carve out an exception, a link holding its own bolt ring
+    against a neighbour's box being one, and two exceptions can fire in the
+    same place without either rule noticing. So the shared volume is sampled
+    and each point is asked of both links.
     """
     boxes = [box for box in world_boxes(spec, drives, sections)
              if box.get("placed")]
+    built = {}
+    for index, link in enumerate(spec.links()):
+        made, _reason = link_domain(spec, index, drives, sections=sections)
+        if made is not None:
+            built[link.name] = (made[0], made[1], made[2],
+                                next(b for b in boxes if b["link"] == link.name))
+
+    def _state(name, point):
+        """solid, void or free at a world point, in that link's own mesh."""
+        if name not in built:
+            return None
+        mesh, solid, void, box = built[name]
+        along, other = box["along"], (0 if box["along"] == 1 else 1)
+        local = np.array([point[along] - box["low"][along],
+                          point[other] - box["low"][other],
+                          point[2] - box["low"][2]])
+        index = np.array([local[0] / mesh.dx, local[1] / mesh.dy,
+                          local[2] / mesh.dz], dtype=int)
+        if np.any(index < 0) or index[0] >= mesh.nx or index[1] >= mesh.ny \
+                or index[2] >= mesh.nz:
+            return None
+        flat = (index[0] * mesh.ny + index[1]) * mesh.nz + index[2]
+        if flat >= mesh.n_elements:
+            return None
+        return "solid" if solid[flat] else ("void" if void[flat] else "free")
+
     rows = []
     for first, second in zip(boxes, boxes[1:]):
         low = np.maximum(first["low"], second["low"])
         high = np.minimum(first["high"], second["high"])
         extent = np.clip(high - low, 0.0, None)
         shared = float(np.prod(extent)) * 1e9
+        both, contested = 0, 0
+        if shared > 0.0:
+            grid = [np.linspace(low[i], high[i], samples) for i in range(3)]
+            for x in grid[0]:
+                for y in grid[1]:
+                    for z in grid[2]:
+                        point = np.array([x, y, z])
+                        a = _state(first["link"], point)
+                        b = _state(second["link"], point)
+                        if a == "solid" and b == "solid":
+                            both += 1
+                        if a in ("solid", "free") and b in ("solid", "free"):
+                            contested += 1
         rows.append({
             "pair": f"{first['link']} and {second['link']}",
             "shared_mm3": shared,
             "shared_extent_mm": [float(e) * 1000.0 for e in extent],
-            "held_empty": shared > 0.0,
+            "both_solid_samples": both,
+            "both_could_use_samples": contested,
+            "samples": samples ** 3 if shared > 0.0 else 0,
             "note": ("their domains meet face to face" if shared <= 0.0 else
-                     "both domains reach into this volume and each holds the "
-                     "other's box empty, so neither designs in it")})
+                     "their boxes overlap, which a crossing flange requires; "
+                     "what matters is that neither holds the same material")})
     return rows
 
 

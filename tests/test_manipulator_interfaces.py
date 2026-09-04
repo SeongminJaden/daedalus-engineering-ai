@@ -363,41 +363,38 @@ def test_a_link_is_clipped_to_its_domain_so_it_cannot_reach_its_neighbour():
     assert "overshoot" in note
 
 
-def test_a_shared_domain_box_is_held_empty_by_both_links():
-    """The shoulder conflict, closed twice over.
+def test_no_two_links_ever_hold_the_same_material():
+    """The invariant, after the question it asks had to change.
 
-    It was 235,298 cubic millimetres, a 49 by 49 by 98 mm block around the
-    shoulder, and it was there because a link's domain ran from its own joint
-    to the next one and was as wide as its section, so the space around a
-    joint lay inside both the domain that ended there and the domain that
-    started there. Five of the six joints were unaffected, because their axes
-    run along the arm and their domains meet face to face. An assembly found
-    2850 cubic millimetres of real material inside that block, which means
-    most of it was avoided by luck rather than by design.
+    It began as "adjacent domain boxes share nothing", which the shoulder
+    broke by 235,298 cubic millimetres and which putting each link on the far
+    side of the face it bolts to fixed. Then the cranked links needed the
+    union of two boxes and it broke again, by 117,649, and holding every
+    neighbour's box empty fixed that. Then a flange around a crossing axis
+    turned out to be a disc centred on the drive, with half of it behind that
+    joint's own plane and inside the neighbour's box, and the invariant
+    stopped being right at all: demanding no shared box would forbid the
+    disc. The boxes now overlap by 1.8 million cubic millimetres at the
+    shoulder on purpose.
 
-    Putting each link on the far side of the face it bolts to closed it. Then
-    making the two cranked links' domains the UNION of a centred box and an
-    offset box reopened part of it, 117,649 cubic millimetres, because a
-    union can reach into a neighbour. So every link now holds every other
-    link's box empty, and the shared volume is designed in by nobody.
+    What must never happen is that two links claim the same MATERIAL, and
+    that is what is asked now. It matters because two rules can each carve
+    out an exception, a link holding its own bolt ring against a neighbour's
+    box being one, and two exceptions can fire in the same place without
+    either rule noticing.
     """
-    from projects.manipulator.links import domain_overlaps, link_domain
+    from projects.manipulator.links import domain_overlaps
     from projects.manipulator.loop import run_loop
 
     loop = run_loop()
-    drives = dict(loop.data["history"][-1].selected)
-    sections = loop.data["final_sections"]
-    rows = domain_overlaps(SPEC, drives, sections)
-    shared = [row for row in rows if row["shared_mm3"] > 0.0]
-    assert len(shared) == 1 and shared[0]["pair"] == "base_column and upper_arm"
-    assert all(row["held_empty"] for row in shared)
-
-    # And it is actually held empty, not merely declared to be.
-    built, reason = link_domain(SPEC, 0, drives, sections=sections)
-    assert built is not None, reason
-    _mesh, _solid, void, _span, _height, _width, note = built
-    assert "neighbouring link's domain" in note
-    assert void.any()
+    rows = domain_overlaps(SPEC, dict(loop.data["history"][-1].selected),
+                           loop.data["final_sections"], samples=10)
+    assert rows
+    assert any(row["shared_mm3"] > 0.0 for row in rows), (
+        "no boxes overlap at all, which means the crossing flanges lost "
+        "their discs")
+    for row in rows:
+        assert row["both_solid_samples"] == 0, row
 
 
 def test_two_links_are_asked_for_a_shape_a_box_cannot_be():
@@ -578,3 +575,68 @@ def test_only_the_cranked_links_need_a_withdrawal_corridor():
         carved[link.name] = "corridor" in built[-1]
     assert {name for name, has in carved.items() if has} == {
         "base_column", "upper_arm", "wrist_roll_body"}
+
+
+def test_two_flange_discs_fit_between_a_drives_mounting_faces():
+    """A joint whose axis crosses the arm has a flange disc on each side of
+    it, and they have to fit in the gap the drive leaves.
+
+    The shoulder is comfortable: its faces are 42.7 mm apart and two 9 mm
+    flanges leave 24.7. The wrist is not: the AK80-9's faces are 24.5 apart
+    and the same two flanges leave 6.5. The flange thickness comes from a
+    bolt length and can move, and at 12 mm the two discs at the wrist would
+    meet. This is the number that says so.
+    """
+    from projects.manipulator.interfaces import face_separation_m
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    gaps = {}
+    for joint in SPEC.joints():
+        separation = face_separation_m(str(drives.get(joint.name, "")))
+        if separation is None:
+            continue
+        gaps[joint.name] = separation - 2.0 * SPEC.flange_thickness_m
+    assert gaps, "no joint could be checked"
+    for name, gap in gaps.items():
+        assert gap > 0.0, (
+            f"{name}: two {SPEC.flange_thickness_m * 1000:.0f} mm flanges do "
+            f"not fit in the {(gap + 2 * SPEC.flange_thickness_m) * 1000:.1f} "
+            f"mm between that drive's mounting faces")
+    tightest = min(gaps, key=gaps.get)
+    assert gaps[tightest] == pytest.approx(0.0065, abs=0.0005)
+    assert "wrist" in tightest or "roll" in tightest, tightest
+
+
+def test_the_volume_fraction_means_the_same_thing_on_every_link():
+    """It did not, and the spread was sevenfold.
+
+    A volume fraction read against the whole domain means whatever each
+    part's interfaces leave over. On this arm 0.3 of the domain came out as
+    0.128 of the decidable elements on the tool flange and 0.898 on the wrist
+    pitch body, so the same number asked one part for a skeleton and another
+    for a nearly solid block. Read against the free region it asks the same
+    question everywhere, and that is what the links use.
+    """
+    import numpy as np
+
+    from optimization.topology import SimpProblem
+    from physics.fem.mesh import solid_box_mesh
+
+    mesh = solid_box_mesh(0.1, 0.1, 0.1, 6, 6, 6)
+    solid = np.zeros(mesh.n_elements, dtype=bool)
+    solid[:40] = True
+    void = np.zeros(mesh.n_elements, dtype=bool)
+    void[40:120] = True
+    made = {}
+    for how in ("domain", "free"):
+        made[how] = SimpProblem(
+            mesh=mesh, youngs_modulus_pa=7e10, poisson_ratio=0.33,
+            fixed_nodes=mesh.nodes_at_x(0.0), load_nodes=mesh.nodes_at_x(0.1),
+            total_load_n=-1.0, load_direction=1, volume_fraction=0.3,
+            volume_fraction_of=how, passive_solid=solid,
+            passive_void=void).free_volume_fraction()
+    assert made["free"] == pytest.approx(0.3)
+    assert made["domain"] != pytest.approx(0.3)
+    assert made["domain"] == pytest.approx(0.2583, abs=0.001)

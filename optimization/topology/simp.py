@@ -49,6 +49,9 @@ class SimpProblem:
     total_load_n: float
     load_direction: int = 1
     volume_fraction: float = 0.4
+    #: What `volume_fraction` is a fraction OF: the whole domain, or only the
+    #: elements the optimiser may decide. See `free_volume_fraction`.
+    volume_fraction_of: str = "domain"
     penalty: float = PENALTY
     min_density: float = MIN_DENSITY
     filter_radius_elements: float = 1.5
@@ -109,11 +112,28 @@ class SimpProblem:
         return free
 
     def free_volume_fraction(self) -> float:
-        """The volume fraction the OC step should hit over the free elements
-        so that the whole domain lands on `volume_fraction`."""
+        """The volume fraction the OC step should hit over the free elements.
+
+        WHAT THE FRACTION IS A FRACTION OF is a real choice and it was never
+        made. Read against the whole domain, which is what `domain` does and
+        what every earlier result in this repository used, the same number
+        means different things to different parts: on this arm 0.3 of the
+        domain came out as 0.128 of what the optimiser may decide on the tool
+        flange and 0.898 on the wrist pitch body, a sevenfold spread, because
+        those two parts have very different amounts of their volume already
+        settled by interfaces. Searching over such a number searches the
+        wrong variable.
+
+        Read against the FREE elements it means one thing everywhere: how
+        much of what is actually being decided gets used. The default stays
+        `domain` so that every pinned result here keeps its meaning, and the
+        parts whose interfaces dominate them ask for `free`.
+        """
         free = self.free_mask
         if free is None:
             return self.volume_fraction
+        if self.volume_fraction_of == "free":
+            return float(np.clip(self.volume_fraction, self.min_density, 1.0))
         n = self.mesh.n_elements
         solid = 0.0 if self.passive_solid is None else float(np.sum(self.passive_solid))
         target = self.volume_fraction * n - solid

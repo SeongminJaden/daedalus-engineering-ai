@@ -71,7 +71,8 @@ def _search_one(payload):
             fixed_nodes=mesh.nodes_at_x(0.0),
             load_nodes=mesh.nodes_at_x(float(mesh.nx * mesh.dx)),
             total_load_n=-transverse, load_direction=1,
-            volume_fraction=fraction, filter_radius_elements=2.0,
+            volume_fraction=fraction, volume_fraction_of="free",
+            filter_radius_elements=2.0,
             passive_solid=passive_solid, passive_void=passive_void,
             density_projection=projection, projection_vjp=vjp)
 
