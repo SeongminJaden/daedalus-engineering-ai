@@ -707,6 +707,18 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
             sections=sections, transform=transform))
     tool = trimesh.util.concatenate(cutters)
     cut = body.difference(tool)
+    # DROP THE ZERO VOLUME SHELLS. Cutting twenty four holes out of a
+    # marching cubes body leaves the occasional closed surface with no
+    # thickness: it is not a second part, it is an artefact, and it made the
+    # tool flange arrive as two components with one of them measuring 0.0
+    # cubic millimetres. Some CAD importers refuse a body like that and
+    # others import it as a stray face nobody can select.
+    pieces = [piece for piece in cut.split(only_watertight=False)
+              if abs(float(piece.volume)) > 1e-9]
+    if len(pieces) == 1:
+        cut = pieces[0]
+    elif len(pieces) > 1:
+        cut = max(pieces, key=lambda piece: abs(float(piece.volume)))
     report = [f"{len(holes)} holes cut: "
               + ", ".join(sorted({f"{h['end']} {h['kind']} "
                                   f"{h['diameter_m'] * 1000:.1f} mm"
