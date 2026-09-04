@@ -160,6 +160,12 @@ class SourcedMotor(SourcedPart):
     backlash_arcmin: float | None = None
     rated_current_a: float | None = None
     peak_current_a: float | None = None
+    #: Outline, where the page prints it. A joint has to contain its own
+    #: actuator, and a design that never reads these numbers puts a 98 mm
+    #: motor in a 40 mm link. Most pages do not print them, and then the
+    #: envelope simply cannot be checked, which is itself a finding.
+    outer_diameter_m: float | None = None
+    axial_length_m: float | None = None
 
     def require(self, name: str) -> float:
         value = getattr(self, name)
@@ -413,6 +419,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         nominal_speed_rad_s=390.0 * RPM_TO_RAD_S,
         rotor_inertia_kg_m2=1118.3238 * GCM2_TO_KG_M2,
         mass_kg=0.490,
+        outer_diameter_m=0.098,
+        axial_length_m=0.0385,
         gear_ratio=9.0,
         backlash_arcmin=15.0,
         rated_current_a=12.0,
@@ -425,6 +433,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
             ValueSource("nominal_speed_rad_s", "Rated Speed 390 rpm", CUBEMARS_AK80_9.title),
             ValueSource("rotor_inertia_kg_m2", "Rotor Inertia 1118.3238 gcm2", CUBEMARS_AK80_9.title),
             ValueSource("mass_kg", "Weight 490g", CUBEMARS_AK80_9.title),
+            ValueSource("outer_diameter_m", "Motor Dimensions 98 x 38.5 mm, diameter", CUBEMARS_AK80_9.title),
+            ValueSource("axial_length_m", "Motor Dimensions 98 x 38.5 mm, length", CUBEMARS_AK80_9.title),
             ValueSource("gear_ratio", "Gear Ratio 9:1", CUBEMARS_AK80_9.title),
             ValueSource("backlash_arcmin", "Backlash 15 arcmin", CUBEMARS_AK80_9.title),
             ValueSource("rated_current_a", "Rated Current 12A", CUBEMARS_AK80_9.title),

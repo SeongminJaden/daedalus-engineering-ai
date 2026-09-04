@@ -23,7 +23,7 @@ from projects.manipulator.arm import build_arm, stretched_pose  # noqa: E402
 from projects.manipulator.loop import run_loop  # noqa: E402
 from projects.manipulator.spec import SPEC  # noqa: E402
 from projects.manipulator.stages import (assembly_stage, bus_voltage_stage,  # noqa: E402
-                                         compliance_stage,
+                                         compliance_stage, envelope_stage,
                                          drive_comparison_stage, drivetrain_stage,
                                          dynamics_stage, fatigue_stage,
                                          features_stage, link_design_stage,
@@ -97,6 +97,7 @@ def main() -> int:
     stages["comparison"] = drive_comparison_stage(stages["drivetrain"], SPEC)
     stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
+    stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
     print("dynamics and drivetrain done", flush=True)
 
     if not args.skip_links:
@@ -164,6 +165,7 @@ def main() -> int:
         section("3d. Joint compliance and backlash, from the gear data",
                 stages["compliance"]),
         section("3e. What the bus voltage costs", stages["bus"]),
+        section("3f. Does each joint contain its own drive", stages["envelope"]),
     ]
     if "links" in stages:
         document.append(section("4. Each link through both design paths",

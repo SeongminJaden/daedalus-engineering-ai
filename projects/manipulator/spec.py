@@ -62,9 +62,29 @@ class ManipulatorSpec:
     #: reach is the sum of the three moving lengths measured from the
     #: shoulder, which is what "maximum reach" means for this layout.
     base_height_m: float = 0.150
-    upper_arm_m: float = 0.280
-    forearm_m: float = 0.240
-    wrist_m: float = 0.080
+
+    #: The axial room each wrist joint gets. CHOSEN at 40 mm because the only
+    #: actuator in the catalogue whose outline is printed is 38.5 mm long, and
+    #: a joint has to contain its own drive. The first version of this design
+    #: gave the wrist joints 30 and 25 mm without looking at any actuator, and
+    #: a Fusion model of it found the 38.5 mm drive interfering by 8.5 and
+    #: 13.5 mm. The three wrist joints therefore take 120 mm of the reach.
+    wrist_spacing_m: float = 0.040
+
+    #: What is left of the reach after the wrist, split in the same ratio the
+    #: first version used. These are derived rather than stated, so a change
+    #: to the wrist spacing moves them instead of breaking the reach.
+    @property
+    def wrist_m(self) -> float:
+        return 3.0 * self.wrist_spacing_m
+
+    @property
+    def upper_arm_m(self) -> float:
+        return (self.reach_m - self.wrist_m) * (280.0 / 520.0)
+
+    @property
+    def forearm_m(self) -> float:
+        return (self.reach_m - self.wrist_m) * (240.0 / 520.0)
 
     #: Jerk limit for the S curve. Chosen so that the jerk phase is about a
     #: fifth of the move: a smaller value makes the move longer than the two
@@ -97,6 +117,21 @@ class ManipulatorSpec:
     #: because the joints that need the most torque are only offered there.
     bus_voltage_v: float = 48.0
 
+    #: The smallest outer dimension a link may have, in metres. CHOSEN, and
+    #: the arithmetic is stated: a joint interface carries four M6 socket head
+    #: screws whose counterbores are 10.4 mm across (ISO 4762 head plus the
+    #: clearance in geometry/cad_export/manufacturing_features.py). Four of
+    #: them around a central bore with an edge margin needs about three
+    #: counterbore diameters across the face, which is 31.2 mm, rounded to 32.
+    #: Without this the section optimiser returns a 10 mm wide tube: feasible
+    #: arithmetic, and a link that cannot bolt to anything.
+    minimum_section_m: float = 0.032
+
+    #: The thinnest wall the milling rules in geometry/manufacturability
+    #: accept for aluminium. Below this the optimiser buys mass by asking for
+    #: a wall no shop will cut.
+    minimum_wall_m: float = 0.001
+
     materials: dict[str, str] = field(default_factory=lambda: {
         "link": "al_6061_t6",
         "link_alternative": "al_7075_t6",
@@ -110,10 +145,17 @@ class ManipulatorSpec:
         """A classic six revolute layout: yaw, two pitches, then a roll pitch
         roll wrist."""
         return [
-            JointSpec("j1_base_yaw", (0.0, 1.0, 0.0), origin_y_m=self.base_height_m,
-                      description="base rotation about the vertical"),
+            # j1 sits at the floor and the column is its child, so the column
+            # spins about its own vertical axis and its inertia belongs on
+            # this joint. The first version put j1 at the top of the column
+            # with the column still hanging from it, which is the same
+            # inertia on a joint the column did not rotate about.
+            JointSpec("j1_base_yaw", (0.0, 1.0, 0.0),
+                      description="base rotation about the vertical, at the "
+                                  "floor, carrying the column above it"),
             JointSpec("j2_shoulder", (0.0, 0.0, 1.0),
-                      description="shoulder pitch, carries the whole arm"),
+                      origin_y_m=self.base_height_m,
+                      description="shoulder pitch at the top of the column"),
             JointSpec("j3_elbow", (0.0, 0.0, 1.0), origin_x_m=self.upper_arm_m,
                       description="elbow pitch"),
             JointSpec("j4_wrist_roll", (1.0, 0.0, 0.0), origin_x_m=self.forearm_m,
@@ -123,9 +165,11 @@ class ManipulatorSpec:
             # moves nothing in the forward kinematics except for the tip link,
             # where it becomes the tool offset: the first build left these at
             # zero and the tool came out 55 mm short.
-            JointSpec("j5_wrist_pitch", (0.0, 0.0, 1.0), origin_x_m=0.030,
+            JointSpec("j5_wrist_pitch", (0.0, 0.0, 1.0),
+                      origin_x_m=self.wrist_spacing_m,
                       description="wrist pitch"),
-            JointSpec("j6_tool_roll", (1.0, 0.0, 0.0), origin_x_m=0.025,
+            JointSpec("j6_tool_roll", (1.0, 0.0, 0.0),
+                      origin_x_m=self.wrist_spacing_m,
                       description="tool roll"),
         ]
 
@@ -147,11 +191,11 @@ class ManipulatorSpec:
             # lengths are what separate the wrist axes. They add to the reach,
             # and the tool flange takes what is left of the stated wrist
             # length so that the three sum to it exactly.
-            LinkSpec("wrist_roll_body", 0.030, 0.050, 0.050, 0.004,
-                     self.materials["link"], role="wrist roll housing"),
-            LinkSpec("wrist_pitch_body", 0.025, 0.045, 0.045, 0.004,
-                     self.materials["link"], role="wrist pitch housing"),
-            LinkSpec("tool_flange", self.wrist_m - 0.055, 0.040, 0.040, 0.004,
+            LinkSpec("wrist_roll_body", self.wrist_spacing_m, 0.050, 0.050,
+                     0.004, self.materials["link"], role="wrist roll housing"),
+            LinkSpec("wrist_pitch_body", self.wrist_spacing_m, 0.045, 0.045,
+                     0.004, self.materials["link"], role="wrist pitch housing"),
+            LinkSpec("tool_flange", self.wrist_spacing_m, 0.040, 0.040, 0.004,
                      self.materials["link"], role="tool interface"),
         ]
 

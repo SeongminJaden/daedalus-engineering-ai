@@ -110,9 +110,42 @@ def carried_load_n(arm: Assembly, link_name: str, spec: ManipulatorSpec,
     return (spec.payload_kg + outboard_links + outboard_actuators) * 9.80665
 
 
+def actuator_section_floor(spec: ManipulatorSpec,
+                           drives: dict[str, str] | None = None
+                           ) -> dict[str, float]:
+    """The smallest section each link may have, from the drive it carries.
+
+    A link has to contain its actuator. Where the actuator's outline is
+    printed the floor is that outline; where it is not, the floor falls back
+    to the joint interface, and the envelope stage reports which links are
+    therefore unverified.
+    """
+    from drivetrain.sourced import sourced_motor
+
+    floors = {link.name: spec.minimum_section_m for link in spec.links()}
+    if not drives:
+        return floors
+    joints = [joint.name for joint in spec.joints()]
+    links = [link.name for link in spec.links()]
+    for joint_name, part in drives.items():
+        if not part or "+" in part:
+            continue
+        try:
+            actuator = sourced_motor(part)
+        except Exception:
+            continue
+        if actuator.outer_diameter_m is None:
+            continue
+        link_name = links[joints.index(joint_name)]
+        floors[link_name] = max(floors[link_name], actuator.outer_diameter_m)
+    return floors
+
+
 def size_sections(arm: Assembly, spec: ManipulatorSpec,
                   actuator_masses: dict[str, float],
-                  minimum_wall_m: float = 0.003) -> dict[str, Section]:
+                  minimum_wall_m: float = 0.003,
+                  section_floors: dict[str, float] | None = None
+                  ) -> dict[str, Section]:
     """One cantilever sizing per link, at the load that link carries.
 
     The width and the wall are held at the starting values and the height is
@@ -133,9 +166,10 @@ def size_sections(arm: Assembly, spec: ManipulatorSpec,
             safety_factor=spec.static_safety_factor_metal,
             deflection_limit_m=max(spec.tip_deflection_limit_m * share, 1e-6),
             minimum_height_m=max(4.0 * minimum_wall_m, 0.02))
+        floor = (section_floors or {}).get(link_spec.name, 0.0)
         sections[link_spec.name] = Section(
-            outer_height_m=sizing.height_m,
-            outer_width_m=link_spec.outer_width_m,
+            outer_height_m=max(sizing.height_m, floor),
+            outer_width_m=max(link_spec.outer_width_m, floor),
             wall_thickness_m=minimum_wall_m)
     return sections
 
@@ -192,7 +226,10 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
                 f"less than {tolerance_kg * 1000:.0f} g")
             break
         previous_total = total
-        sections = size_sections(arm, spec, actuator_masses)
+        floors = actuator_section_floor(
+            spec, {row["joint"]: row.get("selected") for row in drives.rows})
+        sections = size_sections(arm, spec, actuator_masses,
+                                 section_floors=floors)
     else:
         result.notes.append(
             f"did NOT converge in {max_iterations} iterations; the history "
@@ -208,3 +245,140 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
         "because the assembly model has no point mass; the assembly's own mass "
         "is the structure only")
     return result
+
+
+def link_problem(link_spec, load_n: float, limit_m: float,
+                 spec: ManipulatorSpec):
+    """One link as an Engineering IR problem, for the optimiser.
+
+    The envelope is the specification's starting section, and the FLOOR is
+    the joint interface: a link narrower than four M6 counterbores cannot
+    bolt to the joint it belongs to. The optimiser has no way to know that,
+    and left to itself it returns a 10 mm wide tube.
+    """
+    from core.engineering_ir.schema import (BoundaryCondition, Constraints,
+                                            EngineeringProblem, Geometry, Load,
+                                            Objective, ObjectiveQuantity,
+                                            ObjectiveSense, SectionType, Vec3)
+
+    return EngineeringProblem(
+        name=f"{link_spec.name}_section",
+        geometry=Geometry(length_m=link_spec.length_m,
+                          max_height_m=link_spec.outer_height_m,
+                          max_width_m=link_spec.outer_width_m,
+                          section_type=SectionType.HOLLOW_RECTANGLE),
+        material_id=spec.materials["link"],
+        loads=[Load(magnitude_n=load_n, direction=Vec3(x=0.0, y=-1.0, z=0.0))],
+        boundary_conditions=[BoundaryCondition()],
+        constraints=Constraints(
+            max_deflection_m=limit_m,
+            min_safety_factor=spec.static_safety_factor_metal),
+        objectives=[Objective(sense=ObjectiveSense.MINIMIZE,
+                              quantity=ObjectiveQuantity.MASS)])
+
+
+def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
+                            actuator_masses: dict[str, float],
+                            minimum_wall_m: float = 0.003,
+                            apply_interface_floor: bool = True
+                            ) -> dict[str, Section]:
+    """All three section dimensions at once, by the existing SLSQP.
+
+    The one dimensional routine solves for the height with the width and the
+    wall held where the specification put them, which makes the starting
+    guess part of the answer. This calls the optimiser the repository already
+    has, on the same constraints, and lets it move all three.
+
+    A link the optimiser cannot solve keeps the one dimensional result rather
+    than failing the run, and `sizing_comparison` reports which ones those
+    were.
+    """
+    from optimization.constraints import build_optimization_problem
+    from optimization.gradient.slsqp import optimize_slsqp
+
+    fallback = size_sections(arm, spec, actuator_masses, minimum_wall_m)
+    sections: dict[str, Section] = {}
+    for link_spec in spec.links():
+        load = carried_load_n(arm, link_spec.name, spec, actuator_masses)
+        share = link_spec.length_m / max(spec.reach_check_m(), 1e-9)
+        limit = max(spec.tip_deflection_limit_m * share, 1e-6)
+        try:
+            op = build_optimization_problem(
+                link_problem(link_spec, load, limit, spec))
+            result = optimize_slsqp(op)
+            # SLSQP often stops with "positive directional derivative for
+            # linesearch" at a point that satisfies every constraint. That is
+            # a line search giving up, not an infeasible answer, so the test
+            # is feasibility and an improvement in mass, not the success flag.
+            if not result.evaluation.is_feasible():
+                sections[link_spec.name] = fallback[link_spec.name]
+                continue
+            width, height, wall = result.x
+            # The interface floor, applied after the optimiser rather than as
+            # a bound, so the table can show what the unconstrained optimum
+            # was and what the floor cost.
+            if apply_interface_floor:
+                width = max(width, spec.minimum_section_m)
+                height = max(height, spec.minimum_section_m)
+                wall = max(wall, spec.minimum_wall_m)
+            if wall >= 0.5 * min(width, height):
+                # The bounds allow a wall that leaves no cavity. Such a point
+                # is not a hollow section at all and the genome refuses it.
+                sections[link_spec.name] = fallback[link_spec.name]
+                continue
+            sections[link_spec.name] = Section(outer_height_m=float(height),
+                                               outer_width_m=float(width),
+                                               wall_thickness_m=float(wall))
+        except Exception:
+            sections[link_spec.name] = fallback[link_spec.name]
+
+    # Keep whichever is lighter, link by link, so the comparison cannot make
+    # a link heavier than the routine it replaces.
+    material = get_material(arm.material_id)
+    for link_spec in spec.links():
+        name = link_spec.name
+        chosen, previous = sections[name], fallback[name]
+        if (chosen.genome(arm.material_id).section.mass(
+                link_spec.length_m, material.density_kg_m3)
+                > previous.genome(arm.material_id).section.mass(
+                    link_spec.length_m, material.density_kg_m3)):
+            sections[name] = previous
+    return sections
+
+
+def sizing_comparison(spec: ManipulatorSpec = SPEC,
+                      actuator_masses: dict[str, float] | None = None
+                      ) -> list[dict]:
+    """One dimension against three, on the same links and the same limits."""
+    actuator_masses = actuator_masses or {}
+    arm = build_arm(starting_sections(spec), spec)
+    material = get_material(arm.material_id)
+    one = size_sections(arm, spec, actuator_masses)
+    three = size_sections_optimised(arm, spec, actuator_masses)
+    unconstrained = size_sections_optimised(arm, spec, actuator_masses,
+                                            apply_interface_floor=False)
+    rows = []
+    for link_spec in spec.links():
+        name = link_spec.name
+        def mass(section: Section) -> float:
+            return section.genome(arm.material_id).section.mass(
+                link_spec.length_m, material.density_kg_m3)
+        rows.append({
+            "link": name,
+            "one_dimension_mass_kg": mass(one[name]),
+            "three_dimension_mass_kg": mass(three[name]),
+            "saving": 1.0 - mass(three[name]) / max(mass(one[name]), 1e-12),
+            "one_dimension_hwt_mm": [round(v * 1e3, 2) for v in
+                                     (one[name].outer_height_m,
+                                      one[name].outer_width_m,
+                                      one[name].wall_thickness_m)],
+            "three_dimension_hwt_mm": [round(v * 1e3, 2) for v in
+                                       (three[name].outer_height_m,
+                                        three[name].outer_width_m,
+                                        three[name].wall_thickness_m)],
+            "no_interface_floor_mass_kg": mass(unconstrained[name]),
+            "no_interface_floor_hwt_mm": [round(v * 1e3, 2) for v in
+                                          (unconstrained[name].outer_height_m,
+                                           unconstrained[name].outer_width_m,
+                                           unconstrained[name].wall_thickness_m)]})
+    return rows

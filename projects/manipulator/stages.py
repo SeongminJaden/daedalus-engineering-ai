@@ -1026,3 +1026,75 @@ def bus_voltage_stage(dynamics: StageResult, load_inertias: dict[str, float],
         "torque and speed both move with the bus and the pages do not "
         "tabulate the arm's voltage for every part")
     return result
+
+
+# --------------------------------- 3f. does the joint contain its own drive
+
+def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
+                   spec: ManipulatorSpec = SPEC) -> StageResult:
+    """Check each joint against the outline of the drive it was given.
+
+    A joint has to contain its actuator, and until this stage existed nothing
+    in the pipeline read an actuator's outline at all. A Fusion model of this
+    arm found the consequence: an actuator 38.5 mm long in a 30 mm joint
+    spacing, and a 98 mm diameter actuator on links 40 to 90 mm across.
+
+    Where the page does not print an outline the check cannot run, and that
+    is reported as unverifiable rather than as a pass.
+    """
+    from drivetrain.sourced import sourced_motor
+
+    result = StageResult(name="actuator envelope")
+    joints = spec.joints()
+    spacing_after = {}
+    for index, joint in enumerate(joints):
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        spacing_after[joint.name] = (following.origin_x_m if following
+                                     else spec.links()[-1].length_m)
+
+    for row in drivetrain.rows:
+        name = row["joint"]
+        entry = {"joint": name, "drive": row.get("selected")}
+        if row.get("status") != "selected" or "+" in str(row.get("selected")):
+            entry["status"] = ("a motor and gear unit pair has no single "
+                               "outline in this catalogue"
+                               if row.get("status") == "selected"
+                               else "no drive")
+            result.rows.append(entry)
+            continue
+        actuator = sourced_motor(row["selected"])
+        link = arm.links[[j.name for j in arm.actuated_joints()].index(name)]
+        section = sections[link.name]
+        across = max(section.outer_height_m, section.outer_width_m)
+        entry.update({"link": link.name,
+                      "link_across_m": across,
+                      "joint_spacing_m": spacing_after[name]})
+        if actuator.outer_diameter_m is None:
+            entry["diameter_check"] = "not printed"
+        else:
+            entry["actuator_diameter_m"] = actuator.outer_diameter_m
+            entry["diameter_check"] = (
+                "fits" if actuator.outer_diameter_m <= across
+                else f"INTERFERES by "
+                     f"{(actuator.outer_diameter_m - across) * 1000:.1f} mm")
+        if actuator.axial_length_m is None:
+            entry["length_check"] = "not printed"
+        else:
+            entry["actuator_length_m"] = actuator.axial_length_m
+            entry["length_check"] = (
+                "fits" if actuator.axial_length_m <= spacing_after[name]
+                else f"INTERFERES by "
+                     f"{(actuator.axial_length_m - spacing_after[name]) * 1000:.1f} mm")
+        result.rows.append(entry)
+
+    printed = [r for r in result.rows if r.get("diameter_check") not in
+               (None, "not printed")]
+    result.notes.append(
+        f"{len(printed)} of {len(result.rows)} joints have an actuator whose "
+        f"outline is printed at all; the rest cannot be checked")
+    result.could_not.append(
+        "Most actuator pages print no outline, so this check is unverifiable "
+        "for those joints. A frameless motor has no outline to print: its "
+        "housing, bearings and shaft are somebody's design and are not in "
+        "this one, and its mass is not in the total either.")
+    return result

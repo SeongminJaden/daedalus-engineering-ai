@@ -217,3 +217,47 @@ def test_the_bus_voltage_changes_the_mass_and_the_stage_prices_it():
     assert len({row["parts"] for row in driven}) > 1, (
         "the bus voltage changed nothing, which would mean it is not being "
         "applied")
+
+
+def test_the_wrist_spacing_follows_the_actuator_that_has_to_fit_in_it():
+    """A Fusion model of the first design found a 38.5 mm actuator in a 30 mm
+    joint spacing. The spacing is now a variable with that outline as its
+    floor, and the reach is held by shortening the arm instead."""
+    from drivetrain.sourced import sourced_motor
+
+    ak80_9 = sourced_motor("cubemars_ak80_9_v3")
+    assert ak80_9.axial_length_m == 0.0385
+    assert ak80_9.outer_diameter_m == 0.098
+    assert SPEC.wrist_spacing_m >= ak80_9.axial_length_m
+    assert SPEC.reach_check_m() == pytest.approx(SPEC.reach_m)
+    assert SPEC.upper_arm_m + SPEC.forearm_m == pytest.approx(
+        SPEC.reach_m - 3 * SPEC.wrist_spacing_m)
+
+
+@pytest.mark.slow
+def test_no_joint_with_a_printed_outline_interferes_with_its_own_drive():
+    from physics.dynamics import mass_matrix
+    from projects.manipulator.arm import stretched_pose
+    from projects.manipulator.stages import (dynamics_stage, drivetrain_stage,
+                                             envelope_stage)
+
+    result = run_loop(SPEC)
+    arm = build_arm(result.data["final_sections"], SPEC)
+    dynamics = dynamics_stage(arm, SPEC, samples=60)
+    density = get_material(arm.material_id).density_kg_m3
+    inertia = mass_matrix(arm, stretched_pose(SPEC), density)
+    load_inertias = {joint.name: float(inertia[i, i])
+                     for i, joint in enumerate(arm.actuated_joints())}
+    drives = drivetrain_stage(dynamics, SPEC, load_inertias)
+    envelope = envelope_stage(arm, drives, result.data["final_sections"], SPEC)
+
+    checked = [row for row in envelope.rows
+               if row.get("diameter_check") not in (None, "not printed")]
+    assert checked, "no joint could be checked at all"
+    for row in checked:
+        assert row["diameter_check"] == "fits", row
+        assert row["length_check"] == "fits", row
+    unchecked = [row for row in envelope.rows
+                 if row.get("diameter_check") == "not printed"]
+    assert unchecked, "every outline was printed, which is not this catalogue"
+    assert any("cannot be checked" in note for note in envelope.notes)
