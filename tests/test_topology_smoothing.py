@@ -142,3 +142,56 @@ def test_the_stl_round_trips_and_can_be_volume_meshed(tmp_path):
     assert tets.connectivity.shape[1] == 4
     span = tets.node_coords.max(axis=0) - tets.node_coords.min(axis=0)
     assert np.allclose(span, 2 * 0.06, rtol=0.15), span
+
+
+def test_the_extracted_body_sits_where_the_field_does():
+    """Position, not just volume, and it was wrong.
+
+    A density belongs to its element's CENTRE, and marching cubes indexes the
+    padded array from its corner. The extraction subtracted a whole cell to
+    undo the pad, which put the body half an element low on all three axes:
+    4.1 mm on the arm links, whose cells are 8.2 mm across. Every volume check
+    passed throughout, because a translation does not change a volume. It was
+    found when the parts were placed in an assembly and the joints did not
+    meet.
+
+    A completely solid field is the case with an exact answer here: its
+    surface is the domain box, corner at the origin.
+    """
+    mesh = solid_box_mesh(0.4, 0.2, 0.1, 8, 4, 2)
+    surface = marching_surface(mesh, solid_field(mesh), iso_level=0.5,
+                               smoothing_iterations=0)
+    low = np.asarray(surface.vertices).min(axis=0)
+    high = np.asarray(surface.vertices).max(axis=0)
+    assert low == pytest.approx([0.0, 0.0, 0.0], abs=1e-12)
+    assert high == pytest.approx([0.4, 0.2, 0.1], abs=1e-12)
+
+
+def test_a_ball_comes_out_centred_on_the_ball():
+    """The same defect on a curved surface, where it is not a special case."""
+    mesh = solid_box_mesh(0.2, 0.2, 0.2, 20, 20, 20)
+    surface = marching_surface(mesh, ball_field(mesh, 0.06), iso_level=0.5,
+                               smoothing_iterations=0)
+    vertices = np.asarray(surface.vertices)
+    centre = 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
+    assert centre == pytest.approx([0.1, 0.1, 0.1], abs=1e-3)
+
+
+def test_the_extracted_triangles_point_outward():
+    """A body whose faces point inward is not a solid.
+
+    Marching cubes orients its triangles by the direction the field
+    decreases, and for this field that came out inside out. Every volume in
+    this module is read through abs(), so nothing here noticed. What noticed
+    was a mesh boolean, which refused the body as "not a volume" and could not
+    cut a bolt hole in it.
+    """
+    import trimesh
+
+    mesh = solid_box_mesh(0.2, 0.2, 0.2, 12, 12, 12)
+    surface = marching_surface(mesh, ball_field(mesh, 0.06), 0.5, 10)
+    body = trimesh.Trimesh(vertices=surface.vertices, faces=surface.triangles,
+                           process=False)
+    assert body.is_watertight
+    assert body.volume > 0.0, "the signed volume is negative: faces point in"
+    assert body.is_winding_consistent

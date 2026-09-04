@@ -26,7 +26,7 @@ from physics.failure.brittle import (BrittleDataMissing, BrittleLimit,
 def test_every_printed_entry_carries_its_document_and_machine():
     for entry in PRINTED_MATERIALS.values():
         assert entry.document_url.startswith("https://")
-        assert entry.read_on == "2026-09-03"
+        assert entry.read_on in ("2026-09-03", "2026-09-04")
         assert entry.machine and entry.standard
         assert entry.directions
         for direction in entry.directions.values():
@@ -51,12 +51,56 @@ def test_the_same_material_on_two_machines_is_two_entries():
     assert abs(yield_ratio_900 - yield_ratio_770) > 0.15
 
 
-def test_the_upright_direction_is_the_weak_one_everywhere_measured():
+def test_the_upright_direction_is_the_weak_one_in_every_polymer_measured():
+    """True for the polymers, and the metal broke it.
+
+    Both FDM entries and the sintered nylon are weakest across the layers,
+    which is the story everyone tells about printed parts. AlSi10Mg on a
+    laser powder bed does not follow it: on the RenAM 500 the ULTIMATE
+    strength is HIGHER across the layers (442 against 424 MPa) while the
+    YIELD is LOWER (263 against 283), and the EOS M 290 sheet shows the same
+    inversion (460 against 450 on ultimate, 230 against 270 on yield). So a
+    part designed against ultimate and a part designed against yield want
+    opposite build orientations, and one anisotropy factor cannot express
+    that. This is the metal case of the thing the two ABS machines already
+    showed: a single factor is wrong somewhere.
+    """
     for entry in PRINTED_MATERIALS.values():
+        if entry.base_material_id == "alsi10mg_slm":
+            continue
         weakest = entry.weakest()
         assert weakest.orientation in (BuildOrientation.UPRIGHT_ZX,
                                        BuildOrientation.AXIS_Z)
         assert entry.anisotropy_ratio() < 1.0
+
+
+def test_the_printed_metal_is_weaker_on_yield_and_stronger_on_ultimate_across_layers():
+    """The inversion, pinned as numbers on both machines that print it."""
+    for part_id, ultimate_ratio, yield_ratio in (
+            ("alsi10mg_slm_renam500", 442.0 / 424.0, 263.0 / 283.0),
+            ("alsi10mg_slm_eos_m290", 460.0 / 450.0, 230.0 / 270.0)):
+        entry = printed_material(part_id)
+        across = entry.directions[BuildOrientation.AXIS_Z]
+        in_plane = entry.directions[BuildOrientation.AXIS_X]
+        assert (across.tensile_strength_pa / in_plane.tensile_strength_pa
+                == pytest.approx(ultimate_ratio, abs=0.001))
+        assert (across.yield_strength_pa / in_plane.yield_strength_pa
+                == pytest.approx(yield_ratio, abs=0.001))
+        assert across.tensile_strength_pa > in_plane.tensile_strength_pa
+        assert across.yield_strength_pa < in_plane.yield_strength_pa
+        # And ductility falls across the layers on both, as it does for the
+        # polymers.
+        assert (across.elongation_at_break_percent
+                < in_plane.elongation_at_break_percent)
+
+
+def test_only_one_of_the_two_metal_sheets_prints_a_modulus():
+    """EOS prints none, so its modulus fields are empty rather than borrowed
+    from the other machine's sheet."""
+    renishaw = printed_material("alsi10mg_slm_renam500")
+    eos = printed_material("alsi10mg_slm_eos_m290")
+    assert all(d.modulus_pa is not None for d in renishaw.directions.values())
+    assert all(d.modulus_pa is None for d in eos.directions.values())
 
 
 def test_ductility_falls_further_than_strength():

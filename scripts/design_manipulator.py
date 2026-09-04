@@ -27,7 +27,8 @@ from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # 
                                          compliance_stage, envelope_stage,
                                          drive_comparison_stage, drivetrain_stage,
                                          dynamics_stage, fatigue_stage,
-                                         features_stage, link_design_stage,
+                                         features_stage, interface_stage,
+                                         link_design_stage,
                                          manufacturability_stage,
                                          measurement_plan_stage,
                                          pinocchio_cross_check, policy_stage,
@@ -99,6 +100,7 @@ def main() -> int:
     stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
     stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
+    stages["interfaces"] = interface_stage(stages["drivetrain"], SPEC)
     print("dynamics and drivetrain done", flush=True)
 
     if not args.skip_links:
@@ -168,6 +170,19 @@ def main() -> int:
                 stages["compliance"]),
         section("3e. What the bus voltage costs", stages["bus"]),
         section("3f. Does each joint contain its own drive", stages["envelope"]),
+        section("3g. What each link bolts to", stages["interfaces"]),
+        "The bolt circles, as the drawings print them:\n",
+        table(stages["interfaces"].data.get("faces", [])),
+        "\nWhether the clearance hole can take up the uncertainty in the "
+        "clock angle. A pattern measured on an approximate model does not "
+        "have a loose tolerance, it has one the fastener cannot absorb:\n",
+        table(stages["interfaces"].data.get("clock_checks", [])),
+        "\nWhat the sources do not say, listed rather than filled in:\n",
+        "".join(f"- {item}\n"
+                for item in stages["interfaces"].data.get("unresolved", [])),
+        "\nParts this arm needs and does not have:\n",
+        table(stages["interfaces"].data.get("gaps", [])),
+        "",
     ]
     if "links" in stages:
         document.append(section("4. Each link through both design paths",

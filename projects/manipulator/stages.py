@@ -1098,8 +1098,15 @@ def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
     spacing_after = {}
     for index, joint in enumerate(joints):
         following = joints[index + 1] if index + 1 < len(joints) else None
-        spacing_after[joint.name] = (following.origin_x_m if following
-                                     else spec.links()[-1].length_m)
+        # The offset to the next joint, whichever direction it lies in. The
+        # base column runs UP, so j2 carries its 150 mm as origin_y and zero
+        # as origin_x; reading origin_x alone said the shoulder sits on top of
+        # the base yaw drive with no space at all, and reported a 98 mm
+        # interference that is not there. The same mistake was found and fixed
+        # in the link domain builder.
+        spacing_after[joint.name] = (
+            max(following.origin_x_m, following.origin_y_m) if following
+            else spec.links()[-1].length_m)
     drives = {row["joint"]: row.get("selected") for row in drivetrain.rows}
     extents: dict[str, tuple] = {}
     for joint in joints:
@@ -1256,4 +1263,75 @@ def bolted_joint_stage(drivetrain: StageResult, sections,
         "surfaces. One measured coefficient for the actual finish would close "
         "this, and until then the flange is checked for separation and bolt "
         "strength only, which is not the same as checked.")
+    return result
+
+
+def interface_stage(drivetrain: StageResult,
+                    spec: ManipulatorSpec = SPEC) -> StageResult:
+    """What each link bolts to, what is measured, and what is missing.
+
+    This stage exists because the arm had flanges and no fastening. A 9 mm
+    slab at the end of a link is not an interface until something says which
+    face of which actuator it meets, on what circle, with what bolt, clocked
+    which way. Every value here comes from a manufacturer drawing or the
+    manufacturer's own 3D model, and every value that comes from neither is
+    listed as missing instead.
+    """
+    from .interfaces import (assembly_gaps, clock_uncertainty_check, face_for,
+                             link_interfaces, unresolved_features)
+
+    result = StageResult(name="mounting interfaces")
+    drives = {row["joint"]: row.get("selected") for row in drivetrain.rows}
+    joints = [joint.name for joint in spec.joints()]
+    links = [link.name for link in spec.links()]
+
+    for row in link_interfaces(links, joints, drives):
+        proximal, distal = row["proximal_face"], row["distal_face"]
+        result.rows.append({
+            "link": row["link"],
+            "proximal_joint": row["proximal_joint"],
+            "proximal": (f"{proximal.actuator} output, "
+                         f"{proximal.patterns[0].count}-"
+                         f"{proximal.patterns[0].thread} on "
+                         f"{proximal.largest_bolt_circle_m() * 1000:.0f} mm"
+                         if proximal else "NOT FASTENABLE"),
+            "proximal_clock_deg": (proximal.patterns[0].clock_deg
+                                   if proximal else None),
+            "distal_joint": row["distal_joint"] or "tool",
+            "distal": (f"{distal.actuator} housing, "
+                       f"{distal.patterns[0].count}-"
+                       f"{distal.patterns[0].thread} on "
+                       f"{distal.largest_bolt_circle_m() * 1000:.0f} mm"
+                       if distal else
+                       ("tool plate, unspecified" if not row["distal_joint"]
+                        else "NOT FASTENABLE")),
+            "distal_clock_deg": (distal.patterns[0].clock_deg
+                                 if distal else None)})
+
+    seen: set = set()
+    for joint in joints:
+        for side in ("output", "housing"):
+            face = face_for(drives.get(joint, ""), side)
+            if face is None or (face.actuator, face.face) in seen:
+                continue
+            seen.add((face.actuator, face.face))
+            result.data.setdefault("faces", []).extend(face.rows())
+            result.data.setdefault("unresolved", []).extend(
+                unresolved_features(face))
+            result.data.setdefault("clock_checks", []).extend(
+                clock_uncertainty_check(face))
+    result.data["gaps"] = assembly_gaps(joints, drives)
+
+    blocked = [c for c in result.data.get("clock_checks", [])
+               if c["verdict"] == "NOT ABSORBED"]
+    if blocked:
+        result.notes.append(
+            f"{len(blocked)} bolt circles have a clock uncertainty the "
+            f"clearance hole cannot take up. Those joints cannot be drilled "
+            f"from these sources; the clock has to be measured on the part")
+    result.notes.append(
+        f"{len(result.data.get('unresolved', []))} values the sources do not "
+        f"give are listed rather than filled in")
+    result.notes.append(
+        f"{len(result.data['gaps'])} parts the arm needs and does not have")
     return result

@@ -95,9 +95,22 @@ def test_the_mass_torque_loop_converges_and_says_how_far_it_moved():
     assert result.rows, "the loop produced no history"
     assert any("converged" in note for note in result.notes), result.notes
     first, last = result.rows[0], result.rows[-1]
-    # The starting sections are deliberately generous, so the loop must remove
-    # mass rather than add it.
-    assert last["structure_mass_kg"] < first["structure_mass_kg"]
+    # THE LOOP CONVERGES UPWARD, and this assertion used to say the opposite.
+    # It read "the starting sections are deliberately generous, so the loop
+    # must remove mass rather than add it", and that stopped being true when
+    # the wrist grew by 10 mm of assembly clearance and every link gained two
+    # 9 mm flanges. Both were corrections, and both add mass the seed did not
+    # carry. Measured: the seed is 3.09 kg and the loop settles at 4.46 kg in
+    # three iterations. In 6061 it is 3.13 and 4.51, so the direction is a
+    # property of the loop and not of the printed alloy.
+    #
+    # What matters is that it SETTLES, not which way it moves. A loop that
+    # adds mass, needs a bigger drive, and adds mass again would run away, and
+    # this one does not.
+    assert last["structure_mass_kg"] == pytest.approx(4.46, abs=0.15)
+    assert last["structure_mass_kg"] > first["structure_mass_kg"]
+    middle = result.rows[len(result.rows) // 2]
+    assert abs(last["structure_mass_kg"] - middle["structure_mass_kg"]) < 0.01
     # And the torque must RISE, because the drives it selects have mass.
     assert last["shoulder_peak_nm"] > first["shoulder_peak_nm"]
     assert len(result.rows) <= 8

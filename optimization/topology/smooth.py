@@ -129,11 +129,24 @@ def marching_surface(mesh: Mesh, density: np.ndarray, iso_level: float = 0.5,
     spacing = (mesh.dx, mesh.dy, mesh.dz)
     vertices, faces, _normals, _values = measure.marching_cubes(
         padded, level=iso_level, spacing=spacing)
-    vertices = vertices - np.array(spacing)          # undo the pad offset
+    # Undo the pad offset AND put the surface where the field is. A density
+    # lives at its element's CENTRE, so unpadded element j sits at
+    # (j + 0.5) * d, while marching cubes returns padded index j + 1 at
+    # (j + 1) * d. Subtracting a full cell put the whole body half an element
+    # low on every axis: the volume was right and the position was not, which
+    # is invisible in a volume check and wrong the moment the part is placed
+    # in an assembly.
+    vertices = vertices - 0.5 * np.array(spacing)
     if smoothing_iterations:
         vertices = taubin_smooth(vertices, faces, smoothing_iterations)
 
     surface = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    # Point the triangles OUTWARD. Marching cubes orients its faces by the
+    # direction the field decreases, which for this field comes out inside
+    # out: the body's signed volume was negative and every mesh boolean
+    # refused it as "not a volume". Nothing that only measured a magnitude
+    # ever saw it, because the volume was read through abs().
+    trimesh.repair.fix_normals(surface)
     field_volume = float(np.sum(np.asarray(density, dtype=float))
                          * mesh.element_volume)
     voxel_volume = float(np.sum(np.asarray(density, dtype=float) >= iso_level)

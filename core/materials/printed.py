@@ -197,8 +197,72 @@ EOS_PA2200 = PrintedMaterial(
     notes="Strength falls 12 percent across the layers and strain at break "
           "falls by four fifths, which is the number that matters for impact.")
 
+RENISHAW_ALSI10MG_RENAM500 = PrintedMaterial(
+    id="alsi10mg_slm_renam500",
+    base_material_id="alsi10mg_slm",
+    process="laser powder bed fusion",
+    machine="Renishaw RenAM 500 series, 30 micrometre layer, continuous wave, "
+            "single laser per part, stripe scan",
+    document_title="RenAM 500 series material data sheet, Aluminium AlSi10Mg, "
+                   "properties of additively manufactured components, as built",
+    document_url="https://www.renishaw.com/resourcecentre/download/data-sheet-renam-500-series-aluminium-alsi10mg-material-data-sheet--138868",
+    read_on="2026-09-04",
+    standard="ASTM E8 at ambient temperature, machined before testing, 16 samples",
+    directions={
+        BuildOrientation.AXIS_X: PrintedProperty(
+            orientation=BuildOrientation.AXIS_X,
+            yield_strength_pa=283e6, tensile_strength_pa=424e6,
+            modulus_pa=72e9, elongation_at_break_percent=10.0,
+            printed_as="horizontal (XY): UTS 424 +/- 4 MPa, yield 283 +/- 4 "
+                       "MPa, modulus 72 +/- 2 GPa, elongation 10 +/- 1 %"),
+        BuildOrientation.AXIS_Z: PrintedProperty(
+            orientation=BuildOrientation.AXIS_Z,
+            yield_strength_pa=263e6, tensile_strength_pa=442e6,
+            modulus_pa=70e9, elongation_at_break_percent=6.0,
+            printed_as="vertical (Z): UTS 442 +/- 9 MPa, yield 263 +/- 8 MPa, "
+                       "modulus 70 +/- 5 GPa, elongation 6 +/- 1 %")},
+    notes="This one contradicts the usual story and it is the reason the "
+          "module keeps machines apart. Across the layers the alloy is "
+          "STRONGER in ultimate strength (442 against 424 MPa) and WEAKER in "
+          "yield (263 against 283 MPa) and in ductility (6 against 10 "
+          "percent). A single anisotropy factor would get one of the two "
+          "backwards. The sheet states these are not a guaranteed minimum.")
+
+EOS_ALSI10MG_M290 = PrintedMaterial(
+    id="alsi10mg_slm_eos_m290",
+    base_material_id="alsi10mg_slm",
+    process="laser powder bed fusion",
+    machine="EOS M 290, 30 micrometre layer, argon, MaterialSet "
+            "AlSi10Mg_FlexM291 2.01",
+    document_title="EOS Aluminium AlSi10Mg Material Data Sheet, mechanical "
+                   "properties, as manufactured state",
+    document_url="https://www.eos.info/var/assets/03_system-related-assets/material-related-contents/metal-materials-and-examples/metal-material-datasheet/aluminium/material_datasheet_eos_aluminium-alsi10mg_en_web.pdf",
+    read_on="2026-09-04",
+    standard="ISO 6892-1 B10 on machined turned samples",
+    directions={
+        BuildOrientation.AXIS_X: PrintedProperty(
+            orientation=BuildOrientation.AXIS_X,
+            yield_strength_pa=270e6, tensile_strength_pa=450e6,
+            elongation_at_break_percent=10.2,
+            printed_as="horizontal: yield 270 MPa, UTS 450 MPa, elongation "
+                       "10.2 %, 108 samples"),
+        BuildOrientation.AXIS_Z: PrintedProperty(
+            orientation=BuildOrientation.AXIS_Z,
+            yield_strength_pa=230e6, tensile_strength_pa=460e6,
+            elongation_at_break_percent=6.3,
+            printed_as="vertical: yield 230 MPa, UTS 460 MPa, elongation "
+                       "6.3 %, 261 samples")},
+    notes="The same alloy on another machine, and the direction effect is a "
+          "different size: 15 percent on yield here against 7 percent on the "
+          "RenAM 500. NO MODULUS IS PRINTED on this sheet, so its modulus "
+          "fields are empty rather than filled from the other machine. Heat "
+          "treated (EOS T6) values, not stored here, move yield to 250 "
+          "vertical and 260 horizontal and drop UTS to 310 and 320.")
+
 PRINTED_MATERIALS: dict[str, PrintedMaterial] = {
-    m.id: m for m in (STRATASYS_ABS_M30_F900, STRATASYS_ABS_M30_F770, EOS_PA2200)}
+    m.id: m for m in (STRATASYS_ABS_M30_F900, STRATASYS_ABS_M30_F770,
+                      EOS_PA2200, RENISHAW_ALSI10MG_RENAM500,
+                      EOS_ALSI10MG_M290)}
 
 
 def printed_material(part_id: str) -> PrintedMaterial:

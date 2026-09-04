@@ -146,11 +146,23 @@ class ManipulatorSpec:
     minimum_section_m: float = 0.032
 
     #: Thickness of the flange at each end of a link, where the bolts go.
-    #: CHOSEN as the larger of what the two failed checks demand: a 6.4 mm
-    #: counterbore has to fit, and a tapped hole in aluminium wants 1.5
-    #: diameters, which is 9 mm for M6. So 9 mm, and the mass of these
-    #: flanges is counted rather than ignored: two per link, a solid plate of
-    #: the section's outer size less the bolt holes.
+    #: The number is unchanged at 9 mm and the REASON for it has been
+    #: replaced, because the first reason was wrong. It said a tapped hole in
+    #: aluminium wants 1.5 diameters, so an M6 thread in the link needs 9 mm.
+    #: The link is not tapped. The threads are in the actuator and the
+    #: drawings print them: 8-M3 depth 7 mm on the AK80-64 housing face and
+    #: 8-M3 depth 10 mm on its output face. The link side is a CLEARANCE hole,
+    #: ISO 273 medium, 3.4 mm for M3 and 4.5 mm for M4.
+    #:
+    #: So the flange thickness is a grip length, not an engagement length. At
+    #: 9 mm the housing face takes a catalogue M3 x 14: 9 mm of grip and 5 mm
+    #: of engagement in a 7 mm hole, which is above 1.5 diameters and leaves
+    #: 2 mm of hole below the bolt. The output face takes an M3 x 16, 7 mm
+    #: into a 10 mm hole with 3 mm spare. A bolt that bottoms out is torqued
+    #: against the hole instead of the joint, which is why the spare matters
+    #: and why the old rule was dangerous: it sized the link's own thread and
+    #: could have called for a bolt longer than the hole it goes into. The
+    #: mass of these flanges is counted, two per link.
     flange_thickness_m: float = 0.009
 
     #: The thinnest wall the milling rules in geometry/manufacturability
@@ -158,8 +170,18 @@ class ManipulatorSpec:
     #: a wall no shop will cut.
     minimum_wall_m: float = 0.001
 
+    #: CHOSEN. The links are laser powder bed fusion parts, so the material
+    #: is the alloy that process runs, not a wrought bar. The first version of
+    #: this design sized the links in 6061-T6 and then generated them as
+    #: organic bodies a mill cannot reach into. Those two statements cannot
+    #: both be true, and the material was the one that was wrong: 6061 is not
+    #: an SLM alloy. AlSi10Mg is, and the entry carries the direction resolved
+    #: numbers the process actually produces. It is a real change, not a
+    #: relabelling: the modulus falls from 68.9 to 70.0 GPa and the yield from
+    #: 276 to 263 MPa, both against the weaker printed direction.
     materials: dict[str, str] = field(default_factory=lambda: {
-        "link": "al_6061_t6",
+        "link": "alsi10mg_slm",
+        "link_wrought_alternative": "al_6061_t6",
         "link_alternative": "al_7075_t6",
         "cover": "pa12",
     })

@@ -206,6 +206,117 @@ materials:
       source: matweb_typical
       grade: secondary
       note: MatWeb typical 26.0 GPa; exact E/(2(1+nu)) would be 25.9
+- id: alsi10mg_slm
+  name: AlSi10Mg, laser powder bed fusion
+  density_kg_m3: 2670.0
+  youngs_modulus_pa: 70000000000.0
+  yield_strength_pa: 263000000.0
+  ultimate_strength_pa: 424000000.0
+  poisson_ratio: 0.36
+  shear_modulus_pa: 25735294118.0
+  fatigue_strength_pa: 110000000.0
+  thermal_expansion_1_k: 2.0e-05
+  source: Renishaw RenAM 500 series data sheet for the elastic and strength values, EOS M 290 data sheet
+    for density, fatigue and expansion, and a peer reviewed measurement for the Poisson ratio that neither
+    sheet prints
+  status: supplier_datasheet
+  derived_fields:
+  - shear_modulus_pa
+  notes: THIS IS A PRINTED MATERIAL AND IT IS NOT ISOTROPIC. Both sheets print two directions and they
+    differ. The stored values are the WEAKER printed direction in each case, so a design using them is not
+    relying on the stronger one. Renishaw as built prints 72 GPa and 283 MPa yield across the layers (XY)
+    against 70 GPa and 263 MPa along the build direction (Z), and EOS M 290 prints 270 MPa yield horizontal
+    against 230 MPa vertical, which is a 15 percent direction effect on one machine and a 7 percent effect
+    on the other. The direction resolved tables are in core.materials.printed as alsi10mg_slm_renam500 and
+    alsi10mg_slm_eos_m290, and a part designed here must be checked against the orientation it is actually
+    built in. TWO MACHINES ARE MIXED in this entry, because Renishaw prints a modulus and EOS does not while
+    EOS prints an absolute density and a fatigue strength and Renishaw does not. A real part is built on ONE
+    machine and must be re-qualified against that machine's own sheet before anything is made.
+  sources:
+  - id: renishaw_alsi10mg_renam500
+    title: RenAM 500 series material data sheet, Aluminium AlSi10Mg, part number H-5800-1069
+    publisher: Renishaw plc
+    grade: primary
+    url: https://www.renishaw.com/resourcecentre/download/data-sheet-renam-500-series-aluminium-alsi10mg-material-data-sheet--138868
+    document_date: not printed
+    retrieved: '2026-09-04'
+    notes: Parameter set 30 micrometre layer, continuous wave, single laser per part, stripe scan strategy.
+      Samples built with four lasers, one laser per sample, no downstream processing, tested to ASTM E8 at
+      ambient temperature, machined before testing, 16 samples. The sheet states its data are not a guaranteed
+      minimum specification.
+  - id: eos_alsi10mg_m290
+    title: EOS Aluminium AlSi10Mg Material Data Sheet, for EOS M 290, 30 micrometre layer
+    publisher: EOS GmbH
+    grade: primary
+    url: https://www.eos.info/var/assets/03_system-related-assets/material-related-contents/metal-materials-and-examples/metal-material-datasheet/aluminium/material_datasheet_eos_aluminium-alsi10mg_en_web.pdf
+    document_date: not printed
+    retrieved: '2026-09-04'
+    notes: MaterialSet AlSi10Mg_FlexM291 2.01, argon, 35 C build platform, 0.4 mm minimum wall thickness.
+      Tensile testing to ISO 6892-1 B10 on machined turned samples. The sheet prints NO modulus of elasticity
+      and NO Poisson ratio.
+  - id: chmelko_2023_alsi10mg
+    title: Strength and Cyclic Properties of Additive vs. Conventionally Produced Material AlSi10Mg
+    publisher: Chmelko et al., Materials (Basel), 2023
+    grade: secondary
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC10095530/
+    document_date: '2023'
+    retrieved: '2026-09-04'
+    notes: A measurement reported in a peer reviewed paper, not a producer datasheet, which is why it is
+      graded secondary here. Used only for the Poisson ratio, which neither manufacturer sheet prints.
+  value_sources:
+    youngs_modulus_pa:
+      source: renishaw_alsi10mg_renam500
+      grade: primary
+      location: Properties of additively manufactured components, 30 micrometre continuous wave
+      as_printed: 70 GPa +/- 5 GPa vertical (Z), 72 GPa +/- 2 GPa horizontal (XY), as built
+      condition: as built, vertical (Z), the lower of the two printed directions
+      note: The vertical value is stored because deflection is what this design constrains and the lower
+        modulus is the conservative one for it.
+    yield_strength_pa:
+      source: renishaw_alsi10mg_renam500
+      grade: primary
+      location: Properties of additively manufactured components, 30 micrometre continuous wave
+      as_printed: 263 MPa +/- 8 MPa vertical (Z), 283 MPa +/- 4 MPa horizontal (XY), as built
+      condition: as built, vertical (Z), the weaker of the two printed directions
+    ultimate_strength_pa:
+      source: renishaw_alsi10mg_renam500
+      grade: primary
+      location: Properties of additively manufactured components, 30 micrometre continuous wave
+      as_printed: 424 MPa +/- 4 MPa horizontal (XY), 442 MPa +/- 9 MPa vertical (Z), as built
+      condition: as built, horizontal (XY), the weaker of the two printed directions
+    density_kg_m3:
+      source: eos_alsi10mg_m290
+      grade: primary
+      location: Physical Part Properties, density ISO 3369
+      as_printed: average density greater than or equal to 2.67 g/cm3, 34 samples
+      note: Renishaw prints bulk density as a percentage, greater than or equal to 99.8 percent, not as an
+        absolute, so the absolute comes from EOS.
+    fatigue_strength_pa:
+      source: eos_alsi10mg_m290
+      grade: primary
+      location: Additional Data, fatigue strength
+      as_printed: typical lower limit of fatigue strength 110 MPa as manufactured
+      condition: HCF to ASTM E466-15, 20 million cycles, fully reversed, machined vertical and horizontal
+        samples, no heat treatment
+      note: The sheet states aluminium alloys have no fatigue limit and that actual values depend on geometry
+        and surface finish.
+    thermal_expansion_1_k:
+      source: eos_alsi10mg_m290
+      grade: primary
+      location: Additional Data, coefficient of thermal expansion, ASTM E228
+      as_printed: 20e-6 /K over 25 to 100 C
+    poisson_ratio:
+      source: chmelko_2023_alsi10mg
+      grade: secondary
+      location: Section 3.1, analysis of AlSi10Mg strength properties
+      as_printed: 'Poisson ratio cast 0.35, AM 0.36'
+      note: NEITHER manufacturer sheet prints a Poisson ratio. This is the only measured value found for the
+        additively manufactured alloy and it is graded secondary.
+    shear_modulus_pa:
+      source: renishaw_alsi10mg_renam500
+      grade: derived
+      as_printed: computed as E / (2 (1 + nu)) from the stored 70 GPa and 0.36
+      note: No sheet prints a shear modulus for this alloy.
 - id: al_2024_t3
   name: Aluminium 2024-T3
   density_kg_m3: 2780.0
