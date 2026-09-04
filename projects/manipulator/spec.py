@@ -58,6 +58,30 @@ class ManipulatorSpec:
     #: two finger gripper holding a part, and it is a choice, not a
     #: measurement; a real gripper's inertia tensor would replace it.
     payload_extent_m: float = 0.100
+
+    #: CHOSEN, and it costs nothing. Where two consecutive joints turn about
+    #: the SAME axis, their actuators face opposite ways. Without that rule
+    #: the arm is impossible rather than merely awkward: the link between
+    #: them bolts to the first drive's output face and the second drive's
+    #: housing face, and if both drives face the same way those two planes
+    #: are on the same side of the link and it would have to be in two places
+    #: at once. Facing them apart puts the link exactly between them, and its
+    #: thickness follows from the drawings rather than from a preference: the
+    #: AK80-64's two mounting faces are 42.7 mm apart, so the upper arm is
+    #: 42.7 mm thick along the shoulder axis.
+    #:
+    #: THE KINEMATICS DO NOT CHANGE. A joint axis is a line, and moving the
+    #: mounting planes along that line does not move it. Nothing in the
+    #: dynamics or the Pinocchio cross check has to be re-derived. The
+    #: INERTIA does change, because the links no longer sit symmetrically
+    #: about the plane of the arm, and that has to be recomputed from the
+    #: generated bodies.
+    #:
+    #: The alternative was to give the joints z offsets, which every
+    #: industrial arm also has. It was not taken because every one of those
+    #: offsets would be a number no source prints, while this rule adds none.
+    #: It stays available if packaging ever demands it.
+    alternate_facing_on_shared_axes: bool = True
     reach_m: float = 0.600
     degrees_of_freedom: int = 6
     move_angle_rad: float = 1.5707963267948966      # 90 degrees per joint

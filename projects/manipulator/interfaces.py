@@ -497,3 +497,29 @@ def assembly_gaps(joint_names: list[str], drives: dict[str, str],
                 "carries": "everything outboard of this joint",
                 "status": "MISSING"})
     return gaps
+
+
+def face_separation_m(actuator_id: str) -> float | None:
+    """How far apart an actuator's two mounting faces are.
+
+    This is what a link between two joints on the SAME axis is thick, and it
+    is not a choice: the AK80-64 is 61.9 mm long with its output face 8.0 mm
+    inboard of one end and its housing face 11.2 inboard of the other, so
+    anything bolted to both is 42.7 mm thick. Every number in that comes off
+    the drawing.
+    """
+    output = face_for(actuator_id, "output")
+    housing = face_for(actuator_id, "housing")
+    if output is None or housing is None:
+        return None
+    if output.face_inset_m is None or housing.face_inset_m is None:
+        return None
+    from drivetrain.sourced import sourced_motor
+
+    try:
+        length = sourced_motor(actuator_id).axial_length_m
+    except Exception:
+        return None
+    if not length:
+        return None
+    return float(length - output.face_inset_m - housing.face_inset_m)

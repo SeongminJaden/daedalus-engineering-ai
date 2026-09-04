@@ -46,6 +46,7 @@ from optimization.topology.smooth import marching_surface, write_stl
 from optimization.topology.verify import elements_touching
 from physics.fem.mesh import solid_box_mesh
 
+from .interfaces import face_separation_m
 from .spec import SPEC, ManipulatorSpec
 
 #: Iso level for the extraction. 0.5 is the middle of the three the smoothing
@@ -152,7 +153,8 @@ def local_axis(spec, link_index: int, axis) -> np.ndarray:
 
 def actuator_void(mesh, joint, actuator, at_x: float, height_m: float,
                   width_m: float, face: str, spec,
-                  axis=None) -> tuple[np.ndarray, str]:
+                  axis=None, axis_offset: float = 0.0
+                  ) -> tuple[np.ndarray, str]:
     """The volume a drive occupies, placed against the joint it belongs to.
 
     Two things decide the placement and only one of them used to be here.
@@ -177,6 +179,11 @@ def actuator_void(mesh, joint, actuator, at_x: float, height_m: float,
     axis = np.asarray(joint.axis if axis is None else axis, dtype=float)
     axis = axis / np.linalg.norm(axis)
     origin = np.array([at_x, 0.5 * height_m, 0.5 * width_m])
+    if abs(float(axis[0])) <= 0.5:
+        # The axis crosses the link, so the mounting face is a plane across
+        # it and the axis line lies IN that plane rather than through the
+        # link's middle.
+        origin = origin - axis * float(np.dot(origin, axis)) + axis * axis_offset
     offset = centroids - origin
     along = offset @ axis
     radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
@@ -236,6 +243,42 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
     if actuator is not None and actuator.outer_diameter_m:
         height = max(height, actuator.outer_diameter_m)
         width = max(width, actuator.outer_diameter_m)
+
+    # WHERE THE JOINT SITS ACROSS THE LINK, AND HOW THICK THE LINK MAY BE.
+    # A link bolts to the output face of the joint that drives it, so that
+    # face is a boundary of the link and not a plane through its middle: the
+    # drive is entirely on the far side of it. For a joint whose axis crosses
+    # the arm this fixes where the axis line lies in the link's own frame,
+    # at the face rather than at the centre.
+    #
+    # When the joint at the far end turns about the SAME axis, the link is
+    # also bounded by that drive's housing face, and the two faces are the
+    # actuator's own mounting face separation apart. Then the thickness is
+    # not a choice at all. This is the shoulder: the upper arm lies between
+    # two AK80-64s facing opposite ways, 42.7 mm apart, and any wider a
+    # section would be in the same place as a motor.
+    axis_own = local_axis(spec, link_index, joint.axis)
+    across_own = abs(float(axis_own[0])) <= 0.5
+    axis_next = (local_axis(spec, link_index, following.axis)
+                 if following is not None else None)
+    parallel = (axis_next is not None and across_own
+                and abs(float(np.dot(axis_own, axis_next))) > 0.99)
+    if parallel:
+        thickness_note = (
+            f"both its joints turn about the same axis. Their drives must "
+            f"therefore face OPPOSITE ways, or this link would have to be on "
+            f"both sides of the shoulder at once, and the "
+            f"{face_separation_m(str(drives.get(following.name, ''))) * 1000:.1f}"
+            f" mm between the far drive's two faces is the gap the link's own "
+            f"thickness sits above")
+    elif across_own:
+        thickness_note = ("its two joints turn about different axes, so their "
+                          "mounting faces are not parallel and neither "
+                          "constrains the other")
+    else:
+        thickness_note = ("the joint axis runs along the link, so its "
+                          "mounting face is already across the link")
+
     mesh = solid_box_mesh(span, height, width, *divisions)
 
     centroids = mesh.element_centroids()
@@ -245,6 +288,7 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
 
     passive_void = np.zeros(mesh.n_elements, dtype=bool)
     notes: list[str] = []
+    notes.append(thickness_note)
     for role, at_x, other in (("its own drive", 0.0, joint),
                               ("the drive it carries", span, following)):
         if other is None:
@@ -257,10 +301,27 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
                          f"{drives.get(other.name, 'its drive')}, so no pocket "
                          f"was cut for {role}")
             continue
+        axis_local = local_axis(spec, link_index, other.axis)
+        # WHICH SIDE OF THE MOUNTING FACE THE LINK IS ON. A link sits on the
+        # far side of the face it bolts to, and the drive sits on the near
+        # side. For a joint whose axis crosses the link that fixes where the
+        # axis line lies in this frame: at the FACE, not through the middle.
+        # Putting it through the middle is what let a motor and a link claim
+        # 235 cubic centimetres of the same space at the shoulder.
+        if abs(float(axis_local[0])) > 0.5:
+            offset = 0.0                       # coaxial: the face is the end
+        elif role == "its own drive":
+            offset = 0.0                       # its output face is z = 0
+        else:
+            # It carries this drive's HOUSING at the far face, and the
+            # drive's OUTPUT face, which is the origin this function wants,
+            # is its own face separation beyond that.
+            separation = face_separation_m(str(drives.get(other.name, "")))
+            offset = width + (separation or 0.0)
         cut, why = actuator_void(
             mesh, other, carried, at_x, height, width,
             "output" if role == "its own drive" else "housing", spec,
-            axis=local_axis(spec, link_index, other.axis))
+            axis=axis_local, axis_offset=offset)
         passive_void |= cut
         notes.append(f"{role} at x = {at_x * 1000:.0f} mm: {why}")
     void_note = "; ".join(notes)
@@ -637,6 +698,88 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
     return cut, report
 
 
+def link_placements(spec: ManipulatorSpec, drives: dict[str, str],
+                    sections: dict | None = None) -> list[dict]:
+    """Where each link's own frame sits in the arm's frame.
+
+    A link's file has x along itself from its start joint. What decides the
+    rest is which side of a mounting face the link is on: it is on the far
+    side of the face it bolts to, and the drive is on the near side. For a
+    joint whose axis crosses the arm that offsets the whole link along that
+    axis, and it is the offset that stops two links claiming one space.
+
+    The base column carries the shoulder rather than being driven by it, so
+    it hangs below that drive's HOUSING face; the upper arm is driven by it
+    and sits above its OUTPUT face. The 42.7 mm between those two faces is
+    the motor, and neither link is in it.
+    """
+    joints = spec.joints()
+    links = spec.links()
+    rows = []
+    position = np.zeros(3)
+    for index, link in enumerate(links):
+        joint = joints[index]
+        position = position + np.array([joint.origin_x_m, joint.origin_y_m, 0.0])
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        built, reason = link_domain(spec, index, drives, sections=sections)
+        if built is None:
+            rows.append({"link": link.name, "placed": False, "reason": reason})
+            continue
+        _mesh, _solid, _void, span, height, width, _note = built
+
+        along = 1 if (following is not None
+                      and following.origin_y_m > following.origin_x_m) else 0
+        across = [i for i in range(3) if i != along]
+        low = np.array(position, dtype=float)
+        high = np.array(position, dtype=float)
+        high[along] += span
+        low[across[0]] -= 0.5 * height
+        high[across[0]] += 0.5 * height
+
+        # The offset along the joint axis. Local z maps to the arm's z.
+        axis_own = local_axis(spec, index, joint.axis)
+        driven_across = abs(float(axis_own[0])) <= 0.5
+        carries_across = (
+            following is not None
+            and abs(float(local_axis(spec, index, following.axis)[0])) <= 0.5)
+        conflict = ""
+        if driven_across:
+            low[2], high[2] = 0.0, width          # driven: above the output face
+            basis = "driven by a crossing axis, so it sits above that output face"
+            if carries_across:
+                basis += (" and carries another, which is why those two drives "
+                          "must face opposite ways")
+        elif carries_across:
+            separation = face_separation_m(str(drives.get(following.name, "")))
+            top = -(separation or 0.0)
+            low[2], high[2] = top - width, top
+            basis = (f"carries a crossing axis, so it hangs below that "
+                     f"housing face, {(separation or 0.0) * 1000:.1f} mm "
+                     f"below the joint")
+            # TWO REQUIREMENTS THAT DO NOT BOTH HOLD. A link driven by a
+            # coaxial joint has to be centred on that axis, because it bolts
+            # to a face perpendicular to it and turns about it. A link that
+            # carries a crossing joint has to sit clear of that drive's
+            # housing face. Where a link does both, as the wrist roll body
+            # does, the two cannot both be satisfied by a box: the pitch
+            # drive has to hang to one side of the roll axis, which is what a
+            # real wrist does and is not what this domain says.
+            conflict = (
+                f"{link.name} is driven by a coaxial joint, which wants it "
+                f"centred on that axis, AND carries a crossing joint, which "
+                f"pushes it {abs(top) * 1000:.1f} mm to one side. A box "
+                f"cannot do both. A real wrist hangs the pitch drive off the "
+                f"roll axis, and this domain does not say how")
+        else:
+            low[2], high[2] = -0.5 * width, 0.5 * width
+            basis = "both its joints are coaxial with it, so it is centred"
+        rows.append({"link": link.name, "placed": True,
+                     "low_mm": [float(v) * 1000.0 for v in low],
+                     "high_mm": [float(v) * 1000.0 for v in high],
+                     "basis": basis, "conflict": conflict})
+    return rows
+
+
 def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
                     sections: dict | None = None) -> list[dict]:
     """Where two links are given the same space to design in.
@@ -654,43 +797,15 @@ def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
     the number is a property of the specification rather than of whatever
     shape the optimiser happened to produce.
     """
-    joints = spec.joints()
-    links = spec.links()
-    boxes = []
-    position = np.zeros(3)
-    for index, link in enumerate(links):
-        joint = joints[index]
-        position = position + np.array([joint.origin_x_m, joint.origin_y_m, 0.0])
-        following = joints[index + 1] if index + 1 < len(joints) else None
-        section = (sections or {}).get(link.name)
-        height = (section.outer_height_m if section is not None
-                  else spec.minimum_section_m)
-        width = (section.outer_width_m if section is not None
-                 else spec.minimum_section_m)
-        actuator = actuator_for(joint.name, drives)
-        if actuator is not None and actuator.outer_diameter_m:
-            height = max(height, actuator.outer_diameter_m)
-            width = max(width, actuator.outer_diameter_m)
-        if following is not None and following.origin_y_m > following.origin_x_m:
-            span, along = following.origin_y_m, 1        # the link runs up
-        else:
-            span = (following.origin_x_m if following is not None
-                    else link.length_m)
-            along = 0
-        low = np.array(position, dtype=float)
-        high = np.array(position, dtype=float)
-        across = [i for i in range(3) if i != along]
-        high[along] += span
-        low[across[0]] -= 0.5 * height
-        high[across[0]] += 0.5 * height
-        low[across[1]] -= 0.5 * width
-        high[across[1]] += 0.5 * width
-        boxes.append({"link": link.name, "low": low, "high": high})
+    boxes = [row for row in link_placements(spec, drives, sections)
+             if row.get("placed")]
 
     rows = []
     for first, second in zip(boxes, boxes[1:]):
-        low = np.maximum(first["low"], second["low"])
-        high = np.minimum(first["high"], second["high"])
+        low = np.maximum(np.array(first["low_mm"]) / 1000.0,
+                         np.array(second["low_mm"]) / 1000.0)
+        high = np.minimum(np.array(first["high_mm"]) / 1000.0,
+                          np.array(second["high_mm"]) / 1000.0)
         extent = np.clip(high - low, 0.0, None)
         rows.append({
             "pair": f"{first['link']} and {second['link']}",

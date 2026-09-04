@@ -363,19 +363,27 @@ def test_a_link_is_clipped_to_its_domain_so_it_cannot_reach_its_neighbour():
     assert "overshoot" in note
 
 
-def test_the_shoulder_is_the_one_joint_whose_links_claim_the_same_space():
-    """Measured, and it is the specification's fault rather than the mesh's.
+def test_no_two_link_domains_claim_the_same_space_any_more():
+    """The shoulder conflict, closed by geometry rather than by a new part.
 
-    Five of the six joints have their two links meet face to face and share
-    exactly nothing. The shoulder does not: its axis crosses the arm, so the
-    column that ends there and the upper arm that starts there each reach
-    half a section past it, and 235 cubic centimetres of design domain belong
-    to both. An assembly found 2850 cubic millimetres of real material inside
-    that block, which means most of it was avoided by luck.
+    It was 235,298 cubic millimetres, a 49 by 49 by 98 mm block around the
+    shoulder, and it was there because a link's domain ran from its own joint
+    to the next one and was as wide as its section, so the space around a
+    joint lay inside both the domain that ended there and the domain that
+    started there. Five of the six joints were unaffected, because their axes
+    run along the arm and their domains meet face to face. The shoulder's
+    axis crosses the arm, so its two links met at a right angle and each
+    reached half a section past the other. An assembly found 2850 cubic
+    millimetres of real material inside that block, which means most of it
+    was avoided by luck rather than by design.
 
-    This is not marching cubes overshoot and clipping does not touch it. It
-    is two parts told to occupy one place, and a real arm puts a bracket
-    there.
+    A link sits on the FAR side of the face it bolts to and the drive sits on
+    the near side. The base column carries the shoulder, so it hangs below
+    that drive's housing face; the upper arm is driven by it, so it sits
+    above its output face; and the 42.7 mm between those two faces is the
+    motor, which neither link is in. Every number in that comes off a
+    drawing, and the 235 cubic centimetres the two domains used to share is
+    now zero.
     """
     from projects.manipulator.links import domain_overlaps
     from projects.manipulator.loop import run_loop
@@ -383,13 +391,29 @@ def test_the_shoulder_is_the_one_joint_whose_links_claim_the_same_space():
     loop = run_loop()
     rows = domain_overlaps(SPEC, dict(loop.data["history"][-1].selected),
                            loop.data["final_sections"])
-    shared = [row for row in rows if row["shared_mm3"] > 0.0]
-    assert len(shared) == 1
-    assert shared[0]["pair"] == "base_column and upper_arm"
-    assert shared[0]["shared_mm3"] == pytest.approx(235298.0, rel=0.01)
-    assert shared[0]["shared_extent_mm"] == pytest.approx([49.0, 49.0, 98.0],
-                                                          abs=0.5)
+    assert rows
     for row in rows:
-        if row not in shared:
-            assert row["shared_mm3"] == 0.0
-            assert "face to face" in row["note"]
+        assert row["shared_mm3"] == 0.0, row
+
+
+def test_two_links_are_asked_for_a_shape_a_box_cannot_be():
+    """What the placement rules disagree about, stated rather than resolved.
+
+    A link driven by a COAXIAL joint has to be centred on that axis: it bolts
+    to a face perpendicular to it and turns about it. A link that carries a
+    CROSSING joint has to sit clear of that drive's housing face, which is to
+    one side. The base column does both, and so does the wrist roll body. A
+    box cannot satisfy both, and a real arm answers it with a bracket at the
+    shoulder and a cranked body at the wrist.
+    """
+    from projects.manipulator.links import link_placements
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    rows = link_placements(SPEC, dict(loop.data["history"][-1].selected),
+                           loop.data["final_sections"])
+    conflicted = {row["link"] for row in rows if row.get("conflict")}
+    assert conflicted == {"base_column", "wrist_roll_body"}
+    for row in rows:
+        if row["link"] in conflicted:
+            assert "cannot do both" in row["conflict"]
