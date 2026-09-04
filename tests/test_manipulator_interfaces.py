@@ -335,3 +335,61 @@ def test_a_drive_with_no_drawing_cannot_be_selected():
                     if r["joint"] == "j6_tool_roll")
     assert selected == "cubemars_ak60_6_v3_kv80"
     assert face_for(selected, "output") is not None
+
+
+def test_a_link_is_clipped_to_its_domain_so_it_cannot_reach_its_neighbour():
+    """The overshoot that made six parts in a row interfere.
+
+    Marching cubes puts the surface where the field crosses the iso level and
+    smoothing moves it again, so an extracted body stands about 1.7 mm proud
+    of its domain at every face. For one part that is a rounding; for six in
+    a row whose domains are exactly the joint spacings it means every link
+    reaches past both its joint planes into its neighbours, which is what an
+    assembly measured. Clipping also leaves the two mounting faces flat,
+    which is what they bolt against.
+    """
+    import trimesh
+
+    from projects.manipulator.links import clip_to_domain
+
+    proud = trimesh.creation.icosphere(radius=60.0)
+    proud.apply_translation([39.25, 49.0, 49.0])
+    assert proud.bounds[0][0] < 0.0 and proud.bounds[1][0] > 78.5
+
+    cut, note = clip_to_domain(proud, 0.0785, 0.098, 0.098, scale=1000.0)
+    assert cut.is_watertight
+    assert cut.bounds[0] == pytest.approx([0.0, 0.0, 0.0], abs=1e-6)
+    assert cut.bounds[1] == pytest.approx([78.5, 98.0, 98.0], abs=1e-6)
+    assert "overshoot" in note
+
+
+def test_the_shoulder_is_the_one_joint_whose_links_claim_the_same_space():
+    """Measured, and it is the specification's fault rather than the mesh's.
+
+    Five of the six joints have their two links meet face to face and share
+    exactly nothing. The shoulder does not: its axis crosses the arm, so the
+    column that ends there and the upper arm that starts there each reach
+    half a section past it, and 235 cubic centimetres of design domain belong
+    to both. An assembly found 2850 cubic millimetres of real material inside
+    that block, which means most of it was avoided by luck.
+
+    This is not marching cubes overshoot and clipping does not touch it. It
+    is two parts told to occupy one place, and a real arm puts a bracket
+    there.
+    """
+    from projects.manipulator.links import domain_overlaps
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    rows = domain_overlaps(SPEC, dict(loop.data["history"][-1].selected),
+                           loop.data["final_sections"])
+    shared = [row for row in rows if row["shared_mm3"] > 0.0]
+    assert len(shared) == 1
+    assert shared[0]["pair"] == "base_column and upper_arm"
+    assert shared[0]["shared_mm3"] == pytest.approx(235298.0, rel=0.01)
+    assert shared[0]["shared_extent_mm"] == pytest.approx([49.0, 49.0, 98.0],
+                                                          abs=0.5)
+    for row in rows:
+        if row not in shared:
+            assert row["shared_mm3"] == 0.0
+            assert "face to face" in row["note"]

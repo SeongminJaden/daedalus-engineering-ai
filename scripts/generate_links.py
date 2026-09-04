@@ -74,8 +74,25 @@ def md5(path: Path) -> str:
     return digest.hexdigest()
 
 
+def searched_fractions(path: Path) -> dict:
+    """Per link volume fractions from the search, where it found one.
+
+    A link with no feasible fraction keeps the default, and the summary says
+    which links those are. Using one number for six parts was never a design
+    decision, it was a placeholder.
+    """
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text())
+    return {row["link"]: row["best_volume_fraction"]
+            for row in data.get("rows", [])
+            if row.get("best_volume_fraction") is not None}
+
+
 def main(iterations: int = 60, volume_fraction: float = 0.3,
-         workers: int = 1, threads_per_worker: int = 4) -> int:
+         workers: int = 1, threads_per_worker: int = 4,
+         search: str = "data/generated/manipulator_volume_search/search.json"
+         ) -> int:
     loop = run_loop()
     drives = dict(loop.data["history"][-1].selected)
     sections = loop.data["final_sections"]
@@ -85,8 +102,10 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
                                  row["peak_s_curve_nm"])
                for row in dynamics.rows}
 
+    fractions = searched_fractions(Path(search))
     payloads = [(index, link.name, drives, torques, str(OUT), iterations,
-                 volume_fraction, threads_per_worker, sections)
+                 fractions.get(link.name, volume_fraction),
+                 threads_per_worker, sections)
                 for index, link in enumerate(SPEC.links())]
     if workers > 1:
         # SPAWN, not fork. The parent has already touched Warp to size the
@@ -113,6 +132,7 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
                "triangles": design.triangles,
                "notes": list(design.notes),
                "unresolved": list(design.unresolved),
+               "volume_fraction": fractions.get(link.name, volume_fraction),
                "reason": design.reason, "seconds": round(seconds, 1)}
         row.update(files)
         rows.append(row)
@@ -154,6 +174,10 @@ if __name__ == "__main__":
                              "own CUDA context, so this is bounded by video "
                              "memory as well as by cores")
     parser.add_argument("--threads-per-worker", type=int, default=4)
+    parser.add_argument(
+        "--search",
+        default="data/generated/manipulator_volume_search/search.json",
+        help="per link volume fractions from scripts/size_links_by_volume.py")
     args = parser.parse_args()
     raise SystemExit(main(args.iterations, args.volume_fraction,
-                          args.workers, args.threads_per_worker))
+                          args.workers, args.threads_per_worker, args.search))

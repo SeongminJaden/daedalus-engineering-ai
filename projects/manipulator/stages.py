@@ -1312,7 +1312,8 @@ def bolted_joint_stage(drivetrain: StageResult, sections,
 
 def interface_stage(drivetrain: StageResult,
                     spec: ManipulatorSpec = SPEC,
-                    designed: set[str] | None = None) -> StageResult:
+                    designed: set[str] | None = None,
+                    sections: dict | None = None) -> StageResult:
     """What each link bolts to, what is measured, and what is missing.
 
     This stage exists because the arm had flanges and no fastening. A 9 mm
@@ -1366,6 +1367,34 @@ def interface_stage(drivetrain: StageResult,
             result.data.setdefault("clock_checks", []).extend(
                 clock_uncertainty_check(face))
     result.data["gaps"] = assembly_gaps(joints, drives, designed)
+
+    # TWO LINKS TOLD TO OCCUPY ONE PLACE. Where a joint's axis crosses the
+    # arm the domain that ends there and the domain that starts there meet at
+    # a right angle, and each reaches half a section past the other. It is
+    # not overshoot and clipping does not touch it. An assembly measured
+    # 2850 cubic millimetres of real material in the shared volume at the
+    # shoulder; the shared volume itself is 235 cubic centimetres, so how
+    # much of it collides is luck.
+    from .links import domain_overlaps
+
+    overlaps = domain_overlaps(spec, drives, sections)
+    result.data["domain_overlaps"] = overlaps
+    for row in overlaps:
+        if row["shared_mm3"] <= 0.0:
+            continue
+        result.data["gaps"].append({
+            "gap": "a bracket at this joint",
+            "where": row["pair"],
+            "why": (f"{row['shared_mm3'] / 1000.0:.1f} cubic centimetres of "
+                    f"design domain belong to both links, a "
+                    f"{row['shared_extent_mm'][0]:.0f} by "
+                    f"{row['shared_extent_mm'][1]:.0f} by "
+                    f"{row['shared_extent_mm'][2]:.0f} mm block around the "
+                    f"joint. Two square sections meeting at a right angle "
+                    f"around a round drive cannot both have it, and a real "
+                    f"arm puts a bracket there instead"),
+            "carries": "everything outboard of this joint",
+            "status": "MISSING"})
 
     missing = [g for g in result.data["gaps"] if g["status"] == "MISSING"]
     blocked = [c for c in result.data.get("clock_checks", [])

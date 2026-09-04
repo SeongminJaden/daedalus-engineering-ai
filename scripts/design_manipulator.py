@@ -109,7 +109,8 @@ def main() -> int:
                 if (Path("data/generated/manipulator_mounts")
                     / f"{name}.stl").exists()}
     stages["interfaces"] = interface_stage(stages["drivetrain"], SPEC,
-                                           designed=designed)
+                                           designed=designed,
+                                           sections=sections)
     stages["spigot"] = spigot_stage(stages["dynamics"], stages["drivetrain"],
                                     SPEC)
     print("dynamics and drivetrain done", flush=True)
@@ -195,6 +196,11 @@ def main() -> int:
                 for item in stages["interfaces"].data.get("unresolved", [])),
         "\nParts this arm needs and does not have:\n",
         table(stages["interfaces"].data.get("gaps", [])),
+        "\nWhere two links are given the same space to design in. A joint "
+        "whose axis crosses the arm has both its links reaching half a "
+        "section past it, which is not overshoot and clipping does not touch "
+        "it:\n",
+        table(stages["interfaces"].data.get("domain_overlaps", [])),
         "",
     ]
     if "links" in stages:

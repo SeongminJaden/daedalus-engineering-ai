@@ -42,7 +42,8 @@ from optimization.topology.smooth import marching_surface, write_stl
 from physics.fem.mesh import solid_box_mesh
 
 from .interfaces import ISO_273_MEDIUM_M, bolt_holes, face_for
-from .links import (EXPORT_SCALE, ISO_LEVEL, cut_holes, scaled_surface)
+from .links import (EXPORT_SCALE, ISO_LEVEL, clip_to_domain,
+                    cut_holes, scaled_surface)
 from .spec import SPEC, ManipulatorSpec
 
 GRAVITY = 9.80665
@@ -226,6 +227,8 @@ def generate_mount(name: str, actuator_id: str, face_name: str,
     exported = scaled_surface(surface, EXPORT_SCALE)
     body = trimesh.Trimesh(vertices=np.asarray(exported.vertices),
                            faces=np.asarray(exported.triangles), process=False)
+    body, clipped = clip_to_domain(body, length_m, height_m, width_m,
+                                   EXPORT_SCALE)
     holes = [{"end": "actuator", "kind": "clearance", "face": face.face,
               "thread": h["thread"], "diameter_m": h["diameter_m"],
               "y_m": h["y_m"], "z_m": h["z_m"],
@@ -245,6 +248,7 @@ def generate_mount(name: str, actuator_id: str, face_name: str,
         triangles=int(body.faces.shape[0]),
         stl_path=str(out_dir / f"{name}.stl"), loads=dict(loads))
     design.notes.extend(report)
+    design.notes.append(clipped)
     design.notes.append(
         f"x = 0 is the {face.actuator} {face.face} face, "
         f"{face.patterns[0].count} by {face.patterns[0].thread} on a "

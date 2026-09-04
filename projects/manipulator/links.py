@@ -369,10 +369,11 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     exported = scaled_surface(surface, EXPORT_SCALE)
     body = trimesh.Trimesh(vertices=np.asarray(exported.vertices),
                            faces=np.asarray(exported.triangles), process=False)
+    body, clipped = clip_to_domain(body, span, height, width, EXPORT_SCALE)
+    before_mm3 = float(abs(body.volume))
     holes, unresolved = mounting_holes(spec, link_index, drives, span)
     body, hole_report = cut_holes(body, holes, height, width,
                                   scale=EXPORT_SCALE)
-    before_mm3 = float(abs(surface.volume_m3)) * EXPORT_SCALE ** 3
     after_mm3 = float(abs(body.volume))
     body.export(str(out_dir / f"{link.name}.stl"))
     stl = out_dir / f"{link.name}.stl"
@@ -390,6 +391,7 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         triangles=int(body.faces.shape[0]),
         stl_path=str(stl))
     design.notes.extend(hole_report)
+    design.notes.append(clipped)
     design.notes.append(
         f"the holes removed {100.0 * (1.0 - after_mm3 / before_mm3):.2f} "
         f"percent of the extracted volume")
@@ -502,6 +504,42 @@ def size_link_by_volume_fraction(spec: ManipulatorSpec, link_index: int,
 CABLE_BORE_M = 0.021
 
 
+def clip_to_domain(body, length_m: float, height_m: float, width_m: float,
+                   scale: float = 1.0):
+    """Cut the body back to the box it was designed in.
+
+    Marching cubes puts the surface where the field crosses the iso level and
+    smoothing moves it again, so an extracted body overshoots its domain by
+    up to about 1.7 mm. That does not matter for one part and it matters for
+    six in a row: a link whose domain is exactly the joint spacing grows past
+    both its joint planes and interferes with its neighbours at both ends,
+    which a Fusion assembly measured. Clipping also makes the two mounting
+    faces flat, which is what they bolt against.
+    """
+    import trimesh
+
+    before = float(abs(body.volume))
+    box = trimesh.creation.box(
+        extents=(length_m * scale, height_m * scale, width_m * scale),
+        transform=trimesh.transformations.translation_matrix(
+            [0.5 * length_m * scale, 0.5 * height_m * scale,
+             0.5 * width_m * scale]))
+    try:
+        cut = body.intersection(box)
+    except Exception as exc:                      # a boolean that will not run
+        return body, (f"the body was NOT clipped to its domain: {exc}. It may "
+                      f"overshoot its joint planes by about 1.7 mm at each end")
+    if cut.is_empty or not cut.is_watertight:
+        return body, ("the body was not clipped to its domain because the "
+                      "result was not a closed solid")
+    after = float(abs(cut.volume))
+    return cut, (f"clipped to the {length_m * 1000:.1f} by "
+                 f"{height_m * 1000:.0f} by {width_m * 1000:.0f} mm design "
+                 f"domain, which removed "
+                 f"{100.0 * (1.0 - after / before):.2f} percent of the "
+                 f"extracted volume as marching cubes overshoot")
+
+
 def mounting_holes(spec: ManipulatorSpec, link_index: int,
                    drives: dict[str, str], span_m: float,
                    clock_deg: float = 0.0) -> tuple[list[dict], list[str]]:
@@ -597,3 +635,71 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
                                   f"{h['diameter_m'] * 1000:.1f} mm"
                                   for h in holes}))]
     return cut, report
+
+
+def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
+                    sections: dict | None = None) -> list[dict]:
+    """Where two links are given the same space to design in.
+
+    A link's domain runs from its own joint to the next one and is as wide as
+    its section, which means the space around a joint is inside BOTH the
+    domain that ends there and the domain that starts there. For a joint
+    whose axis runs along the arm the two domains meet face to face and the
+    shared volume is nothing. For a joint whose axis CROSSES the arm they
+    meet at a right angle and each reaches half a section past the other,
+    and no amount of clipping fixes that because it is not overshoot: it is
+    two parts told to occupy one place.
+
+    This measures the shared box per adjacent pair, in the arm's frame, so
+    the number is a property of the specification rather than of whatever
+    shape the optimiser happened to produce.
+    """
+    joints = spec.joints()
+    links = spec.links()
+    boxes = []
+    position = np.zeros(3)
+    for index, link in enumerate(links):
+        joint = joints[index]
+        position = position + np.array([joint.origin_x_m, joint.origin_y_m, 0.0])
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        section = (sections or {}).get(link.name)
+        height = (section.outer_height_m if section is not None
+                  else spec.minimum_section_m)
+        width = (section.outer_width_m if section is not None
+                 else spec.minimum_section_m)
+        actuator = actuator_for(joint.name, drives)
+        if actuator is not None and actuator.outer_diameter_m:
+            height = max(height, actuator.outer_diameter_m)
+            width = max(width, actuator.outer_diameter_m)
+        if following is not None and following.origin_y_m > following.origin_x_m:
+            span, along = following.origin_y_m, 1        # the link runs up
+        else:
+            span = (following.origin_x_m if following is not None
+                    else link.length_m)
+            along = 0
+        low = np.array(position, dtype=float)
+        high = np.array(position, dtype=float)
+        across = [i for i in range(3) if i != along]
+        high[along] += span
+        low[across[0]] -= 0.5 * height
+        high[across[0]] += 0.5 * height
+        low[across[1]] -= 0.5 * width
+        high[across[1]] += 0.5 * width
+        boxes.append({"link": link.name, "low": low, "high": high})
+
+    rows = []
+    for first, second in zip(boxes, boxes[1:]):
+        low = np.maximum(first["low"], second["low"])
+        high = np.minimum(first["high"], second["high"])
+        extent = np.clip(high - low, 0.0, None)
+        rows.append({
+            "pair": f"{first['link']} and {second['link']}",
+            "shared_mm3": float(np.prod(extent)) * 1e9,
+            "shared_extent_mm": [float(e) * 1000.0 for e in extent],
+            "note": ("their domains meet face to face"
+                     if float(np.prod(extent)) <= 0.0 else
+                     "BOTH DOMAINS CLAIM THIS VOLUME. The joint's axis "
+                     "crosses the arm, so the two links meet at a right "
+                     "angle and each reaches half a section past the other. "
+                     "A bracket is what real arms put here")})
+    return rows
