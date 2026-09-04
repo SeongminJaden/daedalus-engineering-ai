@@ -810,3 +810,35 @@ def test_the_arm_needs_more_joint_stiffness_than_this_catalogue_prints():
     assert needed["j2_shoulder"] > 4.0 * stiffest
     # And the design refuses to call its own deflection a tip deflection.
     assert any("LINK ELASTICITY ONLY" in item for item in stage.could_not)
+
+
+@pytest.mark.slow
+def test_a_link_runs_the_whole_pipeline_in_one_go():
+    """A smoke test, because the expensive failures were all at the end.
+
+    Two runs of six links died an hour and a half in on names that do not
+    exist, because nothing evaluates the boolean pass until a link's
+    optimisation has finished. Both would have been caught in a minute by
+    generating one small link at a few iterations. The shape this produces is
+    not worth looking at; that every stage of the pipeline executes is.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from projects.manipulator.links import generate_link
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    with tempfile.TemporaryDirectory() as directory:
+        design = generate_link(
+            SPEC, 5, dict(loop.data["history"][-1].selected),
+            {"j6_tool_roll": 0.02}, Path(directory), iterations=25,
+            sections=loop.data["final_sections"])
+    assert design.generated, design.reason
+    assert design.watertight
+    assert design.mass_kg > 0.0
+    notes = " ".join(design.notes)
+    for stage in ("clipped to", "interface rings added", "holes cut",
+                  "narrowest bolt ring", "free for the optimiser"):
+        assert stage in notes, f"the pipeline never reached {stage!r}"
+    assert "OUTSIDE the drive" not in notes, notes

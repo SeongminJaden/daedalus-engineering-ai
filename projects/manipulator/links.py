@@ -589,6 +589,17 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         return LinkDesign(name=link.name, generated=False, reason=reason)
     (mesh, passive_solid, passive_void, span, height, width,
      void_note) = built
+    # The link's own box, which the boolean pass needs to place anything in
+    # the arm's frame. `link_domain` has it and does not return it, and
+    # reaching for a name that only exists inside that function is what cost
+    # a full six link run: every worker died on it, an hour and a half after
+    # the run started, because nothing evaluates that line until the very end
+    # of a link.
+    mine = next(box for box in world_boxes(spec, drives, sections)
+                if box["link"] == link.name)
+    joints = spec.joints()
+    joint = joints[link_index]
+    following = joints[link_index + 1] if link_index + 1 < len(joints) else None
 
     material = get_material(spec.materials["link"])
     torque = abs(torques.get(joint.name, 1.0)) or 1.0
@@ -672,8 +683,9 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     # is invariant under both. So the centroid of what was held empty for a
     # drive is checked against where that drive is, which is not.
     void_offsets = []
-    for other, at_x in ((joint, 0.0),
-                        (following, span) if following is not None else (None, 0.0)):
+    for other, at_x in ((joint, mine["reach_low"]),
+                        (following, mine["reach_low"] + mine["joint_span"])
+                        if following is not None else (None, 0.0)):
         if other is None:
             continue
         carried = actuator_for(other.name, drives)
@@ -686,13 +698,29 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         if not picked.any():
             void_offsets.append(f"{other.name}: NOTHING was held empty for it")
             continue
-        centre = mesh.element_centroids()[picked].mean(axis=0)
-        expected = _drive_centre(spec, link_index, other, carried, at_x,
-                                 height, width, mine)
-        away = float(np.linalg.norm(centre - expected))
+        # HOW FAR OUTSIDE THE DRIVE ANY OF IT LIES, not how far its centroid
+        # is from the drive's centre. Comparing centroids compared the middle
+        # of the VISIBLE pocket with the middle of the WHOLE drive, and most
+        # of a drive is outside the link it is bolted to: the tool flange
+        # read 21.4 mm and nothing was wrong, because its motor lies from
+        # -41.5 to +1.5 while the link starts at zero. That is a false alarm
+        # in the one check whose job is to catch a pocket in the wrong place.
+        from .interfaces import face_for
+
+        axis_face = face_for(str(drives.get(other.name, "")), "output")
+        inset = (axis_face.face_inset_m if axis_face is not None
+                 and axis_face.face_inset_m is not None
+                 else 0.5 * carried.axial_length_m)
+        origin = _drive_face(spec, link_index, other, at_x, height, width, mine)
+        along = (mesh.element_centroids()[picked] - origin) @ axis
+        low, high = inset - carried.axial_length_m, inset
+        outside = float(np.max(np.maximum(low - along, along - high)))
         void_offsets.append(
-            f"{other.name}: what was held empty for it sits "
-            f"{away * 1000:.1f} mm from where it is")
+            f"{other.name}: everything held empty for it is inside its own "
+            f"span" if outside <= 0.0 else
+            f"{other.name}: something held empty for it is "
+            f"{outside * 1000:.1f} mm OUTSIDE the drive, so the pocket is "
+            f"not where the drive is")
 
     volume_m3 = after_mm3 / EXPORT_SCALE ** 3
     design = LinkDesign(
