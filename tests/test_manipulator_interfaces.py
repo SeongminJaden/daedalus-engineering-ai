@@ -548,3 +548,33 @@ def test_a_drive_is_subtracted_from_the_body_not_merely_avoided():
     removed = float(abs(block.volume) - abs(cut.volume))
     assert removed == pytest.approx(np.pi * 20.0 ** 2 * 100.0, rel=0.02)
     assert "envelope" in report[0]
+
+
+def test_only_the_cranked_links_need_a_withdrawal_corridor():
+    """A drive has to be able to come out, and a C traps one.
+
+    A link that has material on both sides of a drive within that drive's own
+    radius traps it, however well the two sides avoid the motor itself. The
+    three cranked links do exactly that: the base column's domain reaches
+    from 140.7 mm below the shoulder plane to 49 above it and closes around a
+    motor living between -53.9 and +8. An independent sweep measured all
+    three as trapped in both directions along the axis.
+
+    The three straight links need nothing, because each lies entirely on one
+    side of its own drive already. That is the check on the rule: if a
+    corridor appeared where a link does not wrap, the corridor would be
+    carving material for no reason.
+    """
+    from projects.manipulator.links import link_domain
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+    carved = {}
+    for index, link in enumerate(SPEC.links()):
+        built, reason = link_domain(SPEC, index, drives, sections=sections)
+        assert built is not None, reason
+        carved[link.name] = "corridor" in built[-1]
+    assert {name for name, has in carved.items() if has} == {
+        "base_column", "upper_arm", "wrist_roll_body"}

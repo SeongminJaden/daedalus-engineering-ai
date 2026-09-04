@@ -71,7 +71,59 @@ def _blocked(body, tool) -> float:
     return 0.0 if hit.is_empty else float(abs(hit.volume))
 
 
-def check_link(index: int, spec, drives, sections, path: Path) -> dict:
+def _sweep_line(published: dict, link_name: str, joint_name: str):
+    """The drive's axis line in the link file's own frame, from the PUBLISHED
+    summary rather than from the generator's helpers.
+
+    This path shares no code with the thing it checks, and that is the whole
+    point of it. The first version of this sweep called the same frame
+    helpers the generator does, inherited the same missing offset, and put
+    its cylinder 140.7 mm from the drive on every joint whose axis crosses
+    the arm: the cylinder swept empty space, the intersection came out zero,
+    and the check answered "comes out" while the pocket was in the wrong
+    place. A check that shares a coordinate transform with its subject cannot
+    catch an error in that transform.
+
+    So the arithmetic here is done twice over, deliberately. The link's box
+    and the joints' world origins come out of summary.json, which is what an
+    outside reader consumes, and the world to local mapping is rebuilt from
+    the box corner and the direction the two joint origins differ in.
+    """
+    links = {row["link"]: row for row in published.get("links", [])}
+    joints = {row["tag"]: row for row in published.get("joints", [])}
+    entry, joint = links.get(link_name), joints.get(joint_name)
+    if entry is None or joint is None or "domain_box_world_mm" not in entry:
+        return None, None
+    low = np.asarray(entry["domain_box_world_mm"]["min"], dtype=float) / 1000.0
+    high = np.asarray(entry["domain_box_world_mm"]["max"], dtype=float) / 1000.0
+
+    # Which world axis the link runs along: the one its box is longest in,
+    # among x and y. The generator decides this from the joint offsets; this
+    # decides it from the published box, so the two disagree if either is
+    # wrong.
+    along = 0 if (high - low)[0] >= (high - low)[1] else 1
+    other = 1 - along
+
+    world_axis = np.asarray(joint["axis"], dtype=float)
+    world_origin = np.asarray(joint["origin_mm"], dtype=float) / 1000.0
+    # Every output face lies in the arm's z = 0 plane, which the summary
+    # states per joint rather than this script assuming it.
+    world_origin[2] = float(joint.get("output_face_world_z_mm", 0.0)) / 1000.0
+
+    def to_local(point):
+        return np.array([point[along] - low[along],
+                         point[other] - low[other],
+                         point[2] - low[2]], dtype=float)
+
+    axis = to_local(world_origin + world_axis) - to_local(world_origin)
+    length = float(np.linalg.norm(axis))
+    if length <= 0.0:
+        return None, None
+    return axis / length, to_local(world_origin)
+
+
+def check_link(index: int, spec, drives, sections, path: Path,
+               published: dict) -> dict:
     import trimesh
 
     from projects.manipulator.interfaces import bolt_holes, face_for
@@ -107,10 +159,12 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
             row["drives"].append({"joint": joint.name, "role": role,
                                   "verdict": "no outline, not checked"})
             continue
-        axis = local_axis(spec, index, joint.axis)
-        centre = np.array([at_x, 0.5 * height, 0.5 * width], dtype=float)
-        if abs(float(axis[0])) <= 0.5:
-            centre = centre - axis * float(np.dot(centre, axis))
+        axis, centre = _sweep_line(published, link.name, joint.name)
+        if axis is None:
+            row["drives"].append({"joint": joint.name, "role": role,
+                                  "verdict": "not in the published summary, "
+                                             "not checked"})
+            continue
         reach = 2.0 * (span + height + width)
         out = {}
         for name, sign in (("forwards", 1.0), ("backwards", -1.0)):
@@ -197,10 +251,12 @@ def main(directory: str = str(LINKS)) -> int:
     loop = run_loop()
     drives = dict(loop.data["history"][-1].selected)
     sections = loop.data["final_sections"]
+    summary = Path(directory) / "summary.json"
+    published = json.loads(summary.read_text()) if summary.exists() else {}
     rows = []
     for index, link in enumerate(SPEC.links()):
         row = check_link(index, SPEC, drives, sections,
-                         Path(directory) / f"{link.name}.stl")
+                         Path(directory) / f"{link.name}.stl", published)
         rows.append(row)
         print(json.dumps(row, default=str), flush=True)
     out = Path(directory) / "assembly_access.json"

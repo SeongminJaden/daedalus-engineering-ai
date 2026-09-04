@@ -345,6 +345,49 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         void_note += (f"; {taken} elements belong to a neighbouring link's "
                       f"domain and are held empty")
 
+    # KEEP THE WITHDRAWAL CORRIDOR CLEAR. A drive has to be able to come
+    # out along its own axis, and a link that has material on BOTH sides of
+    # it within its own radius traps it however well the two sides avoid the
+    # motor itself. The cranked links do exactly that: the base column's
+    # domain reaches from 140.7 mm below the shoulder plane to 49 above it,
+    # so it closes around a motor that lives between -53.9 and +8, and an
+    # independent sweep measured it as trapped in both directions.
+    #
+    # A link bolts to one face and the drive is on the far side of it, so
+    # within that drive's swept cylinder the link may exist on ONE side of
+    # the face and not the other. That is not an extra rule: it is the same
+    # rule that places the link, applied to the volume the drive sweeps
+    # rather than only to the volume it occupies.
+    corridors = 0
+    for other, at_x, driven in ((joint, 0.0, True),
+                                (following, span, False) if following is not None
+                                else (None, 0.0, False)):
+        if other is None:
+            continue
+        carried = actuator_for(other.name, drives)
+        if carried is None or not carried.outer_diameter_m:
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        if abs(float(axis[0])) > 0.5:
+            continue                  # coaxial: it leaves along the link
+        origin = _drive_face(spec, link_index, other, at_x, height, width, mine)
+        offset = centroids - origin
+        along = offset @ axis
+        radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+        radius = (0.5 * carried.outer_diameter_m
+                  + ACTUATOR_RADIAL_CLEARANCE_M)
+        if driven:
+            far = along <= 0.0        # it bolts above the output face
+        else:
+            separation = face_separation_m(str(drives.get(other.name, "")))
+            far = along >= -(separation or 0.0)
+        corridor = (radial <= radius) & far
+        corridors += int(corridor.sum())
+        passive_void |= corridor
+    if corridors:
+        void_note += (f"; {corridors} elements held empty as the corridor the "
+                      f"drives come out through")
+
     # HOLD THE BOLT RING SOLID. Cutting the boss and the tail out leaves a
     # thin annulus at each mounting face, and that annulus is what the bolts
     # bear on: 8 mm wide on the AK80-64's output face, with eight 3.4 mm
