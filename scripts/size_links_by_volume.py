@@ -114,7 +114,61 @@ def _search_one(payload):
             "curve": curve}
 
 
-def allocate(curves: list[dict], budget_m: float) -> dict:
+#: CHOSEN. How much of the deflection limit the allocation may spend. The
+#: limit itself is 1 mm, which the specification records as a CHOSEN number
+#: with no safety factor in it, because the task states a tip deflection
+#: constraint without giving one. So there is nothing to draw margin from and
+#: it has to be taken here, explicitly, once.
+#:
+#: Spending 98 percent of an unqualified limit is not a design; it is a
+#: rounding error away from failing. Eighty leaves a fifth.
+DESIGN_MARGIN = 0.80
+
+
+def amplification(spec) -> dict:
+    """How much each link's own deflection is worth AT THE TOOL.
+
+    This is the correction the additivity assumption was missing, and it is
+    not small. A link's measured number is its own loaded face moving under
+    its own load. In the arm, that link also ROTATES everything outboard of
+    it: a cantilever whose tip moves by d has an end slope of about 1.5 d
+    over its length, and that slope swings the remaining reach.
+
+        contribution at the tool = d + (1.5 d / L) * R = d (1 + 1.5 R / L)
+
+    where L is the link's own length and R is the reach still outboard of
+    it. For the base column, 150 mm long with the whole 600 mm arm above it,
+    that factor is 7. For the tool flange it is 1.
+
+    So a plain sum of the six numbers UNDERSTATES the tool's deflection,
+    and by a different amount for every link. The length share rule was
+    spending only a third of the budget, which was waste and was also
+    accidentally covering this; an allocation that spends the budget removes
+    the cover. The 1.5 is the cantilever relation between tip deflection and
+    end slope, and it is an approximation of the same kind as the sum it is
+    correcting.
+    """
+    # The distance along the REACH, which is not the sum of the link
+    # lengths: the base column stands up rather than out, so it adds 150 mm
+    # of length and no reach at all while rotating the entire arm. Adding
+    # every link's length put the tool 750 mm out on a 600 mm arm and gave
+    # the base column a factor of 5.5 where it should be 7.
+    joints = spec.joints()
+    reach = spec.reach_check_m()
+    factors = {}
+    along = 0.0
+    for index, link in enumerate(spec.links()):
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        # The last link ends at the tool, not at another joint.
+        along += (following.origin_x_m if following is not None
+                  else link.length_m)
+        remaining = max(reach - along, 0.0)
+        factors[link.name] = 1.0 + 1.5 * remaining / max(link.length_m, 1e-9)
+    return factors
+
+
+def allocate(curves: list[dict], budget_m: float,
+             factors: dict | None = None) -> dict:
     """Spend one deflection budget across six links, at least total mass.
 
     THE ASSUMPTION IS THAT THE DEFLECTIONS ADD. Each link's number is its own
@@ -131,6 +185,11 @@ def allocate(curves: list[dict], budget_m: float) -> dict:
     """
     import itertools
 
+    factors = factors or {}
+
+    def at_tool(row, point):
+        return point["tip_displacement_m"] * factors.get(row["link"], 1.0)
+
     usable = [[point for point in row.get("curve", []) if point.get("feasible")]
               for row in curves]
     if any(not options for options in usable):
@@ -139,7 +198,8 @@ def allocate(curves: list[dict], budget_m: float) -> dict:
                           "curve, so no allocation exists"}
     best = None
     for combination in itertools.product(*usable):
-        total = sum(point["tip_displacement_m"] for point in combination)
+        total = sum(at_tool(row, point)
+                    for row, point in zip(curves, combination))
         if total > budget_m:
             continue
         mass = sum(point["mass_kg"] for point in combination)
@@ -153,12 +213,16 @@ def allocate(curves: list[dict], budget_m: float) -> dict:
     return {"allocated": True, "total_mass_kg": mass,
             "total_deflection_m": total, "budget_m": budget_m,
             "combinations": int(math.prod(len(o) for o in usable)),
+            "raw_sum_m": sum(point["tip_displacement_m"]
+                             for point in combination),
             "per_link": [
                 {"link": row["link"],
                  "volume_fraction": point["volume_fraction"],
                  "mass_kg": point["mass_kg"],
-                 "tip_displacement_m": point["tip_displacement_m"],
-                 "share_of_budget": point["tip_displacement_m"] / budget_m}
+                 "own_displacement_m": point["tip_displacement_m"],
+                 "amplification": factors.get(row["link"], 1.0),
+                 "at_the_tool_m": at_tool(row, point),
+                 "share_of_budget": at_tool(row, point) / budget_m}
                 for row, point in zip(curves, combination)]}
 
 
@@ -231,13 +295,25 @@ def main(ladder=(0.15, 0.25, 0.35, 0.45), iterations: int = 40,
         print(json.dumps(row, default=str), flush=True)
 
     curves = [row for row in rows if row.get("searched")]
-    budget = SPEC.tip_deflection_limit_m
-    allocated = allocate(curves, budget)
+    factors = amplification(SPEC)
+    budget = SPEC.tip_deflection_limit_m * DESIGN_MARGIN
+    allocated = allocate(curves, budget, factors)
     by_length = by_length_share(curves)
     summary = {"rows": rows, "workers": workers, "ladder": list(ladder),
                "threads_per_worker": threads_per_worker,
                "seconds": round(time.perf_counter() - started, 1),
+               "limit_m": SPEC.tip_deflection_limit_m,
+               "design_margin": DESIGN_MARGIN,
                "budget_m": budget,
+               "amplification": factors,
+               "ladder_rungs": len(ladder),
+               "limit_carries_no_safety_factor": (
+                   "the 1 mm limit is recorded in the specification as a "
+                   "CHOSEN number, 1/600 of the reach, because the task "
+                   "states a tip deflection constraint without giving one. "
+                   "There is no factor inside it to draw margin from, so the "
+                   "margin is taken here, once, and it is "
+                   f"{DESIGN_MARGIN:.0%} of the limit"),
                "allocated": allocated,
                "by_length_share": by_length}
     summary["additivity_assumption"] = (
@@ -259,8 +335,13 @@ def main(ladder=(0.15, 0.25, 0.35, 0.45), iterations: int = 40,
         summary["allocation_note"] = (
             f"splitting the deflection budget by each link's share of the "
             f"reach costs {saved:.3f} kg against spending it where it is "
-            f"cheapest. The split was a rule with no argument behind it and "
-            f"it decided the mass")
+            f"cheapest, on a {len(ladder)} rung ladder. The split was a rule "
+            f"with no argument behind it and it decided the mass. HOW MUCH "
+            f"OF THIS IS THE LADDER: a length share has to take the first "
+            f"rung that clears its own share, so a link needing 0.16 spends "
+            f"0.25, and that waste is independent per link where the "
+            f"allocation can cancel it across six. A finer ladder narrows "
+            f"the gap without closing it")
         summary["budget_used"] = {
             "allocated": allocated["total_deflection_m"] / budget,
             "by_length_share": by_length["total_deflection_m"] / budget}
