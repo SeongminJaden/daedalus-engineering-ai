@@ -102,12 +102,15 @@ def test_the_mass_torque_loop_converges_and_says_how_far_it_moved():
     # 9 mm flanges. Both were corrections, and both add mass the seed did not
     # carry. Measured: the seed is 3.09 kg and the loop settles at 4.46 kg in
     # three iterations. In 6061 it is 3.13 and 4.51, so the direction is a
-    # property of the loop and not of the printed alloy.
+    # property of the loop and not of the printed alloy. It moved again, to
+    # 4.80, when a drive with no published drawing stopped being selectable
+    # and the tool roll took a 380 g AK60-6 instead of a 213 g frameless
+    # motor. That is the price of being able to bolt the arm together.
     #
     # What matters is that it SETTLES, not which way it moves. A loop that
     # adds mass, needs a bigger drive, and adds mass again would run away, and
     # this one does not.
-    assert last["structure_mass_kg"] == pytest.approx(4.46, abs=0.15)
+    assert last["structure_mass_kg"] == pytest.approx(4.85, abs=0.25)
     assert last["structure_mass_kg"] > first["structure_mass_kg"]
     middle = result.rows[len(result.rows) // 2]
     assert abs(last["structure_mass_kg"] - middle["structure_mass_kg"]) < 0.01
@@ -214,7 +217,20 @@ def test_a_module_printed_at_another_voltage_is_refused_not_scaled():
 
 @pytest.mark.slow
 def test_the_bus_voltage_changes_the_mass_and_the_stage_prices_it():
-    """A design decision with a mass consequence, not a wiring detail."""
+    """The bus voltage has stopped being a trade-off and become a
+    requirement, and the reason is worth keeping.
+
+    It used to cost mass: 4.347 kg of drives at 24 V, 3.760 at 36, 3.103 at
+    48, because a lower voltage meant a slower motor and a bigger one to make
+    up for it. Then a drive with no published drawing stopped being
+    selectable, since an outline and a mounting pattern are what let a part
+    be placed and fastened. That left only the CubeMars integrated
+    actuators, and every one of them is a 48 V part.
+
+    So this arm has no 24 V design and no 36 V design at all. Six joints go
+    undriven at both. That is a narrower catalogue rather than a better
+    answer, and the test says which it is.
+    """
     from projects.manipulator.stages import bus_voltage_stage, dynamics_stage
 
     arm = build_arm()
@@ -225,11 +241,13 @@ def test_the_bus_voltage_changes_the_mass_and_the_stage_prices_it():
     assert set(by_voltage) == {24.0, 36.0, 48.0}
     for row in stage.rows:
         assert row["joints_driven"] + row["joints_without_a_drive"] == 6
-    driven = [row for row in stage.rows if row["drive_mass_kg"]]
-    assert driven, "no bus voltage could drive the arm at all"
-    assert len({row["parts"] for row in driven}) > 1, (
-        "the bus voltage changed nothing, which would mean it is not being "
-        "applied")
+
+    assert by_voltage[48.0]["joints_driven"] == 6
+    assert by_voltage[48.0]["drive_mass_kg"] == pytest.approx(3.66, abs=0.2)
+    for voltage in (24.0, 36.0):
+        assert by_voltage[voltage]["joints_driven"] == 0, (
+            f"{voltage} V drove some joints, so the catalogue is wider than "
+            f"this test believes and the reasoning above needs re-checking")
 
 
 def test_the_wrist_spacing_follows_the_actuator_that_has_to_fit_in_it():
@@ -272,10 +290,17 @@ def test_no_joint_with_a_printed_outline_interferes_with_its_own_drive():
         check = row.get("spacing_check")
         if check not in (None, "not printed for one of the pair"):
             assert check.startswith("fits"), row
+    # EVERY OUTLINE IS PRINTED NOW, and this assertion used to say the
+    # opposite. It read "every outline was printed, which is not this
+    # catalogue", and it was true while the tool roll took a frameless motor
+    # that publishes none. A drive with no drawing is no longer selectable,
+    # because an outline and a mounting pattern are what let a part be placed
+    # and fastened, so every joint on this arm can be checked and every one
+    # of them passes.
     unchecked = [row for row in envelope.rows
                  if row.get("diameter_check") == "not printed"]
-    assert unchecked, "every outline was printed, which is not this catalogue"
-    assert any("cannot be checked" in note for note in envelope.notes)
+    assert not unchecked, unchecked
+    assert len(checked) == SPEC.degrees_of_freedom
 
 
 def test_the_along_arm_extent_of_a_drive_depends_on_its_axis():

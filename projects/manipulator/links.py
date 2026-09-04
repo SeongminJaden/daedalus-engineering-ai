@@ -257,29 +257,22 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
     # not a choice at all. This is the shoulder: the upper arm lies between
     # two AK80-64s facing opposite ways, 42.7 mm apart, and any wider a
     # section would be in the same place as a motor.
-    axis_own = local_axis(spec, link_index, joint.axis)
-    across_own = abs(float(axis_own[0])) <= 0.5
-    axis_next = (local_axis(spec, link_index, following.axis)
-                 if following is not None else None)
-    parallel = (axis_next is not None and across_own
-                and abs(float(np.dot(axis_own, axis_next))) > 0.99)
-    if parallel:
-        thickness_note = (
-            f"both its joints turn about the same axis. Their drives must "
-            f"therefore face OPPOSITE ways, or this link would have to be on "
-            f"both sides of the shoulder at once, and the "
-            f"{face_separation_m(str(drives.get(following.name, ''))) * 1000:.1f}"
-            f" mm between the far drive's two faces is the gap the link's own "
-            f"thickness sits above")
-    elif across_own:
-        thickness_note = ("its two joints turn about different axes, so their "
-                          "mounting faces are not parallel and neither "
-                          "constrains the other")
-    else:
-        thickness_note = ("the joint axis runs along the link, so its "
-                          "mounting face is already across the link")
+    boxes = world_boxes(spec, drives, sections)
+    mine = next(b for b in boxes if b["link"] == link.name)
+    if not mine["placed"]:
+        return None, mine["reason"]
+    width = mine["width"]
+    thickness_note = mine["basis"]
 
-    mesh = solid_box_mesh(span, height, width, *divisions)
+    # KEEP THE CELL SIZE, NOT THE CELL COUNT. A cranked link's domain is
+    # nearly twice as wide as a straight one, and holding the division count
+    # fixed would give it 15.8 mm cells where the others have 8.2, which is
+    # coarser than the features being designed. The count follows the width
+    # instead, so only the two cranked links pay for their size.
+    nx, ny, nz = divisions
+    reference = 0.098 / float(nz)
+    nz = max(nz, int(round(width / reference)))
+    mesh = solid_box_mesh(span, height, width, nx, ny, nz)
 
     centroids = mesh.element_centroids()
     flange = spec.flange_thickness_m
@@ -325,6 +318,29 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         passive_void |= cut
         notes.append(f"{role} at x = {at_x * 1000:.0f} mm: {why}")
     void_note = "; ".join(notes)
+
+    # NOBODY ELSE'S SPACE. Taking the union of the centred box and the
+    # offset box is what lets a link be cranked, and it also hands the base
+    # column back the 117,649 cubic millimetres of the shoulder that the
+    # offset had just taken off it. So every other link's domain is held
+    # empty here. The rule is general rather than a patch for one joint: a
+    # link may design in its own box and in nobody else's.
+    world_low, world_high = mine["low"], mine["high"]
+    along, other = mine["along"], (0 if mine["along"] == 1 else 1)
+    world = np.zeros_like(centroids)
+    world[:, along] = world_low[along] + centroids[:, 0]
+    world[:, other] = world_low[other] + centroids[:, 1]
+    world[:, 2] = world_low[2] + centroids[:, 2]
+    taken = 0
+    for box in boxes:
+        if not box["placed"] or box["link"] == link.name:
+            continue
+        inside = np.all((world >= box["low"]) & (world <= box["high"]), axis=1)
+        taken += int(inside.sum())
+        passive_void |= inside
+    if taken:
+        void_note += (f"; {taken} elements belong to a neighbouring link's "
+                      f"domain and are held empty")
 
     # THE DRIVE WINS OVER THE FLANGE where they meet. The AK80-64's output
     # boss stands 8 mm proud of its mounting face, which is 8 mm into a 9 mm
@@ -698,6 +714,104 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
     return cut, report
 
 
+def domain_extent(spec: ManipulatorSpec, link_index: int,
+                  drives: dict[str, str], sections: dict | None = None):
+    """A link's span and section, and where its own frame sits in the arm.
+
+    Split out of `link_domain` because the placement of one link now depends
+    on the placement of its neighbours, and building a mesh to find that out
+    would be circular. Nothing here touches a mesh.
+
+    Returns (span, height, width, z_low, z_high, basis) in metres, where the
+    two z values are the link's extent along the arm's z, or None with a
+    reason.
+    """
+    joints = spec.joints()
+    links = spec.links()
+    link = links[link_index]
+    joint = joints[link_index]
+    following = joints[link_index + 1] if link_index + 1 < len(joints) else None
+
+    if following is None:
+        span = link.length_m
+    else:
+        span = max(following.origin_x_m, following.origin_y_m)
+    if span <= 0.0:
+        return None, (f"{link.name}: its joints are coincident in every "
+                      f"direction, so there is no space to design in")
+
+    actuator = actuator_for(joint.name, drives)
+    section = (sections or {}).get(link.name)
+    height = (section.outer_height_m if section is not None
+              else spec.minimum_section_m)
+    width = (section.outer_width_m if section is not None
+             else spec.minimum_section_m)
+    if actuator is not None and actuator.outer_diameter_m:
+        height = max(height, actuator.outer_diameter_m)
+        width = max(width, actuator.outer_diameter_m)
+
+    axis_own = local_axis(spec, link_index, joint.axis)
+    driven_across = abs(float(axis_own[0])) <= 0.5
+    carries_across = (
+        following is not None
+        and abs(float(local_axis(spec, link_index, following.axis)[0])) <= 0.5)
+    separation = (face_separation_m(str(drives.get(following.name, "")))
+                  if carries_across and following is not None else None)
+
+    if driven_across:
+        low, high = 0.0, width
+        basis = "driven across, so it sits above that output face"
+    elif carries_across:
+        top = -(separation or 0.0)
+        # THE UNION OF THE TWO BOXES, not one of them. A link driven by a
+        # coaxial joint has to be centred on that axis and a link carrying a
+        # crossing joint has to sit clear of that drive's housing face. Where
+        # a link does both, the design domain is everything either rule
+        # allows, and the optimiser finds the crank between them. Taking the
+        # bounding box of both is the whole point: taking either one alone
+        # asks for a shape that cannot exist.
+        low, high = min(top - width, -0.5 * width), max(top, 0.5 * width)
+        basis = (f"carries a crossing axis {abs(top) * 1000:.1f} mm to one "
+                 f"side AND is driven by a coaxial one, so its domain is the "
+                 f"union of the centred box and the offset box and the "
+                 f"optimiser finds the crank")
+    else:
+        low, high = -0.5 * width, 0.5 * width
+        basis = "both its joints are coaxial with it, so it is centred"
+    return (span, height, low, high, basis), ""
+
+
+def world_boxes(spec: ManipulatorSpec, drives: dict[str, str],
+                sections: dict | None = None) -> list[dict]:
+    """Every link's design domain as a box in the arm's frame."""
+    joints = spec.joints()
+    rows = []
+    position = np.zeros(3)
+    for index, link in enumerate(spec.links()):
+        joint = joints[index]
+        position = position + np.array([joint.origin_x_m, joint.origin_y_m, 0.0])
+        built, reason = domain_extent(spec, index, drives, sections)
+        if built is None:
+            rows.append({"link": link.name, "placed": False, "reason": reason})
+            continue
+        span, height, z_low, z_high, basis = built
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        along = 1 if (following is not None
+                      and following.origin_y_m > following.origin_x_m) else 0
+        other = 0 if along == 1 else 1
+        low = np.array(position, dtype=float)
+        high = np.array(position, dtype=float)
+        high[along] += span
+        low[other] -= 0.5 * height
+        high[other] += 0.5 * height
+        low[2], high[2] = z_low, z_high
+        rows.append({"link": link.name, "placed": True, "low": low,
+                     "high": high, "span": span, "height": height,
+                     "width": z_high - z_low, "z_low": z_low, "z_high": z_high,
+                     "along": along, "basis": basis})
+    return rows
+
+
 def link_placements(spec: ManipulatorSpec, drives: dict[str, str],
                     sections: dict | None = None) -> list[dict]:
     """Where each link's own frame sits in the arm's frame.
@@ -782,39 +896,30 @@ def link_placements(spec: ManipulatorSpec, drives: dict[str, str],
 
 def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
                     sections: dict | None = None) -> list[dict]:
-    """Where two links are given the same space to design in.
+    """Where two link domains claim the same space, and what is done about it.
 
-    A link's domain runs from its own joint to the next one and is as wide as
-    its section, which means the space around a joint is inside BOTH the
-    domain that ends there and the domain that starts there. For a joint
-    whose axis runs along the arm the two domains meet face to face and the
-    shared volume is nothing. For a joint whose axis CROSSES the arm they
-    meet at a right angle and each reaches half a section past the other,
-    and no amount of clipping fixes that because it is not overshoot: it is
-    two parts told to occupy one place.
-
-    This measures the shared box per adjacent pair, in the arm's frame, so
-    the number is a property of the specification rather than of whatever
-    shape the optimiser happened to produce.
+    A cranked link's domain is the union of a centred box and an offset box,
+    and a union can reach into a neighbour: the base column's does, by 49 mm
+    in every direction at the shoulder. The generator holds every other
+    link's box empty, so the shared volume is designed in by nobody. This
+    reports both numbers, because a shared box that is held empty and a
+    shared box that is not are different things and only one of them is a
+    defect.
     """
-    boxes = [row for row in link_placements(spec, drives, sections)
-             if row.get("placed")]
-
+    boxes = [box for box in world_boxes(spec, drives, sections)
+             if box.get("placed")]
     rows = []
     for first, second in zip(boxes, boxes[1:]):
-        low = np.maximum(np.array(first["low_mm"]) / 1000.0,
-                         np.array(second["low_mm"]) / 1000.0)
-        high = np.minimum(np.array(first["high_mm"]) / 1000.0,
-                          np.array(second["high_mm"]) / 1000.0)
+        low = np.maximum(first["low"], second["low"])
+        high = np.minimum(first["high"], second["high"])
         extent = np.clip(high - low, 0.0, None)
+        shared = float(np.prod(extent)) * 1e9
         rows.append({
             "pair": f"{first['link']} and {second['link']}",
-            "shared_mm3": float(np.prod(extent)) * 1e9,
+            "shared_mm3": shared,
             "shared_extent_mm": [float(e) * 1000.0 for e in extent],
-            "note": ("their domains meet face to face"
-                     if float(np.prod(extent)) <= 0.0 else
-                     "BOTH DOMAINS CLAIM THIS VOLUME. The joint's axis "
-                     "crosses the arm, so the two links meet at a right "
-                     "angle and each reaches half a section past the other. "
-                     "A bracket is what real arms put here")})
+            "held_empty": shared > 0.0,
+            "note": ("their domains meet face to face" if shared <= 0.0 else
+                     "both domains reach into this volume and each holds the "
+                     "other's box empty, so neither designs in it")})
     return rows

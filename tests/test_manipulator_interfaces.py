@@ -363,37 +363,41 @@ def test_a_link_is_clipped_to_its_domain_so_it_cannot_reach_its_neighbour():
     assert "overshoot" in note
 
 
-def test_no_two_link_domains_claim_the_same_space_any_more():
-    """The shoulder conflict, closed by geometry rather than by a new part.
+def test_a_shared_domain_box_is_held_empty_by_both_links():
+    """The shoulder conflict, closed twice over.
 
     It was 235,298 cubic millimetres, a 49 by 49 by 98 mm block around the
     shoulder, and it was there because a link's domain ran from its own joint
     to the next one and was as wide as its section, so the space around a
     joint lay inside both the domain that ended there and the domain that
     started there. Five of the six joints were unaffected, because their axes
-    run along the arm and their domains meet face to face. The shoulder's
-    axis crosses the arm, so its two links met at a right angle and each
-    reached half a section past the other. An assembly found 2850 cubic
-    millimetres of real material inside that block, which means most of it
-    was avoided by luck rather than by design.
+    run along the arm and their domains meet face to face. An assembly found
+    2850 cubic millimetres of real material inside that block, which means
+    most of it was avoided by luck rather than by design.
 
-    A link sits on the FAR side of the face it bolts to and the drive sits on
-    the near side. The base column carries the shoulder, so it hangs below
-    that drive's housing face; the upper arm is driven by it, so it sits
-    above its output face; and the 42.7 mm between those two faces is the
-    motor, which neither link is in. Every number in that comes off a
-    drawing, and the 235 cubic centimetres the two domains used to share is
-    now zero.
+    Putting each link on the far side of the face it bolts to closed it. Then
+    making the two cranked links' domains the UNION of a centred box and an
+    offset box reopened part of it, 117,649 cubic millimetres, because a
+    union can reach into a neighbour. So every link now holds every other
+    link's box empty, and the shared volume is designed in by nobody.
     """
-    from projects.manipulator.links import domain_overlaps
+    from projects.manipulator.links import domain_overlaps, link_domain
     from projects.manipulator.loop import run_loop
 
     loop = run_loop()
-    rows = domain_overlaps(SPEC, dict(loop.data["history"][-1].selected),
-                           loop.data["final_sections"])
-    assert rows
-    for row in rows:
-        assert row["shared_mm3"] == 0.0, row
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+    rows = domain_overlaps(SPEC, drives, sections)
+    shared = [row for row in rows if row["shared_mm3"] > 0.0]
+    assert len(shared) == 1 and shared[0]["pair"] == "base_column and upper_arm"
+    assert all(row["held_empty"] for row in shared)
+
+    # And it is actually held empty, not merely declared to be.
+    built, reason = link_domain(SPEC, 0, drives, sections=sections)
+    assert built is not None, reason
+    _mesh, _solid, void, _span, _height, _width, note = built
+    assert "neighbouring link's domain" in note
+    assert void.any()
 
 
 def test_two_links_are_asked_for_a_shape_a_box_cannot_be():

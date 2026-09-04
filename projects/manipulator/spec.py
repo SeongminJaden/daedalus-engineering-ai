@@ -116,12 +116,21 @@ class ManipulatorSpec:
     #: which is 19.25 + 49.0 = 68.25 mm, plus the 10 mm assembly clearance,
     #: rounded up to 78.5.
     #:
+    #: It has been wrong a third time, and for a third reason. The pair that
+    #: binds is no longer the roll and the pitch. When the tool roll's
+    #: frameless motor was replaced by an AK60-6, because a drive with no
+    #: published drawing cannot be assembled, the pitch and the tool roll
+    #: became the tight pair: 49.0 mm for the pitch drive's radius across the
+    #: arm plus 21.5 for half the AK60-6's 43 mm length plus 10 of clearance
+    #: is 80.5. At 78.5 the envelope check reported those two as TOUCHING
+    #: with 8 mm of clearance where 10 is demanded.
+    #:
     #: All three wrist gaps take that number because this specification
     #: carries one wrist spacing, so the binding pair sets them all. The three
-    #: wrist joints therefore take 235.5 mm of the 600 mm reach, which is the
+    #: wrist joints therefore take 241.5 mm of the 600 mm reach, which is the
     #: real price of hanging 98 mm drives off a serial wrist: one wrist joint
     #: is now longer than the forearm.
-    wrist_spacing_m: float = 0.0785
+    wrist_spacing_m: float = 0.0805
 
     #: What is left of the reach after the wrist, split in the same ratio the
     #: first version used. These are derived rather than stated, so a change
