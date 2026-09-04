@@ -359,3 +359,40 @@ def test_the_joint_flanges_are_counted_and_are_not_small():
     arm = build_arm(starting_sections(SPEC), SPEC)
     tubes, flanges = structure_mass_kg(arm, SPEC, starting_sections(SPEC))
     assert flanges > 0.3 * tubes, (tubes, flanges)
+
+
+@pytest.mark.slow
+def test_a_link_is_generated_as_a_shape_with_its_interfaces_and_its_pocket():
+    """The links were hollow rectangles: a section, not a structure, with
+    nowhere to bolt a drive and no reason for the material to be where it was.
+    Each link is now a free form body whose ends are held solid for the
+    fastening and whose drive is a hole."""
+    import tempfile
+    from pathlib import Path
+
+    from core.part_dataset.labeller import labelling_available
+    from geometry.cad_export.kernel import kernel_available
+    from projects.manipulator.links import ISO_LEVEL, PROCESS, generate_link
+
+    if not (kernel_available() and labelling_available()):
+        pytest.skip("build123d, gmsh and CalculiX are required")
+
+    drives = {"j3_elbow": "cubemars_ak80_64_kv80",
+              "j4_wrist_roll": "cubemars_ak80_9_v3"}
+    torques = {"j3_elbow": 14.0, "j4_wrist_roll": 5.0}
+    design = generate_link(SPEC, 2, drives, torques,
+                           Path(tempfile.mkdtemp()), iterations=12)
+    assert design.generated, design.reason
+    assert design.watertight
+    assert design.triangles > 500
+    assert design.mass_kg > 0.0
+    # The support filter is inside the optimisation, not scored afterwards.
+    assert design.unsupported_fraction < 0.02
+    assert PROCESS == "slm"
+    assert ISO_LEVEL == 0.5
+    # Both interfaces are held solid, and the drive is a hole where its
+    # outline is published.
+    assert any("held solid for the interfaces" in note for note in design.notes)
+    assert any("pocket for" in note for note in design.notes)
+    # Three load cases, not one.
+    assert len(design.cross_evaluation[0]) == 4      # design plus three cases

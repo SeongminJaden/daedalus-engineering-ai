@@ -59,6 +59,10 @@ class DocumentKind(str, Enum):
     """
 
     MANUFACTURER_DATASHEET = "manufacturer_datasheet"
+    #: A 3D model or drawing the manufacturer distributes. Stronger than a
+    #: page table for geometry: it IS the geometry, and it carries features a
+    #: table cannot state.
+    MANUFACTURER_MODEL = "manufacturer_3d_model"
     MANUFACTURER_PAGE = "manufacturer_page"
     MANUFACTURER_MANUAL = "manufacturer_manual"
     DISTRIBUTOR_PAGE = "distributor_page"
@@ -308,6 +312,18 @@ CUBEMARS_AK80_64 = SourceDocument(
     url="https://www.cubemars.com/goods-1143-AK80-64.html",
     read_on="2026-09-04")
 
+CUBEMARS_AK80_64_MODEL = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK80-64 robotic actuator 3D drawing, distributed STEP model",
+    url="https://www.cubemars.com/data/cms/202602/ak80-64-robotic-actuator-3d-drawing.zip",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_MODEL)
+
+CUBEMARS_AK80_9_MODEL = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="AK80-9 V3.0 robotic actuator 3D drawing, distributed STEP model",
+    url="https://www.cubemars.com/data/cms/202602/ak80-9-v3-0-robotic-actuator-3d-drawing.zip",
+    read_on="2026-09-04", kind=DocumentKind.MANUFACTURER_MODEL)
+
 ROBOTIS_PH54 = SourceDocument(
     publisher="ROBOTIS",
     title="Dynamixel PH54-200-S500-R e-Manual specifications table",
@@ -409,7 +425,7 @@ SOURCED_MOTORS: list[SourcedMotor] = [
     SourcedMotor(
         id="cubemars_ak80_9_v3",
         manufacturer="CubeMars", part_number="AK80-9 V3.0 KV100",
-        documents=[CUBEMARS_AK80_9],
+        documents=[CUBEMARS_AK80_9, CUBEMARS_AK80_9_MODEL],
         grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
         peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
@@ -480,7 +496,10 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "of its own 9:1 stage, so no further gearbox may be stacked on "
                "it. The two speed figures are the 24 V and 48 V values and "
                "the 48 V one is stored. Backlash is printed in degrees and "
-               "stored in arc minutes.")),
+               "stored in arc minutes. The manufacturer also distributes a "
+               "STEP model of this part, which measures 99.24 by 99.24 by "
+               "38.54 mm against the 98 by 38.5 the page prints; the page "
+               "values are kept and the model is cited beside them.")),
     # --- smart actuator modules the robotics industry actually uses ---------
     SourcedMotor(
         id="robotis_ph54_200_s500_r",
@@ -737,7 +756,7 @@ SOURCED_MOTORS: list[SourcedMotor] = [
     SourcedMotor(
         id="cubemars_ak80_64_kv80",
         manufacturer="CubeMars", part_number="AK80-64 KV80",
-        documents=[CUBEMARS_AK80_64],
+        documents=[CUBEMARS_AK80_64, CUBEMARS_AK80_64_MODEL],
         grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=48.0,
         peak_torque_condition="printed without a duration or duty",
         nominal_voltage_v=48.0,
@@ -748,6 +767,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         rotor_inertia_kg_m2=564.5 * GCM2_TO_KG_M2,
         torque_constant_nm_a=0.136,
         mass_kg=0.850,
+        outer_diameter_m=0.098,
+        axial_length_m=0.0619,
         gear_ratio=64.0,
         backlash_arcmin=0.18 * 60.0,
         rated_current_a=7.0,
@@ -765,6 +786,8 @@ SOURCED_MOTORS: list[SourcedMotor] = [
             ValueSource("backlash_arcmin", "Backlash 0.18 degrees", CUBEMARS_AK80_64.title),
             ValueSource("rated_current_a", "Rated Current 7 ADC", CUBEMARS_AK80_64.title),
             ValueSource("peak_current_a", "Peak Current 19 ADC", CUBEMARS_AK80_64.title),
+            ValueSource("outer_diameter_m", "measured on the distributed STEP model: 98 mm across", CUBEMARS_AK80_64_MODEL.title),
+            ValueSource("axial_length_m", "measured on the distributed STEP model: 61.9 mm long", CUBEMARS_AK80_64_MODEL.title),
         ],
         notes=("Integrated actuator with a 64:1 stage, so it is slow: 48 rpm "
                "rated at 48 V. A joint that must turn faster than that cannot "
