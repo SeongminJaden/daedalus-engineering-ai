@@ -451,3 +451,68 @@ def format_search(search: VolumeSearch) -> str:
         lines.append(f"| {step.volume_fraction:.4f} | {mass} | {displacement} | "
                      f"{'yes' if step.feasible else 'no'} |")
     return "\n".join(lines)
+
+
+def face_motion_of_extracted(problem, density: np.ndarray, threshold: float,
+                             element_type=None) -> dict:
+    """How the loaded face MOVES AND TURNS, from the solution already got.
+
+    A part in a chain does two things to everything outboard of it: it moves
+    it, and it TURNS it. Only the first was being read. The second is the
+    larger of the two for an upstream link, because a small rotation swings
+    a long remaining reach, and it was being replaced by a coefficient of
+    1.5 taken from the tip loaded cantilever relation between deflection and
+    end slope.
+
+    That coefficient is not a constant. It is 1.5 for a tip load, 1.333 for
+    a uniformly distributed one and 2.0 for a pure end moment, and an
+    upstream link of an arm is nearest the last of those, because what
+    reaches it is dominated by the weight of everything outboard acting at a
+    distance. Picking one number would understate the links that matter most.
+
+    None of it has to be guessed. The displacement field is already solved,
+    so the face's rigid body motion is a least squares fit to it: six
+    unknowns, a translation and a rotation vector, against three equations
+    per node on a face with many nodes. What was being discarded is the
+    rotation, and this returns both.
+    """
+    from nodes import calculix as ccx
+
+    element_type = element_type or ccx.ElementType.C3D8I
+    sub, _report = retained_submesh(problem.mesh, density, threshold,
+                                    problem.fixed_nodes, problem.load_nodes)
+    fixed = sub.local_nodes(problem.fixed_nodes)
+    loaded = sub.local_nodes(problem.load_nodes)
+    result = ccx.solve(sub, problem.youngs_modulus_pa, problem.poisson_ratio,
+                       fixed, loaded, total_load_n=problem.total_load_n,
+                       load_direction=problem.load_direction,
+                       element_type=element_type)
+    if not result.converged:
+        raise RuntimeError("CalculiX reported an error on the extracted part")
+
+    coords = np.asarray(sub.node_coords)[loaded]
+    motion = np.asarray(result.displacements)[loaded]
+    centre = coords.mean(axis=0)
+    arm = coords - centre
+
+    # u_i = t + w x r_i, linear in (t, w). Three rows per node.
+    rows = np.zeros((3 * len(loaded), 6))
+    for index, r in enumerate(arm):
+        rows[3 * index:3 * index + 3, :3] = np.eye(3)
+        rows[3 * index + 0, 3:] = [0.0, r[2], -r[1]]
+        rows[3 * index + 1, 3:] = [-r[2], 0.0, r[0]]
+        rows[3 * index + 2, 3:] = [r[1], -r[0], 0.0]
+    fit, *_ = np.linalg.lstsq(rows, motion.reshape(-1), rcond=None)
+    translation, rotation = fit[:3], fit[3:]
+    residual = motion - (translation + np.cross(rotation, arm))
+    return {
+        "translation_m": [float(v) for v in translation],
+        "rotation_rad": [float(v) for v in rotation],
+        "face_centre_m": [float(v) for v in centre],
+        # How much of the face's motion a rigid body does NOT explain. A
+        # large value means the face is warping rather than moving, and the
+        # rotation read off it is not a rotation of anything.
+        "residual_m": float(np.abs(residual).max()),
+        "load_direction_m": abs(float(np.mean(
+            motion[:, problem.load_direction]))),
+    }

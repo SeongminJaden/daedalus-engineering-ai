@@ -69,6 +69,24 @@ check in this repository.
 | mass | 8.312 kg of links at a volume fraction of 0.3, which is a fraction OF A DOMAIN and the domains grew. Meaningless until the per link search finishes |
 | not done | the volume fraction search, covers, wiring, bearings beyond a seat tolerance, the spigot fit (no boss tolerance is printed), the AK80-9 dowel angles (not published and not measurable on its model) |
 
+WITHDRAWN RESULT. Every statement in this repository before 2026-09-05 that
+a link "meets its deflection limit" was measuring the wrong quantity, and
+the numbers behind those statements should not be quoted. Each link was
+judged on its own loaded face moving under its own load, and those six
+numbers were added. A link in a chain also ROTATES everything outboard of
+it, and that term was absent: measured on a worked pair the sum reads 0.15
+mm where the tool sees 0.51, and the factor is largest for the base column,
+which is 150 mm long with the whole 600 mm arm above it. The judgements
+were not conservative-but-crude; they understated the tool's deflection,
+and by a different amount per link.
+
+It is corrected by reading each face's rigid body ROTATION out of the
+CalculiX solution that was already being computed, and crossing it with the
+vector from that face to the tool. Nothing new is solved. What changes is
+that the rotation is no longer discarded, and that contributions are added
+as vectors rather than as scalars, since two links can move the tool in
+different directions.
+
 Defects found by standing the parts up, none of which a check here could see:
 
 - The extracted body sat half an element low on all three axes. Volume is
@@ -83,6 +101,12 @@ Defects found by standing the parts up, none of which a check here could see:
 - Two links claimed 235 cubic centimetres of the same space at the shoulder.
 - A placement rule that works on every PAIR of joints made the arm climb
   140.7 mm at each pitch joint and never come back.
+- The reach was measured as the sum of the link lengths. The base column is
+  150 mm long and adds no reach at all, because it stands up rather than
+  out, so the tool came out 750 mm along a 600 mm arm. The reach check
+  itself passed throughout, because it uses the joint origins; the wrong
+  number lived only inside the deflection weighting and appeared the moment
+  that was written. A right length and a wrong reach.
 
 Operational notes: killing a `ProcessPoolExecutor` parent does NOT kill its
 spawned workers, and two abandoned runs once held 11.7 of 16 cores while a

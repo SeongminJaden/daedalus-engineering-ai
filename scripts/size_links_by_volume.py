@@ -30,6 +30,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import numpy as np
+
 OUT = Path("data/generated/manipulator_volume_search")
 
 
@@ -40,8 +42,8 @@ def _limit_threads(per_worker: int) -> None:
 
 
 def _search_one(payload):
-    (index, drives, torques, sections, limit_m, ladder, iterations,
-     threads) = payload
+    (index, drives, torques, sections, limit_m, ladder, iterations, threads,
+     lever_m) = payload
     _limit_threads(threads)
 
     import numpy as np
@@ -50,7 +52,7 @@ def _search_one(payload):
     from optimization.topology import SimpProblem
     from optimization.topology.manufacturing import support_projection_with_gradient
     from optimization.topology.multiload import optimize_multiload
-    from optimization.topology.verify import tip_displacement_of_extracted
+    from optimization.topology.verify import face_motion_of_extracted
     from projects.manipulator.links import link_domain, link_load_cases
     from projects.manipulator.spec import SPEC
 
@@ -95,16 +97,30 @@ def _search_one(payload):
         result = runner(problem, max_iterations=iterations)
         point = {"volume_fraction": fraction}
         try:
-            displacement = tip_displacement_of_extracted(problem,
-                                                         result.density, 0.5)
+            motion = face_motion_of_extracted(problem, result.density, 0.5)
         except Exception as exc:
             point.update({"feasible": False, "note": str(exc)[:120]})
             curve.append(point)
             continue
         kept = int((result.density >= 0.5).sum())
+        # WHAT THIS LINK DOES TO THE TOOL, as a vector, from the solved
+        # field. The face's translation moves everything outboard of it and
+        # its rotation swings the reach still to come, and both come out of
+        # a rigid body fit to the displacements rather than out of a
+        # coefficient. `lever_m` is the vector from this face to the tool in
+        # the arm's frame, so the cross product is the swing.
+        lever = np.asarray(lever_m, dtype=float)
+        rotation = np.asarray(motion["rotation_rad"], dtype=float)
+        at_tool = np.asarray(motion["translation_m"]) + np.cross(rotation,
+                                                                 lever)
         point.update({
             "mass_kg": kept * problem.mesh.element_volume * material.density_kg_m3,
-            "tip_displacement_m": float(displacement),
+            "tip_displacement_m": motion["load_direction_m"],
+            "translation_m": motion["translation_m"],
+            "rotation_rad": motion["rotation_rad"],
+            "rigid_fit_residual_m": motion["residual_m"],
+            "at_tool_m": [float(v) for v in at_tool],
+            "at_tool_magnitude_m": float(np.linalg.norm(at_tool)),
             "feasible": True})
         curve.append(point)
 
@@ -123,6 +139,30 @@ def _search_one(payload):
 #: Spending 98 percent of an unqualified limit is not a design; it is a
 #: rounding error away from failing. Eighty leaves a fifth.
 DESIGN_MARGIN = 0.80
+
+
+def tool_levers(spec) -> dict:
+    """The vector from each link's distal face to the tool, in the arm frame.
+
+    This replaces the amplification coefficient entirely. A link's face
+    rotation crossed with this vector IS its contribution to the tool's
+    motion, with no assumption about the load shape: the 1.5 that stood here
+    was the tip loaded cantilever relation, and it is 1.333 under a
+    distributed load and 2.0 under a pure end moment, which is what an
+    upstream link of an arm mostly sees. Choosing among them would have
+    understated exactly the links that matter most.
+    """
+    joints = spec.joints()
+    tool = np.array([spec.reach_check_m(), 0.0, 0.0])
+    levers = {}
+    along = 0.0
+    for index, link in enumerate(spec.links()):
+        following = joints[index + 1] if index + 1 < len(joints) else None
+        along += (following.origin_x_m if following is not None
+                  else link.length_m)
+        levers[link.name] = [float(v) for v in
+                             (tool - np.array([along, 0.0, 0.0]))]
+    return levers
 
 
 def amplification(spec) -> dict:
@@ -188,7 +228,22 @@ def allocate(curves: list[dict], budget_m: float,
     factors = factors or {}
 
     def at_tool(row, point):
-        return point["tip_displacement_m"] * factors.get(row["link"], 1.0)
+        """This link's contribution to the tool's motion, as a VECTOR.
+
+        Adding scalars was a second error underneath the first. A rotation
+        is a vector and its effect is a cross product, so two links can move
+        the tool in different directions and partly cancel, or in the same
+        direction and add. This arm's pitch axes all lie along z so most of
+        it does line up, but the roll joints do not, and a scalar sum
+        pretends they do.
+        """
+        vector = point.get("at_tool_m")
+        if vector is not None:
+            return np.asarray(vector, dtype=float)
+        # Nothing measured: fall back on the coefficient, along the load
+        # direction only, and the caller can see which happened.
+        estimate = point["tip_displacement_m"] * factors.get(row["link"], 1.0)
+        return np.array([0.0, -estimate, 0.0])
 
     usable = [[point for point in row.get("curve", []) if point.get("feasible")]
               for row in curves]
@@ -198,8 +253,10 @@ def allocate(curves: list[dict], budget_m: float,
                           "curve, so no allocation exists"}
     best = None
     for combination in itertools.product(*usable):
-        total = sum(at_tool(row, point)
-                    for row, point in zip(curves, combination))
+        vector = sum((at_tool(row, point)
+                      for row, point in zip(curves, combination)),
+                     np.zeros(3))
+        total = float(np.linalg.norm(vector))
         if total > budget_m:
             continue
         mass = sum(point["mass_kg"] for point in combination)
@@ -210,19 +267,27 @@ def allocate(curves: list[dict], budget_m: float,
                 "reason": "no combination meets the budget; the lightest "
                           "reachable deflection is above it"}
     mass, total, combination = best
+    vector = sum((at_tool(row, point)
+                  for row, point in zip(curves, combination)), np.zeros(3))
     return {"allocated": True, "total_mass_kg": mass,
+            "total_vector_m": [float(v) for v in vector],
             "total_deflection_m": total, "budget_m": budget_m,
             "combinations": int(math.prod(len(o) for o in usable)),
-            "raw_sum_m": sum(point["tip_displacement_m"]
-                             for point in combination),
+            "raw_scalar_sum_m": sum(point["tip_displacement_m"]
+                                    for point in combination),
             "per_link": [
                 {"link": row["link"],
                  "volume_fraction": point["volume_fraction"],
                  "mass_kg": point["mass_kg"],
                  "own_displacement_m": point["tip_displacement_m"],
-                 "amplification": factors.get(row["link"], 1.0),
-                 "at_the_tool_m": at_tool(row, point),
-                 "share_of_budget": at_tool(row, point) / budget_m}
+                 "rotation_rad": point.get("rotation_rad"),
+                 "rigid_fit_residual_m": point.get("rigid_fit_residual_m"),
+                 "coefficient_estimate": factors.get(row["link"], 1.0),
+                 "at_the_tool_m": [float(v) for v in at_tool(row, point)],
+                 "at_the_tool_magnitude_m": float(
+                     np.linalg.norm(at_tool(row, point))),
+                 "share_of_budget": float(
+                     np.linalg.norm(at_tool(row, point))) / budget_m}
                 for row, point in zip(curves, combination)]}
 
 
@@ -237,6 +302,9 @@ def by_length_share(curves: list[dict]) -> dict:
     for row in curves:
         options = [p for p in row.get("curve", []) if p.get("feasible")
                    and p["tip_displacement_m"] <= row["share_limit_m"]]
+        # Judged on the link's OWN face motion, which is what the old rule
+        # did, so the comparison shows what that rule chose rather than what
+        # it would have chosen knowing better.
         if not options:
             return {"allocated": False,
                     "reason": f"{row['link']} meets no point of its own share"}
@@ -271,12 +339,14 @@ def main(ladder=(0.15, 0.25, 0.35, 0.45), iterations: int = 40,
     # of the reach. A link twice as long may bend twice as far, because the
     # tip sees the sum.
     reach = SPEC.reach_check_m()
+    levers = tool_levers(SPEC)
     payloads = []
     for index, link in enumerate(SPEC.links()):
         share = link.length_m / reach
         payloads.append((index, drives, torques, sections,
                          max(SPEC.tip_deflection_limit_m * share, 1e-5),
-                         tuple(ladder), iterations, threads_per_worker))
+                         tuple(ladder), iterations, threads_per_worker,
+                         levers[link.name]))
 
     started = time.perf_counter()
     if workers > 1:
