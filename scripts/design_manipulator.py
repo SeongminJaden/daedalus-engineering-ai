@@ -31,6 +31,7 @@ from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # 
                                          link_design_stage,
                                          manufacturability_stage,
                                          measurement_plan_stage,
+                                         mount_stage,
                                          pinocchio_cross_check, policy_stage,
                                          reflected_inertia_stage,
                                          spigot_stage,
@@ -125,6 +126,7 @@ def main() -> int:
     stages["fatigue"] = fatigue_stage(stages["dynamics"], sections, SPEC)
     stages["features"] = features_stage(SPEC, sections)
     stages["bolts"] = bolted_joint_stage(stages["drivetrain"], sections, SPEC)
+    stages["mounts"] = mount_stage(SPEC)
     stages["assembly"] = assembly_stage(arm, SPEC, directory=out / "assembly")
     print("assembly done", flush=True)
 
@@ -206,6 +208,8 @@ def main() -> int:
         section("7. Fasteners and tolerances", stages["features"]),
         section("7b. The bolted interface, as far as the data allows",
                 stages["bolts"]),
+        section("9b. The parts that hold the arm to the world",
+                stages["mounts"]),
         section("10. Assembly, Gazebo and interference", stages["assembly"]),
         "## 11. Bill of materials\n",
         "Sourced parts, whose numbers come from a vendor page:\n",

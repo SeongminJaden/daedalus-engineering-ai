@@ -1494,3 +1494,56 @@ def spigot_stage(dynamics: StageResult, drivetrain: StageResult,
         "toleranced feature on the face at 21.0 +0.02. A located fit needs "
         "the boss measured or an H7 recess cut to the measured size.")
     return result
+
+
+def mount_stage(spec: ManipulatorSpec = SPEC,
+                directory: str = "data/generated/manipulator_mounts"
+                ) -> StageResult:
+    """The two parts that hold the arm to the world, as generated.
+
+    This stage reads what `scripts/generate_mounts.py` wrote rather than
+    running the optimisation again, because a design document should report
+    the parts that exist and not a fresh set nobody has seen. If they have
+    not been generated it says so, which is the same answer it gave for
+    several revisions when they did not exist at all.
+    """
+    import json
+    from pathlib import Path
+
+    result = StageResult(name="the parts that hold the arm to the world")
+    summary = Path(directory) / "summary.json"
+    if not summary.exists():
+        result.could_not.append(
+            f"The base mount and the tool plate have not been generated. Run "
+            f"scripts/generate_mounts.py; the files live under {directory} "
+            f"and are not committed.")
+        return result
+
+    data = json.loads(summary.read_text())
+    for part in data.get("parts", []):
+        row = {"part": part["part"], "generated": part["generated"],
+               "mass_kg": part.get("mass_kg"),
+               "envelope_mm": part.get("envelope_mm"),
+               "triangles": part.get("triangles"),
+               "watertight": part.get("watertight")}
+        loads = part.get("loads") or {}
+        row.update({"vertical_n": loads.get("vertical_n"),
+                    "overturning_nm": loads.get("overturning_nm"),
+                    "reaction_nm": loads.get("yaw_reaction_nm")})
+        if not part["generated"]:
+            row["reason"] = part.get("reason")
+        result.rows.append(row)
+        for item in part.get("unresolved", []):
+            result.could_not.append(item)
+
+    made = [r for r in result.rows if r["generated"]]
+    if made:
+        result.notes.append(
+            f"{len(made)} parts, {sum(r['mass_kg'] for r in made):.3f} kg "
+            f"together, in {data.get('units', 'unknown units')} at a volume "
+            f"fraction of {data.get('volume_fraction')}")
+    result.notes.append(
+        "the base mount is sized by its OVERTURNING MOMENT and not by the "
+        "weight it holds: the arm stretched out puts 31.8 N m on it against "
+        "76 N of weight, and the payload alone at full reach is 17.6 of that")
+    return result
