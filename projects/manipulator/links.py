@@ -345,6 +345,48 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         void_note += (f"; {taken} elements belong to a neighbouring link's "
                       f"domain and are held empty")
 
+    # HOLD THE BOLT RING SOLID. Cutting the boss and the tail out leaves a
+    # thin annulus at each mounting face, and that annulus is what the bolts
+    # bear on: 8 mm wide on the AK80-64's output face, with eight 3.4 mm
+    # holes through it leaving 2.3 mm each side. Nothing else in this problem
+    # protects it. A volume constraint would happily spend that material
+    # somewhere stiffer and leave the holes standing in air, and the bolt
+    # access check would still pass, because it looks for room to put a key
+    # in rather than for something to tighten against.
+    from .interfaces import drive_profile, face_for
+
+    rings = 0
+    for other, at_x, side in ((joint, 0.0, +1.0),
+                              (following, span, -1.0) if following is not None
+                              else (None, 0.0, 0.0)):
+        if other is None:
+            continue
+        carried = actuator_for(other.name, drives)
+        profile = drive_profile(str(drives.get(other.name, "")))
+        face = face_for(str(drives.get(other.name, "")), "output")
+        if carried is None or profile is None or face is None:
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        origin = _drive_face(spec, link_index, other, at_x, height, width, mine)
+        offset = centroids - origin
+        along = offset @ axis
+        radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+        if side > 0:                       # driven: the ring is above zero
+            low, high = 0.0, flange
+            inner = profile[-1][2]
+        else:                              # carrying: it is below the tail
+            separation = face_separation_m(str(drives.get(other.name, "")))
+            low, high = -(separation or 0.0) - flange, -(separation or 0.0)
+            inner = profile[0][2]
+        outer = 0.5 * carried.outer_diameter_m
+        ring = ((along >= low) & (along <= high)
+                & (radial >= inner) & (radial <= outer))
+        rings += int(ring.sum())
+        passive_solid = passive_solid | ring
+    if rings:
+        void_note += (f"; {rings} elements held solid as the bolt rings at "
+                      f"the mounting faces")
+
     # THE DRIVE WINS OVER THE FLANGE where they meet. The AK80-64's output
     # boss stands 8 mm proud of its mounting face, which is 8 mm into a 9 mm
     # flange, so the flange has to be relieved for it. Holding both would ask
@@ -781,39 +823,26 @@ def drive_envelopes(spec, link_index, drives, span_m, height_m, width_m, box
         if actuator is None or not (actuator.outer_diameter_m
                                     and actuator.axial_length_m):
             continue
-        separation = face_separation_m(str(drives.get(other.name, "")))
-        if not separation:
+        from .interfaces import drive_profile
+
+        profile = drive_profile(str(drives.get(other.name, "")))
+        if profile is None:
             continue
-        # ONLY BETWEEN THE MOUNTING FACES. A drive is not a cylinder. Beyond
-        # each mounting face it steps down to a boss, and on the AK80-64 that
-        # is radius 40 on the output side and 35.5 on the housing side
-        # against 49 in the middle. The material between the boss and the
-        # full diameter, out there, is not the motor: it is the link's own
-        # flesh and the bolt circle runs through it, 44.5 mm out on the
-        # output face and 42.5 on the housing. Subtracting a plain cylinder
-        # would take the bolts' bearing material away and leave the holes
-        # standing in air, and the bolt access check would still have passed
-        # because it looks for room for a key rather than for something to
-        # tighten against.
-        #
-        # Between the faces the drive IS its full diameter, on every drawing
-        # read here, so that is the part that is subtracted. It needs no
-        # measurement beyond the two insets.
         axis = local_axis(spec, link_index, other.axis)
         face_plane = _drive_face(spec, link_index, other, at_x, height_m,
                                  width_m, box)
-        radius = (0.5 * actuator.outer_diameter_m
-                  + ACTUATOR_RADIAL_CLEARANCE_M)
-        start = face_plane - axis * separation
-        cutters.append({
-            "end": "drive", "kind": "envelope", "face": other.name,
-            "thread": "", "diameter_m": 2.0 * radius,
-            "axis": [float(v) for v in axis],
-            "start_m": [float(v) for v in start],
-            "end_m": [float(v) for v in face_plane],
-            "note": (f"between the mounting faces of "
-                     f"{actuator.part_number}, {separation * 1000:.1f} mm "
-                     f"apart, where it is at its full diameter"),
+        for low, high, radius in profile:
+            start = face_plane + axis * low
+            end = face_plane + axis * high
+            cutters.append({
+                "end": "drive", "kind": "envelope", "face": other.name,
+                "thread": "", "diameter_m": 2.0 * radius,
+                "axis": [float(v) for v in axis],
+                "start_m": [float(v) for v in start],
+                "end_m": [float(v) for v in end],
+                "note": (f"{actuator.part_number} from {low * 1000:.1f} to "
+                         f"{high * 1000:.1f} mm of its own axis at radius "
+                         f"{radius * 1000:.1f}"),
             "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0})
     return cutters
 

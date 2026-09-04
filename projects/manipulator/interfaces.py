@@ -523,3 +523,48 @@ def face_separation_m(actuator_id: str) -> float | None:
     if not length:
         return None
     return float(length - output.face_inset_m - housing.face_inset_m)
+
+
+#: What a drive actually occupies along its own axis, in steps, measured on
+#: the manufacturers' 3D models in 3 mm sections with the OUTPUT MOUNTING
+#: FACE at zero. Radii are the measured maximum plus 1.0 mm of clearance.
+#:
+#: A drive is not a cylinder and the difference is not cosmetic. Beyond each
+#: mounting face it steps down to a boss, and the material out there at full
+#: radius is not the motor: it is the link's own flesh with the bolt circle
+#: running through it. Subtracting a plain cylinder would take the bolts'
+#: bearing material away and leave the holes standing in air. Subtracting
+#: only the part between the faces leaves the boss and the tail uncut, and
+#: an iso surface reaches half a cell, 4.1 mm on these grids, into both.
+#:
+#: In every segment the cut radius exceeds the measured maximum, so the drive
+#: is fully contained; outside the faces it is smaller than the bolt circle,
+#: so the flesh survives. AK80-64 output: cut 41.0 against a 44.5 mm bolt
+#: circle, 3.5 mm of ring. Housing: 36.5 against 42.5, 6.0 mm.
+DRIVE_PROFILE_M: dict[str, tuple[tuple[float, float, float], ...]] = {
+    "cubemars_ak80_64_kv80": ((-0.0539, -0.0440, 0.0365),
+                              (-0.0440, 0.0010, 0.0500),
+                              (0.0010, 0.0080, 0.0410)),
+    "cubemars_ak80_9_v3": ((-0.0355, -0.0245, 0.0371),
+                           (-0.0245, 0.0000, 0.0500),
+                           (0.0000, 0.0030, 0.0256)),
+    "cubemars_ak60_6_v3_kv80": ((-0.0415, 0.0000, 0.0405),
+                                (0.0000, 0.0015, 0.0255)),
+}
+
+#: The AK60-6's boss radius is the drawing's printed 49 mm diameter and not a
+#: measurement: its model carries 108 bodies and the sectioning booleans
+#: failed on most of them. Every other number above is measured.
+DRIVE_PROFILE_UNMEASURED = {
+    "cubemars_ak60_6_v3_kv80": ("the boss segment radius comes from the "
+                                "drawing's printed 49 mm diameter, not from "
+                                "the model, whose sectioning failed"),
+}
+
+
+def drive_profile(actuator_id: str):
+    """The stepped profile, or None where none was measured."""
+    for key, profile in DRIVE_PROFILE_M.items():
+        if key in actuator_id or actuator_id in key:
+            return profile
+    return None
