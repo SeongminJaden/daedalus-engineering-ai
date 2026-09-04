@@ -63,6 +63,15 @@ class ManipulatorSpec:
     #: shoulder, which is what "maximum reach" means for this layout.
     base_height_m: float = 0.150
 
+    #: Room between two drives for the structure that joins them. CHOSEN at
+    #: 10 mm, and the arithmetic is stated rather than implied: a 3 mm housing
+    #: wall on each drive plus 4 mm to get a fastener head and a wire past.
+    #: It is a design allowance and not a measurement. Without it the envelope
+    #: check passes a 0.25 mm gap, which is two actuators touching in mid air
+    #: with nothing holding them together, and a Fusion model of exactly that
+    #: is what put this constant here.
+    assembly_clearance_m: float = 0.010
+
     #: The room each wrist joint gets along the arm. This number has been
     #: wrong twice and the arithmetic is now written out.
     #:
@@ -70,13 +79,15 @@ class ManipulatorSpec:
     #: and its DIAMETER when the axis is across it. The wrist roll is a 38.5 mm
     #: long drive on an along-arm axis; the wrist pitch is the same drive on a
     #: cross-arm axis, so it occupies 98 mm. Two neighbours need half of each,
-    #: which is 19.25 + 49.0 = 68.25 mm, rounded up to 68.5.
+    #: which is 19.25 + 49.0 = 68.25 mm, plus the 10 mm assembly clearance,
+    #: rounded up to 78.5.
     #:
     #: All three wrist gaps take that number because this specification
     #: carries one wrist spacing, so the binding pair sets them all. The three
-    #: wrist joints therefore take 205.5 mm of the 600 mm reach, which is the
-    #: real price of hanging 98 mm drives off a serial wrist.
-    wrist_spacing_m: float = 0.0685
+    #: wrist joints therefore take 235.5 mm of the 600 mm reach, which is the
+    #: real price of hanging 98 mm drives off a serial wrist: one wrist joint
+    #: is now longer than the forearm.
+    wrist_spacing_m: float = 0.0785
 
     #: What is left of the reach after the wrist, split in the same ratio the
     #: first version used. These are derived rather than stated, so a change

@@ -22,7 +22,8 @@ from core.materials import get_material  # noqa: E402
 from projects.manipulator.arm import build_arm, stretched_pose  # noqa: E402
 from projects.manipulator.loop import run_loop  # noqa: E402
 from projects.manipulator.spec import SPEC  # noqa: E402
-from projects.manipulator.stages import (assembly_stage, bus_voltage_stage,  # noqa: E402
+from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # noqa: E402
+                                         bus_voltage_stage,
                                          compliance_stage, envelope_stage,
                                          drive_comparison_stage, drivetrain_stage,
                                          dynamics_stage, fatigue_stage,
@@ -111,6 +112,7 @@ def main() -> int:
 
     stages["fatigue"] = fatigue_stage(stages["dynamics"], sections, SPEC)
     stages["features"] = features_stage(SPEC, sections)
+    stages["bolts"] = bolted_joint_stage(stages["drivetrain"], sections, SPEC)
     stages["assembly"] = assembly_stage(arm, SPEC, directory=out / "assembly")
     print("assembly done", flush=True)
 
@@ -176,6 +178,8 @@ def main() -> int:
     document += [
         section("6. Fatigue over the duty cycle", stages["fatigue"]),
         section("7. Fasteners and tolerances", stages["features"]),
+        section("7b. The bolted interface, as far as the data allows",
+                stages["bolts"]),
         section("10. Assembly, Gazebo and interference", stages["assembly"]),
         "## 11. Bill of materials\n",
         "Sourced parts, whose numbers come from a vendor page:\n",

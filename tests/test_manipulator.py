@@ -256,9 +256,9 @@ def test_no_joint_with_a_printed_outline_interferes_with_its_own_drive():
     assert checked, "no joint could be checked at all"
     for row in checked:
         assert row["diameter_check"] == "fits", row
-        if row.get("spacing_check") not in (None,
-                                            "not printed for one of the pair"):
-            assert row["spacing_check"] == "fits", row
+        check = row.get("spacing_check")
+        if check not in (None, "not printed for one of the pair"):
+            assert check.startswith("fits"), row
     unchecked = [row for row in envelope.rows
                  if row.get("diameter_check") == "not printed"]
     assert unchecked, "every outline was printed, which is not this catalogue"
@@ -281,3 +281,61 @@ def test_the_along_arm_extent_of_a_drive_depends_on_its_axis():
     # Two neighbours need half of each.
     assert 0.5 * (along + across) == pytest.approx(0.06825)
     assert SPEC.wrist_spacing_m >= 0.06825
+
+
+def test_two_drives_that_merely_touch_are_not_assembled():
+    """A Fusion model of the previous design showed the two wrist drives
+    clearing each other by 0.25 mm, which is no room for a housing wall, a
+    bearing, a bolt head or a wire. The envelope rule now demands the stated
+    assembly clearance on top of the touching distance."""
+    assert SPEC.assembly_clearance_m == 0.010
+    touching = 0.5 * (0.0385 + 0.098)
+    assert SPEC.wrist_spacing_m >= touching + SPEC.assembly_clearance_m
+    assert SPEC.reach_check_m() == pytest.approx(SPEC.reach_m)
+    # One wrist joint is now longer than the forearm, which is the finding.
+    assert SPEC.wrist_spacing_m < SPEC.forearm_m
+    assert SPEC.wrist_m > 0.3 * SPEC.reach_m
+
+
+@pytest.mark.slow
+def test_the_bolted_interface_runs_the_tension_path_and_refuses_the_friction_one():
+    from physics.dynamics import mass_matrix
+    from projects.manipulator.arm import stretched_pose
+    from projects.manipulator.stages import (bolted_joint_stage, drivetrain_stage,
+                                             dynamics_stage)
+
+    result = run_loop(SPEC)
+    arm = build_arm(result.data["final_sections"], SPEC)
+    dynamics = dynamics_stage(arm, SPEC, samples=60)
+    density = get_material(arm.material_id).density_kg_m3
+    inertia = mass_matrix(arm, stretched_pose(SPEC), density)
+    load_inertias = {joint.name: float(inertia[i, i])
+                     for i, joint in enumerate(arm.actuated_joints())}
+    drives = drivetrain_stage(dynamics, SPEC, load_inertias)
+    bolts = bolted_joint_stage(drives, result.data["final_sections"], SPEC)
+
+    assert len(bolts.rows) == 6
+    for row in bolts.rows:
+        assert row["preload_n"] > 0.0
+        assert not row["separated"], row
+        assert row["separation_margin"] > 1.0, row
+        assert row["yield_safety"] > 1.0, row
+    assert any("friction" in gap.lower() for gap in bolts.could_not)
+    assert any("VDI 2230" in gap for gap in bolts.could_not)
+
+
+@pytest.mark.slow
+def test_the_flange_cannot_be_fastened_as_drawn_and_says_so():
+    """A 6.4 mm counterbore in a 3 mm wall and 3 mm of thread engagement where
+    aluminium wants 9. Both were in the design for several commits before
+    anyone asked how the bolts actually go in."""
+    from projects.manipulator.stages import features_stage
+
+    result = run_loop(SPEC)
+    features = features_stage(SPEC, result.data["final_sections"])
+    for row in features.rows:
+        assert row["counterbore_fits_wall"] is False
+        assert "would go through it" in row["counterbore_note"]
+        assert row["tapped_wall_is_enough"] is False
+        assert "through bolt" in row["fastening_note"]
+    assert any("cannot be fastened" in gap for gap in features.could_not)

@@ -649,6 +649,31 @@ def features_stage(spec: ManipulatorSpec, sections) -> StageResult:
             "screw_material": material_for(screw)[0],
             "general_tolerance_mm": general_tolerance_mm(
                 section.outer_height_m * 1000, "m")})
+    # Two feasibility checks nobody had made. A counterbore has to fit in the
+    # wall it is cut into, and a tapped hole in aluminium needs more thread
+    # engagement than the wall can give.
+    for row in result.rows:
+        wall = sections[row["interface"].split()[0]].wall_thickness_m
+        depth = row["counterbore_depth_mm"] / 1000.0
+        row["wall_m"] = wall
+        row["counterbore_fits_wall"] = depth <= wall
+        if not row["counterbore_fits_wall"]:
+            row["counterbore_note"] = (
+                f"a {depth * 1000:.1f} mm counterbore cannot be cut in a "
+                f"{wall * 1000:.1f} mm wall: it would go through it. Either "
+                f"the head sits proud, or the flange is locally thickened, "
+                f"and this design does neither")
+        engagement_needed = 1.5 * 0.006          # 1.5 d for a tapped aluminium hole
+        row["thread_engagement_needed_m"] = engagement_needed
+        row["tapped_wall_is_enough"] = wall >= engagement_needed
+        if not row["tapped_wall_is_enough"]:
+            row["fastening_note"] = (
+                f"a tapped {wall * 1000:.1f} mm wall gives {wall * 1000:.1f} "
+                f"mm of engagement against the {engagement_needed * 1000:.1f} "
+                f"mm that 1.5 diameters asks for in aluminium, so this joint "
+                f"needs a through bolt and a nut, a thicker local boss or an "
+                f"insert. None of the three is in this design")
+
     notes = DrawingNotes(
         part_id="upper_arm",
         general_tolerance_class="m",
@@ -661,6 +686,13 @@ def features_stage(spec: ManipulatorSpec, sections) -> StageResult:
         "the bearing seat is an H7/k6 transition fit, computed by the fits "
         "module; the tolerance notes live beside the STEP because AP203 "
         "carries no tolerance entity")
+    result.could_not.append(
+        "As drawn, the joint flanges cannot be fastened. The counterbore is "
+        "deeper than the wall and a tapped wall gives less than half the "
+        "thread engagement aluminium needs, so the design needs a local boss "
+        "or a through bolt with a nut, and has neither. The rows above say so "
+        "per interface. 1.5 diameters of engagement is a practice rule stated "
+        "here, not a measurement from a source in this repository.")
     result.could_not.append(
         "The bolts are sized by the catalogue table and the interface is "
         "described, but no bolted joint analysis was run here: the preload, "
@@ -1111,12 +1143,22 @@ def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
         if extent is None or next_extent is None:
             entry["spacing_check"] = "not printed for one of the pair"
         else:
-            required = 0.5 * (extent + next_extent)
+            touching = 0.5 * (extent + next_extent)
+            required = touching + spec.assembly_clearance_m
+            entry["touching_spacing_m"] = touching
             entry["required_spacing_m"] = required
-            entry["spacing_check"] = (
-                "fits" if required <= spacing_after[name]
-                else f"INTERFERES by "
-                     f"{(required - spacing_after[name]) * 1000:.1f} mm")
+            if required <= spacing_after[name]:
+                entry["spacing_check"] = "fits with the assembly clearance"
+            elif touching <= spacing_after[name]:
+                entry["spacing_check"] = (
+                    f"TOUCHING: clear by "
+                    f"{(spacing_after[name] - touching) * 1000:.2f} mm, which "
+                    f"is less than the {spec.assembly_clearance_m * 1000:.0f} "
+                    f"mm a housing and its fasteners need")
+            else:
+                entry["spacing_check"] = (
+                    f"INTERFERES by "
+                    f"{(touching - spacing_after[name]) * 1000:.1f} mm")
         result.rows.append(entry)
 
     printed = [r for r in result.rows
@@ -1128,9 +1170,90 @@ def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
         "the along-arm extent of a drive is its length when its axis runs "
         "along the arm and its DIAMETER when the axis is across it, which is "
         "every pitch joint")
+    result.notes.append(
+        f"the spacing must clear the touching distance by the "
+        f"{spec.assembly_clearance_m * 1000:.0f} mm assembly clearance; two "
+        f"drives that merely do not overlap have nowhere to put a housing "
+        f"wall, a bearing, a bolt head or a wire")
     result.could_not.append(
         "Most actuator pages print no outline, so this check is unverifiable "
         "for those joints. A frameless motor has no outline to print: its "
         "housing, bearings and shaft are somebody's design and are not in "
         "this one, and its mass is not in the total either.")
+    return result
+
+
+# ------------------------------------------------- 7b. the bolted interface
+
+def bolted_joint_stage(drivetrain: StageResult, sections,
+                       spec: ManipulatorSpec = SPEC,
+                       size: str = "M6", bolt_count: int = 4) -> StageResult:
+    """The joint flange bolts, as far as the data allows.
+
+    WHAT RUNS. The tension path: preload from the proof load, the load factor
+    from bolt and member stiffness, separation, bolt yield and bolt fatigue.
+    physics.joints.bolted does all of it and needs no friction coefficient
+    beyond the nut factor it already carries.
+
+    WHAT DOES NOT. Whether the joint carries its torque by friction. That
+    needs a coefficient of friction for the clamped faces, and no source in
+    this repository gives one for aluminium against aluminium. VDI 2230 is the
+    standard that tabulates them; its tables are not public and the published
+    summaries this project could read give a range for steel and nothing for
+    the surfaces here. So the friction grip check is refused with the number
+    it would need, rather than run with a plausible 0.15.
+
+    The tensile load per bolt is the standard first approximation for a bolt
+    circle in bending: the moment is carried by the bolts on one side, and the
+    most loaded one sees 2M / (n r). It is an approximation and is labelled as
+    one; a real flange analysis distributes the load by stiffness.
+    """
+    from physics.joints.bolted import PropertyClass, analyze_joint
+
+    result = StageResult(name="bolted interface")
+    links = [link.name for link in spec.links()]
+    joints = [joint.name for joint in spec.joints()]
+    for row in drivetrain.rows:
+        if row.get("status") != "selected":
+            continue
+        link_name = links[joints.index(row["joint"])]
+        section = sections[link_name]
+        radius = 0.5 * max(section.outer_height_m, section.outer_width_m) * 0.7
+        moment = row["required_peak_nm"] / spec.torque_margin
+        per_bolt = 2.0 * moment / (bolt_count * max(radius, 1e-6))
+        grip = 2.0 * section.wall_thickness_m + 0.002
+        analysis = analyze_joint(
+            size=size, grade=PropertyClass.C8_8,
+            grip_length_m=grip, external_load_n=per_bolt,
+            external_load_min_n=0.0, member_material="aluminium",
+            member_modulus_pa=68.9e9)
+        result.rows.append({
+            "joint": row["joint"], "flange": link_name,
+            "bolts": f"{bolt_count} x {size} class 8.8",
+            "bolt_circle_radius_m": radius,
+            "moment_nm": moment,
+            "load_per_bolt_n": per_bolt,
+            "preload_n": analysis.preload_n,
+            "tightening_torque_nm": analysis.tightening_torque_nm,
+            "separation_margin": analysis.separation_margin,
+            "bolt_load_n": analysis.bolt_load_n,
+            "separated": analysis.separated,
+            "yield_safety": analysis.yield_safety_factor,
+            "load_factor": analysis.load_factor})
+    result.notes.append(
+        "the load per bolt is the first approximation for a bolt circle in "
+        "bending, 2M over n r; a real flange distributes it by stiffness")
+    result.notes.append(
+        "the nut factor is 0.2 dry, and the torque to preload relation it "
+        "belongs to scatters by about 30 percent, so the achieved preload is "
+        "uncertain by that much before anything else is")
+    result.could_not.append(
+        "Whether these joints carry their torque by FRICTION cannot be "
+        "checked. That needs a coefficient of friction for aluminium against "
+        "aluminium at the clamped faces. VDI 2230 tabulates such values and "
+        "its tables are not public; the summaries this project could read "
+        "give a range for steel on steel (0.1 to 0.3) and nothing for these "
+        "surfaces. One measured coefficient for the actual finish would close "
+        "this, and until then the flange is checked for separation and bolt "
+        "strength only, which is not the same as checked.")
     return result
