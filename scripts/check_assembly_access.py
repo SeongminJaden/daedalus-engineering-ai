@@ -234,11 +234,56 @@ def check_link(index: int, spec, drives, sections, path: Path,
               if d["overlap_mm3"] > 1.0]
     row["inside_a_motor_mm3"] = sum(d["overlap_mm3"]
                                     for d in row.get("drive_overlap", []))
+    # IS THERE ANYTHING LEFT TO TIGHTEN AGAINST? The ring the bolts bear on
+    # is 8 mm wide with eight 3.4 mm holes through it, and nothing else in
+    # the problem knows it matters. This walks the bolt circle itself at 64
+    # points and asks how many are inside the body. It samples the CIRCLE
+    # rather than the holes on purpose: hitting the holes would need the same
+    # in-plane basis the generator used, and sharing that basis is how the
+    # last three defects survived. A surviving ring is mostly solid, broken
+    # only where the holes are, which is about a tenth of it.
+    row["bolt_rings"] = []
+    for envelope in drive_envelopes(spec, index, drives, span, height, width,
+                                    box):
+        face = face_for(str(drives.get(envelope["face"], "")), "output")
+        if face is None:
+            continue
+        axis = np.asarray(envelope["axis"], dtype=float)
+        seed = (np.array([0.0, 1.0, 0.0]) if abs(axis[1]) < 0.9
+                else np.array([1.0, 0.0, 0.0]))
+        first = seed - axis * float(np.dot(seed, axis))
+        first = first / np.linalg.norm(first)
+        second = np.cross(axis, first)
+        plane = np.asarray(envelope["end_m"], dtype=float)
+        for pattern in face.patterns:
+            radius = 0.5 * pattern.bolt_circle_m
+            angles = np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False)
+            points = np.array([
+                (plane + first * (radius * np.cos(a))
+                 + second * (radius * np.sin(a))) * 1000.0
+                for a in angles])
+            try:
+                inside = int(body.contains(points).sum())
+            except Exception as exc:
+                row["bolt_rings"].append({"joint": envelope["face"],
+                                          "thread": pattern.thread,
+                                          "error": str(exc)[:80]})
+                continue
+            row["bolt_rings"].append({
+                "joint": envelope["face"], "thread": pattern.thread,
+                "bolt_circle_mm": pattern.bolt_circle_m * 1000.0,
+                "inside_of_64": inside,
+                "verdict": ("ring is there" if inside >= 40 else
+                            "RING IS GONE, the bolts have nothing to bear on")})
+    lost_rings = [r for r in row["bolt_rings"]
+                  if "GONE" in str(r.get("verdict"))]
+    row["rings_lost"] = len(lost_rings)
+
     blocked = [b for b in row["bolts"] if b["blocked_mm3"] > 0.0]
     row["bolts_blocked"] = len(blocked)
     row["bolts_checked"] = len(row["bolts"])
     row["verdict"] = (
-        "assembles" if not blocked and not inside and all(
+        "assembles" if not blocked and not inside and not lost_rings and all(
             "CANNOT" not in d.get("verdict", "") for d in row["drives"])
         else "DOES NOT ASSEMBLE")
     return row
