@@ -384,6 +384,37 @@ def link_load_cases(mesh, torque_nm: float, transverse_n: float) -> list[LoadCas
     ]
 
 
+def _drive_centre(spec, link_index, joint, actuator, at_x, height_m, width_m,
+                  box):
+    """The middle of a drive's body, in the link's own frame."""
+    from .interfaces import face_for
+
+    axis = local_axis(spec, link_index, joint.axis)
+    centre = np.array([at_x, 0.5 * height_m, 0.5 * width_m], dtype=float)
+    if abs(float(axis[0])) <= 0.5:
+        centre = centre - axis * float(np.dot(centre, axis))
+        centre = centre + axis * (-float(box["low"][2]))
+    face = face_for(str(actuator.id), "output")
+    inset = (face.face_inset_m if face is not None
+             and face.face_inset_m is not None else 0.5 * actuator.axial_length_m)
+    return centre + axis * (inset - 0.5 * actuator.axial_length_m)
+
+
+def _near_axis(mesh, axis, at_x, height_m, width_m, box, radius_m):
+    """Elements within `radius_m` of a drive's axis line."""
+    centroids = mesh.element_centroids()
+    axis = np.asarray(axis, dtype=float)
+    axis = axis / np.linalg.norm(axis)
+    origin = np.array([at_x, 0.5 * height_m, 0.5 * width_m], dtype=float)
+    if abs(float(axis[0])) <= 0.5:
+        origin = origin - axis * float(np.dot(origin, axis))
+        origin = origin + axis * (-float(box["low"][2]))
+    offset = centroids - origin
+    along = offset @ axis
+    radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+    return radial <= radius_m
+
+
 def generate_link(spec: ManipulatorSpec, link_index: int,
                   drives: dict[str, str], torques: dict[str, float],
                   out_dir: Path, iterations: int = 60,
@@ -457,6 +488,36 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     after_mm3 = float(abs(body.volume))
     body.export(str(out_dir / f"{link.name}.stl"))
     stl = out_dir / f"{link.name}.stl"
+    # THE POSITION CHECK THAT PAIRS WITH EVERY SIZE CHECK ABOVE. Three
+    # defects in a row got past this module because everything it measured
+    # was a magnitude: a body half an element low, a body inside out, and a
+    # pocket 140.7 mm from the drive it was for. Volume is invariant under
+    # translation, abs() is invariant under inversion, and an element count
+    # is invariant under both. So the centroid of what was held empty for a
+    # drive is checked against where that drive is, which is not.
+    void_offsets = []
+    for other, at_x in ((joint, 0.0),
+                        (following, span) if following is not None else (None, 0.0)):
+        if other is None:
+            continue
+        carried = actuator_for(other.name, drives)
+        if carried is None or not carried.axial_length_m:
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        picked = passive_void & _near_axis(mesh, axis, at_x, height, width,
+                                           mine, 0.5 * carried.outer_diameter_m
+                                           + ACTUATOR_RADIAL_CLEARANCE_M)
+        if not picked.any():
+            void_offsets.append(f"{other.name}: NOTHING was held empty for it")
+            continue
+        centre = mesh.element_centroids()[picked].mean(axis=0)
+        expected = _drive_centre(spec, link_index, other, carried, at_x,
+                                 height, width, mine)
+        away = float(np.linalg.norm(centre - expected))
+        void_offsets.append(
+            f"{other.name}: what was held empty for it sits "
+            f"{away * 1000:.1f} mm from where it is")
+
     volume_m3 = after_mm3 / EXPORT_SCALE ** 3
     design = LinkDesign(
         name=link.name, generated=True,
@@ -472,6 +533,7 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         stl_path=str(stl))
     design.notes.extend(hole_report)
     design.notes.append(clipped)
+    design.notes.extend(void_offsets)
     design.notes.append(
         f"the holes removed {100.0 * (1.0 - after_mm3 / before_mm3):.2f} "
         f"percent of the extracted volume")

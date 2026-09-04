@@ -90,6 +90,11 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
         return row
     _mesh, _solid, _void, span, height, width, _note = built
     joints = spec.joints()
+    from projects.manipulator.links import world_boxes
+
+    box = next((b for b in world_boxes(spec, drives, sections)
+                if b["link"] == link.name and b.get("placed")), None)
+    box_low_z = box["low"][2] if box else None
     row.update({"checked": True, "drives": [], "bolts": []})
 
     for role, at_x, joint in (("its own drive", 0.0, joints[index]),
@@ -120,6 +125,41 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
             "verdict": ("comes out " + " and ".join(clear) if clear else
                         "CANNOT BE WITHDRAWN either way along its axis")})
 
+    # IS THE PART INSIDE A MOTOR? This is the check that three defects in a
+    # row got past, because all three were positions and everything measured
+    # here was a size. A pocket can be the right diameter, the right length
+    # and inside the domain and still be cut 140.7 mm from the drive it is
+    # for, and no count of elements or free fraction shows it. Intersecting
+    # the body with the drive's own envelope does, and the answer has to be
+    # zero.
+    row["drive_overlap"] = []
+    for role, at_x, joint in (("its own drive", 0.0, joints[index]),
+                              ("the drive it carries", span,
+                               joints[index + 1] if index + 1 < len(joints)
+                               else None)):
+        if joint is None:
+            continue
+        actuator = actuator_for(joint.name, drives)
+        face = face_for(str(drives.get(joint.name, "")), "output")
+        if actuator is None or not actuator.outer_diameter_m or face is None:
+            continue
+        inset = face.face_inset_m
+        if inset is None:
+            continue
+        axis = local_axis(spec, index, joint.axis)
+        centre = np.array([at_x, 0.5 * height, 0.5 * width], dtype=float)
+        if abs(float(axis[0])) <= 0.5:
+            centre = centre - axis * float(np.dot(centre, axis))
+            centre = centre + axis * (-float(box_low_z) if box_low_z is not None
+                                      else 0.0)
+        length = actuator.axial_length_m
+        middle = centre + axis * (inset - 0.5 * length)
+        envelope = _cylinder(0.5 * actuator.outer_diameter_m, length, middle,
+                             axis)
+        row["drive_overlap"].append({
+            "joint": joint.name, "role": role,
+            "overlap_mm3": _blocked(body, envelope)})
+
     holes, _unresolved = mounting_holes(spec, index, drives, span)
     for hole in holes:
         if hole["kind"] != "clearance":
@@ -140,11 +180,15 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
             "end": hole["end"], "thread": hole["thread"],
             "blocked_mm3": _blocked(body, tool)})
 
+    inside = [d for d in row.get("drive_overlap", [])
+              if d["overlap_mm3"] > 1.0]
+    row["inside_a_motor_mm3"] = sum(d["overlap_mm3"]
+                                    for d in row.get("drive_overlap", []))
     blocked = [b for b in row["bolts"] if b["blocked_mm3"] > 0.0]
     row["bolts_blocked"] = len(blocked)
     row["bolts_checked"] = len(row["bolts"])
     row["verdict"] = (
-        "assembles" if not blocked and all(
+        "assembles" if not blocked and not inside and all(
             "CANNOT" not in d.get("verdict", "") for d in row["drives"])
         else "DOES NOT ASSEMBLE")
     return row
