@@ -303,14 +303,17 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
         # 235 cubic centimetres of the same space at the shoulder.
         if abs(float(axis_local[0])) > 0.5:
             offset = 0.0                       # coaxial: the face is the end
-        elif role == "its own drive":
-            offset = 0.0                       # its output face is z = 0
         else:
-            # It carries this drive's HOUSING at the far face, and the
-            # drive's OUTPUT face, which is the origin this function wants,
-            # is its own face separation beyond that.
-            separation = face_separation_m(str(drives.get(other.name, "")))
-            offset = width + (separation or 0.0)
+            # EVERY OUTPUT FACE IS THE ARM'S z = 0 PLANE, and this frame's
+            # zero is wherever the link's box starts. So the face lands at
+            # minus the box's low corner in local coordinates, and putting
+            # 0.0 here instead cut every crossing pocket at the bottom of the
+            # link rather than at the drive. It is the difference between a
+            # pocket in the right place and a pocket 140.7 mm away from one,
+            # and an assembly measured the material left behind: 154,744
+            # cubic millimetres of link inside a motor, on every joint whose
+            # axis crosses the arm and on no other.
+            offset = -float(mine["low"][2])
         cut, why = actuator_void(
             mesh, other, carried, at_x, height, width,
             "output" if role == "its own drive" else "housing", spec,

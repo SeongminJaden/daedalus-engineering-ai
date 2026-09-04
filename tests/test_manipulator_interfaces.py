@@ -476,3 +476,44 @@ def test_the_mounting_planes_do_not_drift_along_the_chain():
     assert total["drift_from_first_mm"] == pytest.approx(0.0, abs=1e-9)
     for row in rows[:-1]:
         assert row["drift_from_first_mm"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_crossing_drive_pocket_lands_on_the_drive_not_on_the_box_corner():
+    """The pocket was 140.7 mm from the motor and every check passed.
+
+    Every drive's output face is the arm's z = 0 plane, and a link's own
+    frame starts wherever its box starts, which for the cranked links is
+    140.7 mm below that. The offset from one to the other was left at zero,
+    so a crossing joint's pocket was cut at the bottom of the link instead of
+    at the drive. Nothing here could see it: the pocket existed, it was the
+    right size, it was in the domain, and it was in the wrong place. An
+    assembly measured the material left behind, 154,744 cubic millimetres of
+    link inside a motor, on every joint whose axis crosses the arm and on no
+    other.
+    """
+    import numpy as np
+
+    from projects.manipulator.links import link_domain, world_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+    boxes = {b["link"]: b for b in world_boxes(SPEC, drives, sections)}
+
+    built, reason = link_domain(SPEC, 1, drives, sections=sections)
+    assert built is not None, reason
+    mesh, _solid, void, _span, _height, _width, _note = built
+    centroids = mesh.element_centroids()[void]
+    world_z = centroids[:, 2] + boxes["upper_arm"]["low"][2]
+
+    # The shoulder and the elbow both lie between -53.9 and +8.0 mm of the
+    # arm's z = 0 plane. The void also holds the neighbour's box, which
+    # reaches much further, so the test is that a real share of it sits on
+    # the drives rather than that all of it does. With the offset at zero
+    # this was empty.
+    on_the_drive = ((world_z >= -0.0539) & (world_z <= 0.008)).sum()
+    assert on_the_drive > 0.2 * len(world_z), (
+        f"only {on_the_drive} of {len(world_z)} void elements are where the "
+        f"drives are; the pocket is not on the drive")
+    assert np.abs(world_z).min() < 0.010, "nothing was cut near the drive"
