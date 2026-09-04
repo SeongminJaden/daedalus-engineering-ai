@@ -276,25 +276,44 @@ def check_link(index: int, spec, drives, sections, path: Path,
         second = np.cross(axis, first)
         plane = np.asarray(envelope["end_m"], dtype=float)
         for pattern in face.patterns:
-            radius = 0.5 * pattern.bolt_circle_m
+            # WALK THREE RADII, not one. A single walk on the bolt circle
+            # says the ring exists somewhere near that radius and says
+            # nothing about its width, so a ring squeezed to half its size by
+            # a grid still passes. Walking 1.5 mm each side as well asks
+            # whether it is the width the drawing calls for: if the inner
+            # walk finds air the ring has been pushed outward, if the outer
+            # walk does it has been pushed in, and either way the bolt seat
+            # is not the designed one.
+            middle = 0.5 * pattern.bolt_circle_m
             angles = np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False)
-            points = np.array([
-                (plane + first * (radius * np.cos(a))
-                 + second * (radius * np.sin(a))) * 1000.0
-                for a in angles])
-            try:
-                inside = int(body.contains(points).sum())
-            except Exception as exc:
+            counts = {}
+            failed = None
+            for label, radius in (("inner", middle - 0.0015),
+                                  ("centre", middle),
+                                  ("outer", middle + 0.0015)):
+                points = np.array([
+                    (plane + first * (radius * np.cos(a))
+                     + second * (radius * np.sin(a))) * 1000.0
+                    for a in angles])
+                try:
+                    counts[label] = int(body.contains(points).sum())
+                except Exception as exc:
+                    failed = str(exc)[:80]
+                    break
+            if failed is not None:
                 row["bolt_rings"].append({"joint": envelope["face"],
                                           "thread": pattern.thread,
-                                          "error": str(exc)[:80]})
+                                          "error": failed})
                 continue
+            thin = [name for name, n in counts.items() if n < 40]
             row["bolt_rings"].append({
                 "joint": envelope["face"], "thread": pattern.thread,
                 "bolt_circle_mm": pattern.bolt_circle_m * 1000.0,
-                "inside_of_64": inside,
-                "verdict": ("ring is there" if inside >= 40 else
-                            "RING IS GONE, the bolts have nothing to bear on")})
+                "inside_of_64": counts,
+                "verdict": ("ring is there and the right width" if not thin else
+                            f"RING IS WRONG at {', '.join(thin)}: the bolts "
+                            f"have less to bear on than the drawing calls "
+                            f"for")})
     lost_rings = [r for r in row["bolt_rings"]
                   if "GONE" in str(r.get("verdict"))]
     row["rings_lost"] = len(lost_rings)

@@ -640,6 +640,11 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     body = trimesh.Trimesh(vertices=np.asarray(exported.vertices),
                            faces=np.asarray(exported.triangles), process=False)
     body, clipped = clip_to_domain(body, span, height, width, EXPORT_SCALE)
+    # Add the exact interfaces BEFORE the holes, so the holes are drilled
+    # through them, and before the drive envelopes, so a ring that reaches
+    # into a motor is trimmed by the motor rather than left there.
+    body, added = add_solids(body, interface_solids(
+        spec, link_index, drives, span, height, width, mine), EXPORT_SCALE)
     before_mm3 = float(abs(body.volume))
     # CUT THE DRIVES OUT, do not merely ask the optimiser to avoid them.
     # Holding elements empty works on element CENTRES, and the iso surface
@@ -704,6 +709,7 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
         stl_path=str(stl))
     design.notes.extend(hole_report)
     design.notes.append(clipped)
+    design.notes.extend(added)
     design.notes.extend(void_offsets)
     design.notes.append(
         f"the holes removed {100.0 * (1.0 - after_mm3 / before_mm3):.2f} "
@@ -1013,6 +1019,114 @@ def drive_envelopes(spec, link_index, drives, span_m, height_m, width_m, box
                          f"{radius * 1000:.1f}"),
             "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0})
     return cutters
+
+
+def interface_solids(spec, link_index, drives, span_m, height_m, width_m,
+                     box) -> list[dict]:
+    """The bolt rings, as exact annuli to be added rather than voxels.
+
+    THE INTERFACE IS SMALLER THAN THE GRID. The ring the bolts bear on is 8
+    mm wide, the flange is 9 mm thick, and a clearance hole leaves 2.3 mm to
+    the ring's edge, against a cell of 8.2 mm. A density field cannot hold
+    any of those: holding the elements solid still leaves the iso surface to
+    draw the boundary with half a cell of error, so a ring specified at 8 mm
+    comes out somewhere between 4 and 12 and the number is the grid's rather
+    than the drawing's.
+
+    So the optimisation still holds those elements solid, which is what pulls
+    the load path into them, and the finished dimensions come from a boolean
+    instead. The rule generalises: a feature smaller than two or three cells
+    belongs in the boolean pass. The density field decides WHERE material
+    goes; an interface dimension came off a drawing and has no reason to
+    negotiate with a mesh.
+    """
+    from .interfaces import drive_profile, face_for
+
+    joints = spec.joints()
+    following = (joints[link_index + 1]
+                 if link_index + 1 < len(joints) else None)
+    flange = spec.flange_thickness_m
+    solids = []
+    ends = [(joints[link_index], box["reach_low"], +1.0)]
+    if following is not None:
+        ends.append((following, box["reach_low"] + box["joint_span"], -1.0))
+    for other, at_x, side in ends:
+        actuator = actuator_for(other.name, drives)
+        profile = drive_profile(str(drives.get(other.name, "")))
+        face = face_for(str(drives.get(other.name, "")), "output")
+        if actuator is None or profile is None or face is None:
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        origin = _drive_face(spec, link_index, other, at_x, height_m, width_m,
+                             box)
+        # THE INNER EDGE IS WHATEVER THE DRIVE STILL OCCUPIES THERE, and
+        # sometimes it occupies nothing. Past the AK80-64's output face the
+        # drive is a 40 mm boss, so the flange is an annulus around it. Past
+        # the AK60-6's housing face the drive stops altogether, so the flange
+        # is a full disc and its bolt circle at 34 mm radius sits inside what
+        # would otherwise have been called the drive's radius. Taking the
+        # nearest profile segment either way gave that face a ring one
+        # millimetre WIDE IN THE NEGATIVE, which is how it was noticed.
+        separation = face_separation_m(str(drives.get(other.name, "")))
+        if side > 0:
+            low = 0.0
+            beyond = [seg for seg in profile if seg[0] >= -1e-9]
+        else:
+            low = -(separation or 0.0) - flange
+            beyond = [seg for seg in profile
+                      if seg[1] <= -(separation or 0.0) + 1e-9]
+        inner = max((seg[2] for seg in beyond), default=0.0)
+        outer = max(0.5 * actuator.outer_diameter_m,
+                    0.5 * face.largest_bolt_circle_m() + 0.005)
+        if outer - inner < 0.001:
+            continue
+        start = origin + axis * low
+        solids.append({
+            "kind": "ring", "face": other.name,
+            "outer_diameter_m": 2.0 * outer, "inner_diameter_m": 2.0 * inner,
+            "axis": [float(v) for v in axis],
+            "start_m": [float(v) for v in start],
+            "end_m": [float(v) for v in (start + axis * flange)],
+            "note": (f"the ring {other.name}'s bolts bear on, "
+                     f"{(outer - inner) * 1000:.1f} mm wide and "
+                     f"{flange * 1000:.0f} thick, added exactly rather than "
+                     f"rounded to a {0.098 / 12 * 1000:.1f} mm cell")})
+    return solids
+
+
+def add_solids(body, solids, scale: float = 1.0, sections: int = 48):
+    """Union the exact interface annuli onto the extracted body."""
+    import trimesh
+
+    if not solids:
+        return body, []
+    added = []
+    for solid in solids:
+        start = np.asarray(solid["start_m"], dtype=float) * scale
+        end = np.asarray(solid["end_m"], dtype=float) * scale
+        direction = end - start
+        length = float(np.linalg.norm(direction))
+        if length <= 0.0:
+            continue
+        transform = trimesh.geometry.align_vectors([0.0, 0.0, 1.0],
+                                                   direction / length)
+        transform[:3, 3] = 0.5 * (start + end)
+        outer = trimesh.creation.cylinder(
+            radius=0.5 * solid["outer_diameter_m"] * scale, height=length,
+            sections=sections, transform=transform)
+        bore = trimesh.creation.cylinder(
+            radius=0.5 * solid["inner_diameter_m"] * scale,
+            height=length * 3.0, sections=sections, transform=transform)
+        if solid["inner_diameter_m"] <= 1e-9:
+            added.append(outer)
+            continue
+        added.append(outer.difference(bore))
+    before = float(abs(body.volume))
+    for piece in added:
+        body = body.union(piece)
+    return body, [f"{len(added)} interface rings added exactly, "
+                  f"{100.0 * (abs(body.volume) / before - 1.0):+.2f} percent "
+                  f"of volume"]
 
 
 def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
