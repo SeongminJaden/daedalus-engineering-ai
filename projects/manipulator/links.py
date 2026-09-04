@@ -753,6 +753,16 @@ def mounting_holes(spec: ManipulatorSpec, link_index: int,
     return holes, unresolved
 
 
+def _drive_face(spec, link_index, joint, at_x, height_m, width_m, box):
+    """The drive's OUTPUT mounting face, as a point in the link's frame."""
+    axis = local_axis(spec, link_index, joint.axis)
+    centre = np.array([at_x, 0.5 * height_m, 0.5 * width_m], dtype=float)
+    if abs(float(axis[0])) <= 0.5:
+        centre = centre - axis * float(np.dot(centre, axis))
+        centre = centre + axis * (-float(box["low"][2]))
+    return centre
+
+
 def drive_envelopes(spec, link_index, drives, span_m, height_m, width_m, box
                     ) -> list[dict]:
     """The drives' own volumes, as cutters in the hole format.
@@ -771,19 +781,39 @@ def drive_envelopes(spec, link_index, drives, span_m, height_m, width_m, box
         if actuator is None or not (actuator.outer_diameter_m
                                     and actuator.axial_length_m):
             continue
+        separation = face_separation_m(str(drives.get(other.name, "")))
+        if not separation:
+            continue
+        # ONLY BETWEEN THE MOUNTING FACES. A drive is not a cylinder. Beyond
+        # each mounting face it steps down to a boss, and on the AK80-64 that
+        # is radius 40 on the output side and 35.5 on the housing side
+        # against 49 in the middle. The material between the boss and the
+        # full diameter, out there, is not the motor: it is the link's own
+        # flesh and the bolt circle runs through it, 44.5 mm out on the
+        # output face and 42.5 on the housing. Subtracting a plain cylinder
+        # would take the bolts' bearing material away and leave the holes
+        # standing in air, and the bolt access check would still have passed
+        # because it looks for room for a key rather than for something to
+        # tighten against.
+        #
+        # Between the faces the drive IS its full diameter, on every drawing
+        # read here, so that is the part that is subtracted. It needs no
+        # measurement beyond the two insets.
         axis = local_axis(spec, link_index, other.axis)
-        centre = _drive_centre(spec, link_index, other, actuator, at_x,
-                              height_m, width_m, box)
-        half = 0.5 * actuator.axial_length_m
+        face_plane = _drive_face(spec, link_index, other, at_x, height_m,
+                                 width_m, box)
         radius = (0.5 * actuator.outer_diameter_m
                   + ACTUATOR_RADIAL_CLEARANCE_M)
-        start, end = centre - axis * half, centre + axis * half
+        start = face_plane - axis * separation
         cutters.append({
             "end": "drive", "kind": "envelope", "face": other.name,
             "thread": "", "diameter_m": 2.0 * radius,
             "axis": [float(v) for v in axis],
             "start_m": [float(v) for v in start],
-            "end_m": [float(v) for v in end],
+            "end_m": [float(v) for v in face_plane],
+            "note": (f"between the mounting faces of "
+                     f"{actuator.part_number}, {separation * 1000:.1f} mm "
+                     f"apart, where it is at its full diameter"),
             "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0})
     return cutters
 

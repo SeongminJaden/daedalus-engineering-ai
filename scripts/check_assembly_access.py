@@ -94,7 +94,6 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
 
     box = next((b for b in world_boxes(spec, drives, sections)
                 if b["link"] == link.name and b.get("placed")), None)
-    box_low_z = box["low"][2] if box else None
     row.update({"checked": True, "drives": [], "bolts": []})
 
     for role, at_x, joint in (("its own drive", 0.0, joints[index]),
@@ -132,33 +131,30 @@ def check_link(index: int, spec, drives, sections, path: Path) -> dict:
     # for, and no count of elements or free fraction shows it. Intersecting
     # the body with the drive's own envelope does, and the answer has to be
     # zero.
+    # IS THE PART INSIDE A MOTOR? This is the check three defects in a row
+    # got past, because all three were positions and everything else measured
+    # here is a size. It uses the SAME envelope the generator subtracts, so
+    # the two cannot disagree about what the motor is: the volume between the
+    # two mounting faces, where every drawing read here shows the drive at
+    # its full diameter. Beyond those faces a drive steps down to a boss and
+    # the material out there is the link's own, with the bolt circle running
+    # through it.
+    from projects.manipulator.links import drive_envelopes
+
     row["drive_overlap"] = []
-    for role, at_x, joint in (("its own drive", 0.0, joints[index]),
-                              ("the drive it carries", span,
-                               joints[index + 1] if index + 1 < len(joints)
-                               else None)):
-        if joint is None:
+    for envelope in drive_envelopes(spec, index, drives, span, height, width,
+                                    box):
+        start = np.asarray(envelope["start_m"], dtype=float)
+        end = np.asarray(envelope["end_m"], dtype=float)
+        axis = end - start
+        length = float(np.linalg.norm(axis))
+        if length <= 0.0:
             continue
-        actuator = actuator_for(joint.name, drives)
-        face = face_for(str(drives.get(joint.name, "")), "output")
-        if actuator is None or not actuator.outer_diameter_m or face is None:
-            continue
-        inset = face.face_inset_m
-        if inset is None:
-            continue
-        axis = local_axis(spec, index, joint.axis)
-        centre = np.array([at_x, 0.5 * height, 0.5 * width], dtype=float)
-        if abs(float(axis[0])) <= 0.5:
-            centre = centre - axis * float(np.dot(centre, axis))
-            centre = centre + axis * (-float(box_low_z) if box_low_z is not None
-                                      else 0.0)
-        length = actuator.axial_length_m
-        middle = centre + axis * (inset - 0.5 * length)
-        envelope = _cylinder(0.5 * actuator.outer_diameter_m, length, middle,
-                             axis)
+        tool = _cylinder(0.5 * envelope["diameter_m"], length,
+                         0.5 * (start + end), axis / length)
         row["drive_overlap"].append({
-            "joint": joint.name, "role": role,
-            "overlap_mm3": _blocked(body, envelope)})
+            "joint": envelope["face"], "role": envelope["note"],
+            "overlap_mm3": _blocked(body, tool)})
 
     holes, _unresolved = mounting_holes(spec, index, drives, span)
     for hole in holes:
