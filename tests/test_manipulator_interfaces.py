@@ -727,3 +727,45 @@ def test_the_corridor_and_the_bolt_ring_do_not_contest_the_same_elements():
             f"{link.name}: {int((corridor & ring).sum())} elements are claimed "
             f"by both the withdrawal corridor and a bolt ring")
     assert seen_a_corridor, "no link had a corridor, so nothing was tested"
+
+
+def test_the_narrowest_bolt_ring_clears_its_floor_and_only_just():
+    """A floor, because the last defect of this kind announced itself and the
+    next one would not have.
+
+    The AK60-6's housing flange came out one millimetre wide IN THE NEGATIVE,
+    and a negative number is impossible to miss. Half a millimetre would have
+    built, passed every check, and arrived as a bolt seat too narrow to
+    tighten against. The sign of a number is not a substitute for a number.
+
+    The floor is 8.0 mm: an M3 socket head is 5.5 across and the ring has to
+    leave 1.25 mm of material each side. Every ring on this arm clears it,
+    and the AK80-64's output faces clear it by half a millimetre, so this is
+    a live limit rather than a formality. It is the same shape of number as
+    the 6.5 mm left between two flange discs at the wrist.
+    """
+    from projects.manipulator.links import (MINIMUM_RING_WIDTH_M,
+                                            interface_solids, world_boxes)
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    boxes = {b["link"]: b for b in world_boxes(SPEC, drives,
+                                               loop.data["final_sections"])}
+    widths = {}
+    for index, link in enumerate(SPEC.links()):
+        box = boxes[link.name]
+        for ring in interface_solids(SPEC, index, drives, box["span"],
+                                     box["height"], box["width"], box):
+            assert not ring.get("refused"), ring["note"]
+            widths[f"{link.name}/{ring['face']}"] = 0.5 * (
+                ring["outer_diameter_m"] - ring["inner_diameter_m"])
+
+    assert widths
+    for name, width in widths.items():
+        assert width >= MINIMUM_RING_WIDTH_M, f"{name}: {width * 1000:.1f} mm"
+    tightest = min(widths, key=widths.get)
+    assert widths[tightest] == pytest.approx(0.0085, abs=0.0003)
+    assert widths[tightest] - MINIMUM_RING_WIDTH_M < 0.001, (
+        "the narrowest ring has more margin than expected, so either a drive "
+        "changed or the floor did; re-read both")

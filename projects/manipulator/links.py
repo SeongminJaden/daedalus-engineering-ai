@@ -827,6 +827,18 @@ def size_link_by_volume_fraction(spec: ManipulatorSpec, link_index: int,
     return rows
 
 
+#: CHOSEN. The narrowest a bolt ring may be. An M3 socket head is 5.5 mm
+#: across and the ring has to leave material beyond it on both sides, and
+#: 1.25 mm a side is the least that is worth calling a seat, so 8.0 mm.
+#:
+#: It exists because of how the last defect here was caught. The AK60-6's
+#: housing flange came out one millimetre wide IN THE NEGATIVE, and a
+#: negative number announces itself. Half a millimetre would not have: it
+#: would have built, passed every check, and arrived as a bolt seat too
+#: narrow to tighten against. A floor turns a class of silent failures into
+#: a refusal, and the sign of a number is not a substitute for one.
+MINIMUM_RING_WIDTH_M = 0.008
+
 #: CHOSEN. The cable has to leave the joint somewhere, and the only through
 #: bore any of these drawings prints is the AK80-64 output's 21 mm. Using that
 #: one diameter on every face means one cable size fits the whole arm, and it
@@ -1078,7 +1090,16 @@ def interface_solids(spec, link_index, drives, span_m, height_m, width_m,
         inner = max((seg[2] for seg in beyond), default=0.0)
         outer = max(0.5 * actuator.outer_diameter_m,
                     0.5 * face.largest_bolt_circle_m() + 0.005)
-        if outer - inner < 0.001:
+        width = outer - inner
+        if width < MINIMUM_RING_WIDTH_M:
+            solids.append({
+                "kind": "ring", "face": other.name, "refused": True,
+                "width_m": float(width),
+                "note": (f"{other.name}: its bolt ring would be "
+                         f"{width * 1000:.1f} mm wide against a floor of "
+                         f"{MINIMUM_RING_WIDTH_M * 1000:.0f}, which is an M3 "
+                         f"head and 1.25 mm of material each side. No ring "
+                         f"was added and this joint cannot be bolted")})
             continue
         start = origin + axis * low
         solids.append({
@@ -1102,6 +1123,8 @@ def add_solids(body, solids, scale: float = 1.0, sections: int = 48):
         return body, []
     added = []
     for solid in solids:
+        if solid.get("refused"):
+            continue
         start = np.asarray(solid["start_m"], dtype=float) * scale
         end = np.asarray(solid["end_m"], dtype=float) * scale
         direction = end - start
@@ -1124,9 +1147,19 @@ def add_solids(body, solids, scale: float = 1.0, sections: int = 48):
     before = float(abs(body.volume))
     for piece in added:
         body = body.union(piece)
-    return body, [f"{len(added)} interface rings added exactly, "
-                  f"{100.0 * (abs(body.volume) / before - 1.0):+.2f} percent "
-                  f"of volume"]
+    widths = [(s["face"], 0.5 * (s["outer_diameter_m"] - s["inner_diameter_m"]))
+              for s in solids if not s.get("refused")]
+    report = [f"{len(added)} interface rings added exactly, "
+              f"{100.0 * (abs(body.volume) / before - 1.0):+.2f} percent "
+              f"of volume"]
+    if widths:
+        joint, narrowest = min(widths, key=lambda pair: pair[1])
+        report.append(
+            f"the narrowest bolt ring is {narrowest * 1000:.1f} mm at "
+            f"{joint}, against a floor of "
+            f"{MINIMUM_RING_WIDTH_M * 1000:.0f} mm")
+    report.extend(s["note"] for s in solids if s.get("refused"))
+    return body, report
 
 
 def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
