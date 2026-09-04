@@ -396,6 +396,17 @@ def test_no_two_links_ever_hold_the_same_material():
     for row in rows:
         assert row["both_solid_samples"] == 0, row
 
+    # And how much room is left for it to go wrong. A contested point is one
+    # element straddling the seam between two boxes: its centroid sits
+    # outside the neighbour's box so the rules leave it free, while part of
+    # the element is inside. It is bounded by half a cell, which is the same
+    # half cell the drive envelopes are subtracted to close, and it is worth
+    # a number rather than an argument because it moves with the grid.
+    worst = max(row["contested_bound_mm3"] for row in rows)
+    assert worst < 4000.0, (
+        f"the seam between two links leaves {worst:.0f} cubic millimetres "
+        f"where both could put material; it was 1882 when this was written")
+
 
 def test_two_links_are_asked_for_a_shape_a_box_cannot_be():
     """What the placement rules disagree about, stated rather than resolved.

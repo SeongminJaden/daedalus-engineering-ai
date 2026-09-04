@@ -1341,7 +1341,16 @@ def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
         shared = float(np.prod(extent)) * 1e9
         both, contested = 0, 0
         if shared > 0.0:
-            grid = [np.linspace(low[i], high[i], samples) for i in range(3)]
+            # SAMPLE INSIDE THE SHARED BOX, not on its faces. A face of the
+            # shared box is a plane that runs THROUGH elements of both
+            # meshes, so a point on it belongs to one element of each and
+            # says nothing about whether the two links agree. Sampling the
+            # faces reported four contested points between the two wrist
+            # bodies, and all four sat exactly on x = 390.0, which is where
+            # one box begins. They were an artefact of measuring on the seam.
+            inset = 0.02 * np.clip(high - low, 0.0, None)
+            grid = [np.linspace(low[i] + inset[i], high[i] - inset[i], samples)
+                    for i in range(3)]
             for x in grid[0]:
                 for y in grid[1]:
                     for z in grid[2]:
@@ -1352,16 +1361,29 @@ def domain_overlaps(spec: ManipulatorSpec, drives: dict[str, str],
                             both += 1
                         if a in ("solid", "free") and b in ("solid", "free"):
                             contested += 1
+        total = samples ** 3 if shared > 0.0 else 0
         rows.append({
             "pair": f"{first['link']} and {second['link']}",
             "shared_mm3": shared,
             "shared_extent_mm": [float(e) * 1000.0 for e in extent],
             "both_solid_samples": both,
             "both_could_use_samples": contested,
-            "samples": samples ** 3 if shared > 0.0 else 0,
+            "samples": total,
+            # An upper bound on how much material the two could put in the
+            # same place, if every contested point turned solid on both
+            # sides. It is not a measurement of interpenetration; it is the
+            # size of the room left for it.
+            "contested_bound_mm3": (shared * contested / total
+                                    if total else 0.0),
             "note": ("their domains meet face to face" if shared <= 0.0 else
                      "their boxes overlap, which a crossing flange requires; "
-                     "what matters is that neither holds the same material")})
+                     "what matters is that neither holds the same material. "
+                     "A contested point is one element straddling the seam "
+                     "between the two boxes: its centroid is outside the "
+                     "neighbour's box so it is free, while part of the "
+                     "element is inside it. That is bounded by half a cell "
+                     "and it is the same half cell the drive envelopes are "
+                     "subtracted to close")})
     return rows
 
 
