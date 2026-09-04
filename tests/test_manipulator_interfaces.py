@@ -517,3 +517,34 @@ def test_a_crossing_drive_pocket_lands_on_the_drive_not_on_the_box_corner():
         f"only {on_the_drive} of {len(world_z)} void elements are where the "
         f"drives are; the pocket is not on the drive")
     assert np.abs(world_z).min() < 0.010, "nothing was cut near the drive"
+
+
+def test_a_drive_is_subtracted_from_the_body_not_merely_avoided():
+    """Holding elements empty cannot keep material out of a motor.
+
+    A void is enforced on element CENTRES, so the iso surface runs between a
+    void element and its solid neighbour and material stands up to half a
+    cell into the pocket. Half a cell on these grids is 4.1 mm against a
+    radial clearance of 1.0, so the surface reaches into the drive by
+    construction. Measured across six links with every pocket in the right
+    place: 104,538 cubic millimetres of link inside a motor. The drives are
+    subtracted now, and a cylinder taken out of a body cannot be inside it.
+    """
+    import numpy as np
+    import trimesh
+
+    from projects.manipulator.links import cut_holes
+
+    block = trimesh.creation.box(extents=(100.0, 100.0, 100.0))
+    block.apply_translation([50.0, 50.0, 50.0])
+    envelope = [{"end": "drive", "kind": "envelope", "face": "j", "thread": "",
+                 "diameter_m": 0.040,
+                 "start_m": [0.05, 0.05, -0.02],
+                 "end_m": [0.05, 0.05, 0.12],
+                 "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0}]
+    cut, report = cut_holes(block, envelope, 0.1, 0.1, scale=1000.0)
+    assert cut.is_watertight
+    # A 40 mm bore through a 100 mm cube takes pi r squared h out of it.
+    removed = float(abs(block.volume) - abs(cut.volume))
+    assert removed == pytest.approx(np.pi * 20.0 ** 2 * 100.0, rel=0.02)
+    assert "envelope" in report[0]
