@@ -120,6 +120,87 @@ def scaled_surface(surface, scale: float):
     return replace(surface, vertices=np.asarray(surface.vertices) * scale)
 
 
+
+#: CHOSEN. A radial gap between the drive and the material around it. Zero
+#: clearance passes an interference check while the surfaces touch, and a
+#: powder bed part's as built surface is rough enough that touching is
+#: contact. One millimetre on the radius.
+ACTUATOR_RADIAL_CLEARANCE_M = 0.001
+
+
+def local_axis(spec, link_index: int, axis) -> np.ndarray:
+    """A joint's axis expressed in the LINK's own frame.
+
+    The joint axes in the specification are in the arm's frame, where y is up
+    and x runs along the reach. A link's own file has x along ITSELF, and for
+    the base column that is the vertical. So the base yaw axis, which is
+    (0, 1, 0) in the arm, is (1, 0, 0) in the column: it turns about the
+    column's length, not across it. Reading the arm's components as if they
+    were the link's made the base column's drive a cross axis cylinder when
+    it is a coaxial one, and put a 98 mm diameter pocket sideways through a
+    part the motor runs along.
+    """
+    joints = spec.joints()
+    following = (joints[link_index + 1]
+                 if link_index + 1 < len(joints) else None)
+    if following is None or following.origin_x_m >= following.origin_y_m:
+        return np.asarray(axis, dtype=float)      # the link runs along x
+    # The link runs along y: x_local = y_arm, y_local = -x_arm, z unchanged.
+    arm = np.asarray(axis, dtype=float)
+    return np.array([arm[1], -arm[0], arm[2]])
+
+
+def actuator_void(mesh, joint, actuator, at_x: float, height_m: float,
+                  width_m: float, face: str, spec,
+                  axis=None) -> tuple[np.ndarray, str]:
+    """The volume a drive occupies, placed against the joint it belongs to.
+
+    Two things decide the placement and only one of them used to be here.
+
+    The AXIS. The drive turns about the joint axis, so its cylinder is about
+    the line through the joint origin in that direction. The first version
+    put the pocket at a fixed distance along the link instead, which for a
+    joint whose axis crosses the arm placed it nowhere in particular: 39.95
+    mm along a link whose joint sits at zero.
+
+    The POSITION ALONG THAT AXIS. A motor does not straddle the joint plane.
+    It hangs off one side of it, and how far is set by where its mounting
+    face sits inboard of its own end, which the AK80-64 drawing prints and
+    the AK80-9 drawing does not. Where it is printed the body is placed
+    against that face. Where it is not, the drive is centred on the joint and
+    the note says so, because centring is a guess that is symmetric rather
+    than a guess that is hidden.
+    """
+    from .interfaces import face_for
+
+    centroids = mesh.element_centroids()
+    axis = np.asarray(joint.axis if axis is None else axis, dtype=float)
+    axis = axis / np.linalg.norm(axis)
+    origin = np.array([at_x, 0.5 * height_m, 0.5 * width_m])
+    offset = centroids - origin
+    along = offset @ axis
+    radial = np.linalg.norm(offset - np.outer(along, axis), axis=1)
+    radius = 0.5 * actuator.outer_diameter_m + ACTUATOR_RADIAL_CLEARANCE_M
+    length = actuator.axial_length_m
+
+    mounting = face_for(actuator.id if hasattr(actuator, "id") else "", face)
+    inset = mounting.face_inset_m if mounting is not None else None
+    if inset is None:
+        low, high = -0.5 * length, 0.5 * length
+        why = (f"{actuator.part_number} centred on the joint, "
+               f"{length * 1000:.1f} mm long by "
+               f"{actuator.outer_diameter_m * 1000:.0f} mm across. NO "
+               f"MOUNTING FACE INSET IS PUBLISHED for its {face} face, so "
+               f"where it sits along its own axis is a guess")
+    else:
+        low, high = -(length - inset), inset
+        why = (f"{actuator.part_number} placed against its {face} face, which "
+               f"the drawing puts {inset * 1000:.1f} mm inboard of its end, "
+               f"so it reaches {high * 1000:.1f} mm into this link and "
+               f"{-low * 1000:.1f} mm out of it")
+    return ((along >= low) & (along <= high) & (radial <= radius)), why
+
+
 def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
                 divisions=(28, 12, 12), sections: dict | None = None):
     """The box a link may occupy, with its interfaces and actuator pockets.
@@ -163,24 +244,38 @@ def link_domain(spec: ManipulatorSpec, link_index: int, drives: dict[str, str],
                      | (centroids[:, 0] >= span - flange))
 
     passive_void = np.zeros(mesh.n_elements, dtype=bool)
-    void_note = "no actuator outline is printed, so no pocket was cut"
-    if actuator is not None and actuator.outer_diameter_m and actuator.axial_length_m:
-        axis = np.asarray(joint.axis, dtype=float)
-        radius = 0.5 * actuator.outer_diameter_m
-        half_length = 0.5 * actuator.axial_length_m
-        centre = np.array([min(flange + half_length, span - flange),
-                           0.5 * height, 0.5 * width])
-        offset = centroids - centre
-        if abs(float(axis[0])) > 0.5:              # the drive lies along the arm
-            along = offset[:, 0]
-            radial = np.linalg.norm(offset[:, 1:], axis=1)
-        else:                                      # across the arm
-            along = offset[:, 2]
-            radial = np.linalg.norm(offset[:, :2], axis=1)
-        passive_void = (np.abs(along) <= half_length) & (radial <= radius)
-        void_note = (f"a {actuator.outer_diameter_m * 1000:.0f} by "
-                     f"{actuator.axial_length_m * 1000:.1f} mm pocket for the "
-                     f"{actuator.part_number}")
+    notes: list[str] = []
+    for role, at_x, other in (("its own drive", 0.0, joint),
+                              ("the drive it carries", span, following)):
+        if other is None:
+            notes.append("this link carries no further joint")
+            continue
+        carried = actuator_for(other.name, drives)
+        if carried is None or not (carried.outer_diameter_m
+                                   and carried.axial_length_m):
+            notes.append(f"{other.name}: no outline is printed for "
+                         f"{drives.get(other.name, 'its drive')}, so no pocket "
+                         f"was cut for {role}")
+            continue
+        cut, why = actuator_void(
+            mesh, other, carried, at_x, height, width,
+            "output" if role == "its own drive" else "housing", spec,
+            axis=local_axis(spec, link_index, other.axis))
+        passive_void |= cut
+        notes.append(f"{role} at x = {at_x * 1000:.0f} mm: {why}")
+    void_note = "; ".join(notes)
+
+    # THE DRIVE WINS OVER THE FLANGE where they meet. The AK80-64's output
+    # boss stands 8 mm proud of its mounting face, which is 8 mm into a 9 mm
+    # flange, so the flange has to be relieved for it. Holding both would ask
+    # the optimiser for material in a place a solid steel part already
+    # occupies. The relief this produces is the spigot register the wrist
+    # joints need anyway.
+    overlap = int((passive_solid & passive_void).sum())
+    passive_solid = passive_solid & ~passive_void
+    if overlap:
+        void_note += (f"; {overlap} elements of flange are relieved where the "
+                      f"drive stands proud of its mounting face")
 
     free = ~(passive_solid | passive_void)
     if free.sum() < 0.15 * mesh.n_elements:
@@ -247,6 +342,22 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     from optimization.topology.export import largest_connected_component
 
     kept = largest_connected_component(mesh, result.density, ISO_LEVEL)
+    # DID THE EXTRACTION THROW AWAY AN INTERFACE? The flange slabs are held
+    # solid because bolts go through them, but keeping only the largest
+    # connected component will drop one of them without a word if the
+    # optimiser hollowed out the middle. That is what shortened the tool
+    # flange by 23 mm: its far slab survived the optimisation, became its own
+    # island, and was silently discarded. A link that loses an interface has
+    # not been designed, it has been truncated.
+    lost = int((passive_solid & (kept < ISO_LEVEL)).sum())
+    if lost:
+        return LinkDesign(
+            name=link.name, generated=False,
+            reason=(f"{link.name}: the extraction dropped {lost} of "
+                    f"{int(passive_solid.sum())} elements that were held "
+                    f"solid for its interfaces. Keeping the largest connected "
+                    f"component removed a flange the bolts go through, so "
+                    f"this body is not the part that was specified"))
     surface = marching_surface(mesh, kept, ISO_LEVEL, smoothing_iterations=10)
     out_dir.mkdir(parents=True, exist_ok=True)
     # Written in MILLIMETRES. Neither STL nor a faceted STEP carries a unit a

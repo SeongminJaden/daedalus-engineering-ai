@@ -406,6 +406,14 @@ def test_a_link_is_generated_as_a_shape_with_its_interfaces_and_its_pocket():
     # Both interfaces are held solid, and the drive is a hole where its
     # outline is published.
     assert any("held solid for the interfaces" in note for note in design.notes)
-    assert any("pocket for" in note for note in design.notes)
+    # TWO drives touch a link, not one: the joint that drives it and the
+    # joint it carries. Only the first used to be cut for, which left the
+    # shoulder motor's 98 mm body overlapping the base column by 60 cm3.
+    assert any("its own drive" in note for note in design.notes)
+    assert any("the drive it carries" in note for note in design.notes)
+    # And the placement now comes from the drawing rather than from a
+    # distance along the link: the AK80-64's mounting face is 8 mm inboard of
+    # its end, so it reaches 8 mm into the link it drives.
+    assert any("inboard of its end" in note for note in design.notes)
     # Three load cases, not one.
     assert len(design.cross_evaluation[0]) == 4      # design plus three cases

@@ -110,6 +110,11 @@ class MountingFace:
     central_bore_depth_m: float | None = None
     #: The spigot the link registers on, largest step first.
     boss_diameters_m: tuple[float, ...] = ()
+    #: How far this mounting face sits inboard from ITS end of the actuator,
+    #: measured along the actuator's own axis. It is what places the body
+    #: relative to the joint frame: a motor does not straddle the joint plane,
+    #: it hangs off one side of it. None where no source gives it.
+    face_inset_m: float | None = None
     dowel_diameter_m: float | None = None
     dowel_depth_m: float | None = None
     dowel_count: int | None = None
@@ -150,7 +155,7 @@ AK80_64_HOUSING = MountingFace(
     outer_diameter_m=0.098,
     patterns=(BoltPattern("M3", 8, 0.085, 0.007, "8-M3 depth 7mm, PCD 85",
                           clock_deg=22.5, clock_source=MODEL_MEASURED),),
-    boss_diameters_m=(0.071,),
+    boss_diameters_m=(0.071,), face_inset_m=0.0112,
     notes=("THE HOUSING PATTERN IS CLOCKED 22.5 DEGREES FROM THE OUTPUT "
            "PATTERN, which is half of the 45 degree pitch. An arm assembled "
            "with both ends on the same clock has every bolt on one end "
@@ -168,7 +173,7 @@ AK80_64_OUTPUT = MountingFace(
               BoltPattern("M4", 6, 0.028, 0.008, "6-M4 depth 8mm, PCD 28",
                           clock_deg=30.0, clock_source=MODEL_MEASURED)),
     central_bore_m=0.021, central_bore_depth_m=0.0045,
-    boss_diameters_m=(0.080, 0.035),
+    boss_diameters_m=(0.080, 0.035), face_inset_m=0.008,
     dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=2,
     dowel_bolt_circle_m=0.028, dowel_angles_deg=(0.0, 180.0),
     dowel_source=MODEL_MEASURED,
@@ -186,7 +191,7 @@ AK80_9_HOUSING = MountingFace(
     patterns=(BoltPattern("M3", 8, 0.085, None, "8-M3, PCD 85",
                           clock_deg=22.5, clock_source=MODEL_APPROXIMATE,
                           clock_tolerance_deg=1.5),),
-    boss_diameters_m=(0.071,),
+    boss_diameters_m=(0.071,), face_inset_m=0.011,
     notes=("no thread depth is printed on this drawing, so the bolt length "
            "cannot be chosen from it",))
 
@@ -200,7 +205,7 @@ AK80_9_OUTPUT = MountingFace(
                           clock_deg=15.75, clock_source=MODEL_APPROXIMATE,
                           clock_tolerance_deg=1.5)),
     central_bore_m=None, central_bore_depth_m=None,
-    boss_diameters_m=(0.048, 0.037),
+    boss_diameters_m=(0.048, 0.037), face_inset_m=0.003,
     dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=None,
     notes=("no central bore is printed on this drawing; the 48 and 37 are "
            "boss steps, not a hole, so no through bore may be designed here",
@@ -211,7 +216,14 @@ AK80_9_OUTPUT = MountingFace(
            "against a printed 85, and its 6-M4 angles scatter from 58.2 to "
            "61.9 degrees apart where they should be 60. The PRINTED "
            "diameters are used and only the clock is taken from the model, "
-           "with 1.5 degrees of stated uncertainty"))
+           "with 1.5 degrees of stated uncertainty",
+           "THE AXIAL DIMENSIONS OF THIS MODEL ARE TRUSTWORTHY even though "
+           "its angles are not. Its two widest faces perpendicular to the "
+           "axis measure 3.00 mm inboard of the output end and 11.00 mm "
+           "inboard of the housing end, and the 2D drawing's section prints "
+           "3 and 11. The approximate model and the drawing confirm each "
+           "other on these, which is why the face insets are used and the "
+           "clock angles are not trusted"))
 
 FACES: dict[tuple[str, str], MountingFace] = {
     (f.actuator, f.face): f for f in

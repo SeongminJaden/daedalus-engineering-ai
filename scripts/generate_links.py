@@ -17,13 +17,14 @@ import json
 import os
 import sys
 import time
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from projects.manipulator.arm import build_arm
-from projects.manipulator.links import EXPORT_SCALE, faceted_step, generate_link
+from projects.manipulator.links import EXPORT_SCALE
 from projects.manipulator.loop import run_loop
 from projects.manipulator.spec import SPEC
 from projects.manipulator.stages import dynamics_stage
@@ -45,14 +46,24 @@ def _one_link(payload):
     (index, name, drives, torques, out_dir, iterations, fraction, threads,
      sections) = payload
     _limit_threads(threads)
-    from projects.manipulator.links import generate_link
+    from projects.manipulator.links import faceted_step, generate_link
     from projects.manipulator.spec import SPEC
 
     started = time.perf_counter()
     design = generate_link(SPEC, index, drives, torques, Path(out_dir),
                            iterations=iterations, volume_fraction=fraction,
                            sections=sections)
-    return index, design, time.perf_counter() - started
+    # The STEP conversion belongs in the worker. Left in the parent it is a
+    # serial tail that grows with the link count and undoes the parallelism.
+    files = {}
+    if design.generated:
+        stl = Path(design.stl_path)
+        step, faces = faceted_step(stl, stl.with_suffix(".step"))
+        files = {"stl": {"file": stl.name, "md5": md5(stl),
+                         "bytes": stl.stat().st_size},
+                 "step": {"file": step.name, "md5": md5(step),
+                          "bytes": step.stat().st_size, "faces": faces}}
+    return index, design, time.perf_counter() - started, files
 
 
 def md5(path: Path) -> str:
@@ -78,13 +89,20 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
                  volume_fraction, threads_per_worker, sections)
                 for index, link in enumerate(SPEC.links())]
     if workers > 1:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        # SPAWN, not fork. The parent has already touched Warp to size the
+        # arm, so it holds a CUDA context, and a forked child inherits that
+        # context in a state CUDA refuses to use: every worker died with
+        # "Warp CUDA error 3: initialization error". A spawned worker starts
+        # a fresh interpreter and initialises its own context.
+        context = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=workers,
+                                 mp_context=context) as pool:
             done = sorted(pool.map(_one_link, payloads), key=lambda r: r[0])
     else:
         done = [_one_link(payload) for payload in payloads]
 
     rows = []
-    for (index, design, seconds), link in zip(done, SPEC.links()):
+    for (index, design, seconds, files), link in zip(done, SPEC.links()):
         row = {"link": link.name, "generated": design.generated,
                "mass_kg": design.mass_kg, "volume_m3": design.volume_m3,
                "compliance_j": design.compliance_j,
@@ -96,13 +114,7 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
                "notes": list(design.notes),
                "unresolved": list(design.unresolved),
                "reason": design.reason, "seconds": round(seconds, 1)}
-        if design.generated:
-            stl = Path(design.stl_path)
-            step, faces = faceted_step(stl, stl.with_suffix(".step"))
-            row["stl"] = {"file": stl.name, "md5": md5(stl),
-                          "bytes": stl.stat().st_size}
-            row["step"] = {"file": step.name, "md5": md5(step),
-                           "bytes": step.stat().st_size, "faces": faces}
+        row.update(files)
         rows.append(row)
         print(json.dumps(row, default=str), flush=True)
 

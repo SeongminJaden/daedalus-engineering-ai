@@ -212,3 +212,54 @@ def test_the_drawing_and_the_model_disagree_and_the_entry_says_so():
     measures 22.5. An entry that quietly picked one would hide a conflict
     someone has to resolve against the real part."""
     assert any("do not agree" in note for note in AK80_64_HOUSING.notes)
+
+
+# --- where the drive sits ------------------------------------------------------
+
+def test_a_joint_axis_is_read_in_the_link_own_frame():
+    """The base column runs up, so the base yaw axis runs ALONG it.
+
+    The specification states axes in the arm's frame, where y is up. A link's
+    file has x along itself. Reading the arm's components as the link's made
+    the base yaw drive a cross axis cylinder when it is a coaxial one, and
+    drove a 98 mm pocket sideways through a part the motor runs along.
+    """
+    from projects.manipulator.links import local_axis
+
+    base = local_axis(SPEC, 0, SPEC.joints()[0].axis)
+    assert abs(base[0]) == pytest.approx(1.0)
+    shoulder = local_axis(SPEC, 0, SPEC.joints()[1].axis)
+    assert abs(shoulder[2]) == pytest.approx(1.0)
+    # Every other link runs along x, so its axes pass through unchanged.
+    for index in range(1, len(SPEC.links())):
+        arm = SPEC.joints()[index].axis
+        assert local_axis(SPEC, index, arm) == pytest.approx(arm)
+
+
+def test_the_face_insets_are_the_printed_ones():
+    """Where a motor sits along its own axis, from the drawings' sections."""
+    assert AK80_64_OUTPUT.face_inset_m == 0.008
+    assert AK80_64_HOUSING.face_inset_m == 0.0112
+    assert AK80_9_OUTPUT.face_inset_m == 0.003
+    assert AK80_9_HOUSING.face_inset_m == 0.011
+
+
+def test_a_link_gets_a_pocket_for_the_drive_it_carries_as_well_as_its_own():
+    """Two drives touch a link and only one used to be cut for.
+
+    The base column is driven by the base yaw and CARRIES the shoulder, and
+    the shoulder's 98 mm body has to fit somewhere.
+    """
+    from projects.manipulator.links import link_domain
+
+    sections = {name: type("S", (), {"outer_height_m": 0.098,
+                                     "outer_width_m": 0.098})()
+                for name in [l.name for l in SPEC.links()]}
+    built, reason = link_domain(SPEC, 0, DRIVES, sections=sections)
+    assert built is not None, reason
+    mesh, solid, void, span, height, width, note = built
+    assert "its own drive" in note and "the drive it carries" in note
+    centroids = mesh.element_centroids()
+    near = void & (centroids[:, 0] < 0.5 * span)
+    far = void & (centroids[:, 0] > 0.5 * span)
+    assert near.any() and far.any(), "one end has no pocket"

@@ -33,6 +33,7 @@ from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # 
                                          measurement_plan_stage,
                                          pinocchio_cross_check, policy_stage,
                                          reflected_inertia_stage,
+                                         spigot_stage,
                                          verification_stage)
 
 
@@ -101,6 +102,8 @@ def main() -> int:
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
     stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
     stages["interfaces"] = interface_stage(stages["drivetrain"], SPEC)
+    stages["spigot"] = spigot_stage(stages["dynamics"], stages["drivetrain"],
+                                    SPEC)
     print("dynamics and drivetrain done", flush=True)
 
     if not args.skip_links:
@@ -171,6 +174,7 @@ def main() -> int:
         section("3e. What the bus voltage costs", stages["bus"]),
         section("3f. Does each joint contain its own drive", stages["envelope"]),
         section("3g. What each link bolts to", stages["interfaces"]),
+        section("3h. Located by a spigot, driven by friction", stages["spigot"]),
         "The bolt circles, as the drawings print them:\n",
         table(stages["interfaces"].data.get("faces", [])),
         "\nWhether the clearance hole can take up the uncertainty in the "

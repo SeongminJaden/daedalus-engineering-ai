@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import time
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -125,7 +126,14 @@ def main(steps: int = 5, iterations: int = 40, workers: int = 3,
 
     started = time.perf_counter()
     if workers > 1:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        # SPAWN, not fork. The parent has already touched Warp to size the
+        # arm, so it holds a CUDA context, and a forked child inherits that
+        # context in a state CUDA refuses to use: every worker died with
+        # "Warp CUDA error 3: initialization error". A spawned worker starts
+        # a fresh interpreter and initialises its own context.
+        context = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=workers,
+                                 mp_context=context) as pool:
             rows = list(pool.map(_search_one, payloads))
     else:
         rows = [_search_one(payload) for payload in payloads]

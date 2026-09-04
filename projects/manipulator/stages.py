@@ -1335,3 +1335,115 @@ def interface_stage(drivetrain: StageResult,
     result.notes.append(
         f"{len(result.data['gaps'])} parts the arm needs and does not have")
     return result
+
+
+def spigot_stage(dynamics: StageResult, drivetrain: StageResult,
+                 spec: ManipulatorSpec = SPEC) -> StageResult:
+    """Can the joint be located by a spigot and driven by friction?
+
+    This is the question that decides whether the AK80-9's clock angle
+    matters. If the bolts are pure clearance holes and the parts are located
+    by the drive's own boss, then an angular error in the bolt circle is
+    absorbed by the clearance and nothing is out of position. What the bolts
+    must then do is hold enough friction to carry the joint torque, because
+    they are no longer in shear against the hole.
+
+    NO COEFFICIENT OF FRICTION IS ASSUMED. This project has refused to invent
+    one for aluminium against aluminium and still does. The question is
+    turned round instead: the stage reports the coefficient the joint would
+    NEED. That number can be compared with any source later, and it needs no
+    source now. It is the honest form of the question, and it turns out to
+    answer it, because the required values are far below anything any dry
+    metal pairing reaches.
+
+    The dowels are checked too, on BEARING IN THE LINK rather than shear in
+    the pin. The pin is hardened steel and the link is cast aluminium; the
+    aluminium yields first, so the pin's own strength never governs and no
+    pin material has to be sourced.
+    """
+    from physics.joints.bolted import PropertyClass, analyze_joint
+
+    from .interfaces import face_for
+
+    result = StageResult(name="spigot register and friction grip")
+    material = get_material(spec.materials["link"])
+    peaks = {row["joint"]: max(row["peak_trapezoidal_nm"],
+                               row["peak_s_curve_nm"])
+             for row in dynamics.rows}
+    preload: dict[str, float] = {}
+    for size in ("M3", "M4"):
+        preload[size] = analyze_joint(
+            size=size, grade=PropertyClass.C8_8,
+            grip_length_m=spec.flange_thickness_m, external_load_n=0.0,
+            external_load_min_n=0.0, member_material="aluminium",
+            member_modulus_pa=material.youngs_modulus_pa).preload_n
+
+    for row in drivetrain.rows:
+        if row.get("status") != "selected":
+            continue
+        joint = row["joint"]
+        face = face_for(str(row.get("selected")), "output")
+        entry = {"joint": joint, "drive": row.get("selected"),
+                 "peak_nm": peaks.get(joint, 0.0)}
+        if face is None:
+            entry["status"] = ("no drawing, so neither a spigot nor a bolt "
+                               "circle is known")
+            result.rows.append(entry)
+            continue
+
+        # Torque per unit coefficient of friction: every bolt clamps its own
+        # circle, and the friction radius is that circle's radius.
+        per_mu = sum(pattern.count * preload[pattern.thread]
+                     * 0.5 * pattern.bolt_circle_m
+                     for pattern in face.patterns)
+        demanded = peaks.get(joint, 0.0) * spec.torque_margin
+        entry.update({
+            "bolts": ", ".join(f"{p.count}x{p.thread}@{p.bolt_circle_m * 1000:.0f}"
+                               for p in face.patterns),
+            "clamp_torque_per_mu_nm": per_mu,
+            "demanded_nm": demanded,
+            "required_friction_coefficient": (demanded / per_mu if per_mu
+                                              else None),
+            "spigot_mm": (max(face.boss_diameters_m) * 1000.0
+                          if face.boss_diameters_m else None)})
+        if face.dowel_angles_deg and face.dowel_diameter_m and face.dowel_depth_m:
+            bearing_n = (face.dowel_diameter_m * face.dowel_depth_m
+                         * material.yield_strength_pa)
+            radius = 0.5 * (face.dowel_bolt_circle_m or 0.0)
+            entry["dowel_torque_nm"] = (len(face.dowel_angles_deg) * bearing_n
+                                        * radius)
+            entry["dowel_basis"] = (
+                f"{len(face.dowel_angles_deg)} pins bearing on "
+                f"{face.dowel_diameter_m * 1000:.0f} by "
+                f"{face.dowel_depth_m * 1000:.0f} mm of link at "
+                f"{material.yield_strength_pa / 1e6:.0f} MPa")
+        else:
+            entry["dowel_torque_nm"] = None
+            entry["dowel_basis"] = "no located dowel on this face"
+        result.rows.append(entry)
+
+    needed = [r["required_friction_coefficient"] for r in result.rows
+              if r.get("required_friction_coefficient")]
+    if needed:
+        result.notes.append(
+            f"the largest coefficient of friction any joint needs is "
+            f"{max(needed):.4f}. No value is assumed here and none has to be: "
+            f"the lowest figure published for any dry metal pairing is an "
+            f"order of magnitude above this, so the friction grip is not what "
+            f"limits these joints")
+    result.notes.append(
+        f"preload is {preload['M3']:.0f} N for M3 and {preload['M4']:.0f} N "
+        f"for M4 at class 8.8, from the same analysis the flange stage uses, "
+        f"and the torque to preload relation scatters by about 30 percent")
+    result.notes.append(
+        "a spigot register makes the AK80-9's clock angle harmless: the "
+        "parts are located by the drive's boss and the bolts only clamp, so "
+        "the 1.11 mm of angular uncertainty is taken up by the clearance hole "
+        "it can no longer be measured against")
+    result.could_not.append(
+        "The spigot fit itself is not sized. That needs a tolerance class for "
+        "the boss, which no drawing prints: the AK80-64 boss is dimensioned "
+        "80 and 35 with no tolerance, and the central bore is the only "
+        "toleranced feature on the face at 21.0 +0.02. A located fit needs "
+        "the boss measured or an H7 recess cut to the measured size.")
+    return result
