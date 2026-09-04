@@ -256,8 +256,28 @@ def test_no_joint_with_a_printed_outline_interferes_with_its_own_drive():
     assert checked, "no joint could be checked at all"
     for row in checked:
         assert row["diameter_check"] == "fits", row
-        assert row["length_check"] == "fits", row
+        if row.get("spacing_check") not in (None,
+                                            "not printed for one of the pair"):
+            assert row["spacing_check"] == "fits", row
     unchecked = [row for row in envelope.rows
                  if row.get("diameter_check") == "not printed"]
     assert unchecked, "every outline was printed, which is not this catalogue"
     assert any("cannot be checked" in note for note in envelope.notes)
+
+
+def test_the_along_arm_extent_of_a_drive_depends_on_its_axis():
+    """A pitch drive lies across the arm, so it occupies its diameter and not
+    its length. Comparing every spacing with the axial length left 28.25 mm of
+    interference at the wrist, which a Fusion model measured."""
+    from drivetrain.sourced import sourced_motor
+    from projects.manipulator.stages import actuator_extent_along_arm
+
+    actuator = sourced_motor("cubemars_ak80_9_v3")
+    along, why_along = actuator_extent_along_arm(actuator, (1.0, 0.0, 0.0))
+    across, why_across = actuator_extent_along_arm(actuator, (0.0, 0.0, 1.0))
+    assert along == actuator.axial_length_m == 0.0385
+    assert across == actuator.outer_diameter_m == 0.098
+    assert "length" in why_along and "diameter" in why_across
+    # Two neighbours need half of each.
+    assert 0.5 * (along + across) == pytest.approx(0.06825)
+    assert SPEC.wrist_spacing_m >= 0.06825

@@ -63,13 +63,20 @@ class ManipulatorSpec:
     #: shoulder, which is what "maximum reach" means for this layout.
     base_height_m: float = 0.150
 
-    #: The axial room each wrist joint gets. CHOSEN at 40 mm because the only
-    #: actuator in the catalogue whose outline is printed is 38.5 mm long, and
-    #: a joint has to contain its own drive. The first version of this design
-    #: gave the wrist joints 30 and 25 mm without looking at any actuator, and
-    #: a Fusion model of it found the 38.5 mm drive interfering by 8.5 and
-    #: 13.5 mm. The three wrist joints therefore take 120 mm of the reach.
-    wrist_spacing_m: float = 0.040
+    #: The room each wrist joint gets along the arm. This number has been
+    #: wrong twice and the arithmetic is now written out.
+    #:
+    #: A drive occupies its own axial length when its axis runs along the arm
+    #: and its DIAMETER when the axis is across it. The wrist roll is a 38.5 mm
+    #: long drive on an along-arm axis; the wrist pitch is the same drive on a
+    #: cross-arm axis, so it occupies 98 mm. Two neighbours need half of each,
+    #: which is 19.25 + 49.0 = 68.25 mm, rounded up to 68.5.
+    #:
+    #: All three wrist gaps take that number because this specification
+    #: carries one wrist spacing, so the binding pair sets them all. The three
+    #: wrist joints therefore take 205.5 mm of the 600 mm reach, which is the
+    #: real price of hanging 98 mm drives off a serial wrist.
+    wrist_spacing_m: float = 0.0685
 
     #: What is left of the reach after the wrist, split in the same ratio the
     #: first version used. These are derived rather than stated, so a change

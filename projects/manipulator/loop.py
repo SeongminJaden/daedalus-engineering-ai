@@ -175,8 +175,14 @@ def size_sections(arm: Assembly, spec: ManipulatorSpec,
 
 
 def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
-             tolerance_kg: float = 1e-3) -> StageResult:
-    """Iterate sections, torques and drives until the mass stops moving."""
+             tolerance_kg: float = 1e-3, optimise_sections: bool = False
+             ) -> StageResult:
+    """Iterate sections, torques and drives until the mass stops moving.
+
+    `optimise_sections` swaps the one dimensional sizing for the three
+    dimensional optimiser under the same floors. It is off by default because
+    it costs about a minute a pass and the design document reports both.
+    """
     result = StageResult(name="mass torque loop")
     actuator_masses: dict[str, float] = {}
     sections = starting_sections(spec)
@@ -228,8 +234,9 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
         previous_total = total
         floors = actuator_section_floor(
             spec, {row["joint"]: row.get("selected") for row in drives.rows})
-        sections = size_sections(arm, spec, actuator_masses,
-                                 section_floors=floors)
+        sizer = (size_sections_optimised if optimise_sections
+                 else size_sections)
+        sections = sizer(arm, spec, actuator_masses, section_floors=floors)
     else:
         result.notes.append(
             f"did NOT converge in {max_iterations} iterations; the history "
@@ -240,6 +247,12 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
     result.data["final_sections"] = sections
     result.data["actuator_masses"] = actuator_masses
     result.data["unselected"] = history[-1].unselected
+    result.data["optimised_sections"] = optimise_sections
+    result.notes.append(
+        ("sections came from the three dimensional optimiser"
+         if optimise_sections else
+         "sections came from the one dimensional sizing; the three "
+         "dimensional optimiser is reported separately"))
     result.notes.append(
         "the actuator masses are placed at their joint origins by this module, "
         "because the assembly model has no point mass; the assembly's own mass "
@@ -277,10 +290,19 @@ def link_problem(link_spec, load_n: float, limit_m: float,
                               quantity=ObjectiveQuantity.MASS)])
 
 
+#: Iterations for the section optimiser. MEASURED, not guessed: one
+#: evaluation runs a finite element solve at 0.617 s, the default 200
+#: iterations cost 186 s per link, and ten iterations reach the same point in
+#: 15 s. Anything above ten is paying three minutes for no movement.
+SECTION_OPTIMISER_ITERATIONS = 10
+
+
 def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
                             actuator_masses: dict[str, float],
                             minimum_wall_m: float = 0.003,
-                            apply_interface_floor: bool = True
+                            apply_interface_floor: bool = True,
+                            section_floors: dict[str, float] | None = None,
+                            max_iter: int = SECTION_OPTIMISER_ITERATIONS
                             ) -> dict[str, Section]:
     """All three section dimensions at once, by the existing SLSQP.
 
@@ -296,7 +318,8 @@ def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
     from optimization.constraints import build_optimization_problem
     from optimization.gradient.slsqp import optimize_slsqp
 
-    fallback = size_sections(arm, spec, actuator_masses, minimum_wall_m)
+    fallback = size_sections(arm, spec, actuator_masses, minimum_wall_m,
+                             section_floors=section_floors)
     sections: dict[str, Section] = {}
     for link_spec in spec.links():
         load = carried_load_n(arm, link_spec.name, spec, actuator_masses)
@@ -305,7 +328,7 @@ def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
         try:
             op = build_optimization_problem(
                 link_problem(link_spec, load, limit, spec))
-            result = optimize_slsqp(op)
+            result = optimize_slsqp(op, max_iter=max_iter)
             # SLSQP often stops with "positive directional derivative for
             # linesearch" at a point that satisfies every constraint. That is
             # a line search giving up, not an infeasible answer, so the test
@@ -318,8 +341,10 @@ def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
             # a bound, so the table can show what the unconstrained optimum
             # was and what the floor cost.
             if apply_interface_floor:
-                width = max(width, spec.minimum_section_m)
-                height = max(height, spec.minimum_section_m)
+                floor = max(spec.minimum_section_m,
+                            (section_floors or {}).get(link_spec.name, 0.0))
+                width = max(width, floor)
+                height = max(height, floor)
                 wall = max(wall, spec.minimum_wall_m)
             if wall >= 0.5 * min(width, height):
                 # The bounds allow a wall that leaves no cavity. Such a point
@@ -347,14 +372,24 @@ def size_sections_optimised(arm: Assembly, spec: ManipulatorSpec,
 
 
 def sizing_comparison(spec: ManipulatorSpec = SPEC,
-                      actuator_masses: dict[str, float] | None = None
+                      actuator_masses: dict[str, float] | None = None,
+                      section_floors: dict[str, float] | None = None
                       ) -> list[dict]:
-    """One dimension against three, on the same links and the same limits."""
+    """One dimension against three, on the same links and the same limits.
+
+    Three columns, because the difference between them is the finding. The one
+    dimensional routine solves for the depth with the width and wall fixed.
+    The three dimensional one moves all three under the same floors. The third
+    column drops the floors, which is what the optimiser wants and what the
+    joint cannot accept.
+    """
     actuator_masses = actuator_masses or {}
     arm = build_arm(starting_sections(spec), spec)
     material = get_material(arm.material_id)
-    one = size_sections(arm, spec, actuator_masses)
-    three = size_sections_optimised(arm, spec, actuator_masses)
+    one = size_sections(arm, spec, actuator_masses,
+                        section_floors=section_floors)
+    three = size_sections_optimised(arm, spec, actuator_masses,
+                                    section_floors=section_floors)
     unconstrained = size_sections_optimised(arm, spec, actuator_masses,
                                             apply_interface_floor=False)
     rows = []

@@ -1030,27 +1030,53 @@ def bus_voltage_stage(dynamics: StageResult, load_inertias: dict[str, float],
 
 # --------------------------------- 3f. does the joint contain its own drive
 
+def actuator_extent_along_arm(actuator, axis) -> tuple[float | None, str]:
+    """How much room the drive takes ALONG the arm, and why.
+
+    An actuator is a cylinder. If its axis lies along the arm it occupies its
+    own axial length; if the axis is across the arm, as every pitch joint's
+    is, it occupies its DIAMETER. The first version of this check compared
+    every joint spacing with the axial length, which is right for the roll
+    joints and wrong for the pitch joints by the difference between 38.5 and
+    98 mm. A Fusion model found the 28.25 mm of interference that left.
+    """
+    import numpy as np
+
+    direction = np.asarray(axis, dtype=float)
+    if abs(float(direction[0])) > 0.5:              # the arm runs along x
+        return actuator.axial_length_m, "axis along the arm: its length"
+    return actuator.outer_diameter_m, "axis across the arm: its diameter"
+
+
 def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
                    spec: ManipulatorSpec = SPEC) -> StageResult:
     """Check each joint against the outline of the drive it was given.
 
-    A joint has to contain its actuator, and until this stage existed nothing
-    in the pipeline read an actuator's outline at all. A Fusion model of this
-    arm found the consequence: an actuator 38.5 mm long in a 30 mm joint
-    spacing, and a 98 mm diameter actuator on links 40 to 90 mm across.
-
-    Where the page does not print an outline the check cannot run, and that
-    is reported as unverifiable rather than as a pass.
+    Two rules. The link section must be at least the actuator diameter, and
+    consecutive joints must be at least half of each one's along-arm extent
+    apart, where that extent depends on which way the actuator's axis points.
+    Where a page prints no outline the check cannot run, and that is reported
+    as unverifiable rather than as a pass.
     """
     from drivetrain.sourced import sourced_motor
 
     result = StageResult(name="actuator envelope")
     joints = spec.joints()
+    names = [joint.name for joint in joints]
     spacing_after = {}
     for index, joint in enumerate(joints):
         following = joints[index + 1] if index + 1 < len(joints) else None
         spacing_after[joint.name] = (following.origin_x_m if following
                                      else spec.links()[-1].length_m)
+    drives = {row["joint"]: row.get("selected") for row in drivetrain.rows}
+    extents: dict[str, tuple] = {}
+    for joint in joints:
+        part = drives.get(joint.name)
+        if not part or "+" in str(part):
+            extents[joint.name] = (None, "no single outline")
+            continue
+        extents[joint.name] = actuator_extent_along_arm(sourced_motor(part),
+                                                        joint.axis)
 
     for row in drivetrain.rows:
         name = row["joint"]
@@ -1063,12 +1089,13 @@ def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
             result.rows.append(entry)
             continue
         actuator = sourced_motor(row["selected"])
-        link = arm.links[[j.name for j in arm.actuated_joints()].index(name)]
+        link = arm.links[names.index(name)]
         section = sections[link.name]
         across = max(section.outer_height_m, section.outer_width_m)
-        entry.update({"link": link.name,
-                      "link_across_m": across,
-                      "joint_spacing_m": spacing_after[name]})
+        extent, why = extents[name]
+        entry.update({"link": link.name, "link_across_m": across,
+                      "joint_spacing_m": spacing_after[name],
+                      "extent_along_arm_m": extent, "extent_basis": why})
         if actuator.outer_diameter_m is None:
             entry["diameter_check"] = "not printed"
         else:
@@ -1077,21 +1104,30 @@ def envelope_stage(arm: Assembly, drivetrain: StageResult, sections,
                 "fits" if actuator.outer_diameter_m <= across
                 else f"INTERFERES by "
                      f"{(actuator.outer_diameter_m - across) * 1000:.1f} mm")
-        if actuator.axial_length_m is None:
-            entry["length_check"] = "not printed"
+
+        index = names.index(name)
+        following = names[index + 1] if index + 1 < len(names) else None
+        next_extent = extents.get(following, (None, ""))[0] if following else None
+        if extent is None or next_extent is None:
+            entry["spacing_check"] = "not printed for one of the pair"
         else:
-            entry["actuator_length_m"] = actuator.axial_length_m
-            entry["length_check"] = (
-                "fits" if actuator.axial_length_m <= spacing_after[name]
+            required = 0.5 * (extent + next_extent)
+            entry["required_spacing_m"] = required
+            entry["spacing_check"] = (
+                "fits" if required <= spacing_after[name]
                 else f"INTERFERES by "
-                     f"{(actuator.axial_length_m - spacing_after[name]) * 1000:.1f} mm")
+                     f"{(required - spacing_after[name]) * 1000:.1f} mm")
         result.rows.append(entry)
 
-    printed = [r for r in result.rows if r.get("diameter_check") not in
-               (None, "not printed")]
+    printed = [r for r in result.rows
+               if r.get("diameter_check") not in (None, "not printed")]
     result.notes.append(
         f"{len(printed)} of {len(result.rows)} joints have an actuator whose "
         f"outline is printed at all; the rest cannot be checked")
+    result.notes.append(
+        "the along-arm extent of a drive is its length when its axis runs "
+        "along the arm and its DIAMETER when the axis is across it, which is "
+        "every pitch joint")
     result.could_not.append(
         "Most actuator pages print no outline, so this check is unverifiable "
         "for those joints. A frameless motor has no outline to print: its "
