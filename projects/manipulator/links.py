@@ -839,6 +839,23 @@ def size_link_by_volume_fraction(spec: ManipulatorSpec, link_index: int,
 #: a refusal, and the sign of a number is not a substitute for one.
 MINIMUM_RING_WIDTH_M = 0.008
 
+#: WHERE THE NARROWEST RING'S 8.5 mm COMES FROM, because it decomposes into
+#: one number that is real and one that is a placeholder. Its inner edge is
+#: 41.0, which is the AK80-64's measured 40.0 boss plus a millimetre of
+#: clearance; its outer edge is 49.5, which is the 44.5 bolt circle plus 5 mm
+#: of edge. So the millimetre of boss clearance comes straight out of the
+#: ring's width.
+#:
+#: That millimetre is there because no drawing prints a tolerance for the
+#: boss, which is already on the list of things this design cannot resolve.
+#: Sized as a located fit it would be nearer 0.05 and the ring would be 9.4
+#: mm. The 8.5 is therefore a pessimism produced by a missing tolerance, not
+#: a limit of the design, and the two entries move together.
+RING_WIDTH_DEPENDS_ON = (
+    "the narrowest ring is 8.5 mm because the boss carries 1.0 mm of "
+    "clearance for want of a printed tolerance. As a located fit it would be "
+    "about 0.05 and the ring would be 9.4 mm")
+
 #: CHOSEN. The cable has to leave the joint somewhere, and the only through
 #: bore any of these drawings prints is the AK80-64 output's 21 mm. Using that
 #: one diameter on every face means one cable size fits the whole arm, and it

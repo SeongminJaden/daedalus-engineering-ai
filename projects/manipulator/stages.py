@@ -1516,12 +1516,16 @@ def spigot_stage(dynamics: StageResult, drivetrain: StageResult,
         "parts are located by the drive's boss and the bolts only clamp, so "
         "the 1.11 mm of angular uncertainty is taken up by the clearance hole "
         "it can no longer be measured against")
+    from .links import RING_WIDTH_DEPENDS_ON
+
     result.could_not.append(
         "The spigot fit itself is not sized. That needs a tolerance class for "
         "the boss, which no drawing prints: the AK80-64 boss is dimensioned "
         "80 and 35 with no tolerance, and the central bore is the only "
         "toleranced feature on the face at 21.0 +0.02. A located fit needs "
-        "the boss measured or an H7 recess cut to the measured size.")
+        "the boss measured or an H7 recess cut to the measured size. "
+        + RING_WIDTH_DEPENDS_ON + ", so this gap and the bolt seat's margin "
+        "are the same gap seen twice.")
     return result
 
 
