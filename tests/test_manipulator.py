@@ -339,3 +339,23 @@ def test_the_flange_cannot_be_fastened_as_drawn_and_says_so():
         assert row["tapped_wall_is_enough"] is False
         assert "through bolt" in row["fastening_note"]
     assert any("cannot be fastened" in gap for gap in features.could_not)
+
+
+def test_the_joint_flanges_are_counted_and_are_not_small():
+    """A 3 mm wall cannot take the counterbore or the thread, so each link
+    gets 9 mm end flanges. They weigh about as much as the tubes, and a
+    structure mass that ignored them would be describing something else."""
+    from projects.manipulator.loop import flange_mass_kg, structure_mass_kg
+    from projects.manipulator.arm import Section, starting_sections
+
+    section = Section(outer_height_m=0.098, outer_width_m=0.098,
+                      wall_thickness_m=0.003)
+    mass = flange_mass_kg(SPEC, section, 2700.0)
+    plate = 2 * 0.098 * 0.098 * SPEC.flange_thickness_m * 2700.0
+    assert mass < plate                    # the bolt holes come out
+    assert mass > 0.9 * plate              # and they are only four M6 holes
+    assert SPEC.flange_thickness_m == 0.009
+
+    arm = build_arm(starting_sections(SPEC), SPEC)
+    tubes, flanges = structure_mass_kg(arm, SPEC, starting_sections(SPEC))
+    assert flanges > 0.3 * tubes, (tubes, flanges)

@@ -110,6 +110,41 @@ def carried_load_n(arm: Assembly, link_name: str, spec: ManipulatorSpec,
     return (spec.payload_kg + outboard_links + outboard_actuators) * 9.80665
 
 
+def flange_mass_kg(spec: ManipulatorSpec, section: Section,
+                   density_kg_m3: float, bolt_count: int = 4,
+                   clearance_hole_m: float = 0.0066) -> float:
+    """Mass of the two end flanges of one link.
+
+    A flange is a plate of the section's outer size and the stated flange
+    thickness, less the bolt holes. It exists because a 3 mm wall cannot take
+    a 6.4 mm counterbore or hold 9 mm of thread, and it is counted because a
+    structure that ignores its own joints is lighter than the thing it
+    describes.
+
+    This is an UPPER BOUND and a deliberate one. A real flange has a central
+    bore for the actuator shaft and the wiring, and on the 98 mm wrist bodies
+    that bore would remove most of the plate. Nothing here knows how big it
+    is, because the actuator pages do not print a shaft or boss diameter, so
+    the mass is counted as if the flange were solid and the note says which
+    way the error runs.
+    """
+    import math
+
+    plate = section.outer_height_m * section.outer_width_m
+    holes = bolt_count * math.pi * (clearance_hole_m / 2.0) ** 2
+    return 2.0 * max(plate - holes, 0.0) * spec.flange_thickness_m * density_kg_m3
+
+
+def structure_mass_kg(arm: Assembly, spec: ManipulatorSpec,
+                      sections: dict[str, Section]) -> tuple[float, float]:
+    """(tube mass, flange mass) for the whole arm."""
+    material = get_material(arm.material_id)
+    tubes = sum(link.mass_kg(material.density_kg_m3) for link in arm.links)
+    flanges = sum(flange_mass_kg(spec, sections[link.name],
+                                 material.density_kg_m3) for link in arm.links)
+    return tubes, flanges
+
+
 def actuator_section_floor(spec: ManipulatorSpec,
                            drives: dict[str, str] | None = None
                            ) -> dict[str, float]:
@@ -192,7 +227,8 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
     for index in range(max_iterations):
         arm = build_arm(sections, spec)
         material = get_material(arm.material_id)
-        structure = sum(link.mass_kg(material.density_kg_m3) for link in arm.links)
+        tubes, flanges = structure_mass_kg(arm, spec, sections)
+        structure = tubes + flanges
 
         dynamics = dynamics_stage(arm, spec, samples=60)
         q = stretched_pose(spec)
@@ -218,6 +254,7 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
         shoulder = next(row["peak_trapezoidal_nm"] for row in dynamics.rows
                         if row["joint"] == "j2_shoulder")
 
+        result.data.setdefault("flange_mass_kg", []).append(flanges)
         history.append(Iteration(index=index, structure_mass_kg=structure,
                                  actuator_mass_kg=actuator_total,
                                  total_mass_kg=total,
@@ -253,6 +290,9 @@ def run_loop(spec: ManipulatorSpec = SPEC, max_iterations: int = 8,
          if optimise_sections else
          "sections came from the one dimensional sizing; the three "
          "dimensional optimiser is reported separately"))
+    result.notes.append(
+        "the structure mass includes the end flanges, two per link, which "
+        "exist because the wall cannot take the counterbore or the thread")
     result.notes.append(
         "the actuator masses are placed at their joint origins by this module, "
         "because the assembly model has no point mass; the assembly's own mass "

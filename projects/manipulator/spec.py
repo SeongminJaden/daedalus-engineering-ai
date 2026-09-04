@@ -145,6 +145,14 @@ class ManipulatorSpec:
     #: arithmetic, and a link that cannot bolt to anything.
     minimum_section_m: float = 0.032
 
+    #: Thickness of the flange at each end of a link, where the bolts go.
+    #: CHOSEN as the larger of what the two failed checks demand: a 6.4 mm
+    #: counterbore has to fit, and a tapped hole in aluminium wants 1.5
+    #: diameters, which is 9 mm for M6. So 9 mm, and the mass of these
+    #: flanges is counted rather than ignored: two per link, a solid plate of
+    #: the section's outer size less the bolt holes.
+    flange_thickness_m: float = 0.009
+
     #: The thinnest wall the milling rules in geometry/manufacturability
     #: accept for aluminium. Below this the optimiser buys mass by asking for
     #: a wall no shop will cut.

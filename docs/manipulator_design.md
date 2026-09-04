@@ -48,13 +48,15 @@ Structure mass 1.330 kg, actuators 3.743 kg, total 5.073 kg. The whole run takes
 
 | actuator_mass_kg | forearm_height_mm | iteration | joints_without_a_drive | shoulder_peak_nm | structure_mass_kg | total_mass_kg | upper_arm_height_mm |
 |---|---|---|---|---|---|---|---|
-| 3.743 | 70 | 0 | 0 | 21.64 | 2.072 | 5.815 | 80 |
-| 3.743 | 32 | 1 | 0 | 28.06 | 1.33 | 5.073 | 32 |
-| 3.743 | 32 | 2 | 0 | 28.06 | 1.33 | 5.073 | 32 |
+| 3.743 | 70 | 0 | 0 | 21.64 | 3.127 | 6.87 | 80 |
+| 3.743 | 32 | 1 | 0 | 28.06 | 2.596 | 6.339 | 32 |
+| 3.743 | 32 | 2 | 0 | 28.06 | 2.596 | 6.339 | 32 |
 
 Note: converged after 3 iterations: the total mass moved less than 1 g.
 
 Note: sections came from the one dimensional sizing; the three dimensional optimiser is reported separately.
+
+Note: the structure mass includes the end flanges, two per link, which exist because the wall cannot take the counterbore or the thread.
 
 Note: the actuator masses are placed at their joint origins by this module, because the assembly model has no point mass; the assembly's own mass is the structure only.
 
@@ -188,8 +190,8 @@ Note: the spacing must clear the touching distance by the 10 mm assembly clearan
 
 | comparability_note | comparable | deflection_limit_m | family_deflection_m | family_feasible | family_mass_kg | family_material | family_seconds | family_shape | freeform_deflection_m | freeform_feasible | freeform_grey | freeform_mass_kg | freeform_seconds | link | load_n |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0003271 | 7.024e-06 | True | 0.402 | al_6061_t6 | 5.022 | hollow_rect | 4.863e-06 | True | 0.1656 | 0.7805 | 13.5 | upper_arm | 57.05 |
-| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0002804 | 0.0001122 | True | 0.1138 | al_6061_t6 | 19.1 | box | 3.545e-06 | True | 0.1969 | 0.488 | 7.564 | forearm | 46.68 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0003271 | 7.024e-06 | True | 0.402 | al_6061_t6 | 5.109 | hollow_rect | 4.863e-06 | True | 0.1656 | 0.7805 | 13.5 | upper_arm | 57.05 |
+| both parts meet the same deflection limit, so the masses answer the same question | True | 0.0002804 | 0.0001122 | True | 0.1138 | al_6061_t6 | 19.08 | box | 3.545e-06 | True | 0.1969 | 0.488 | 7.482 | forearm | 46.68 |
 
 **Could not:** The free form path is not sized to the requirement: it takes a volume fraction. Comparing its mass with the family search's is only meaningful when its extracted part happens to meet the same limit, which the row above states one way or the other.
 
@@ -324,6 +326,30 @@ Parts designed here, which are not purchasable and carry no vendor data:
 **It cannot claim** that the arm works. Nothing has been built. Two joints have no drive at all, so as a machine it is incomplete, and the reason they have none is that the catalogue pages do not print the values the selection needs. The link masses come from a sizing routine that solves for one dimension of three. The free form parts are solved once with linear tetrahedra and their deflections are lower bounds. Friction, backlash and joint compliance are all zero because no measured parameters exist for them, so every torque here is a lower bound too. No cover, no wiring, no bearings beyond a seat tolerance, and no bolted joint analysis.
 
 **The evidence grade of every number in this document is SIMULATED or below**, except the manufacturability rows, which are a rule set with its own grade and are not evidence at all.
+
+## Bearings, and the joints that need one
+
+There are no bearings in this design and for five joints that is the right
+answer: every drive selected for them is an integrated actuator with its own
+output bearing, so the link bolts to that output flange and a second bearing
+would be a second load path fighting the first.
+
+The sixth is not. The tool roll uses a Kollmorgen frameless motor, which is a
+rotor and a stator: no housing, no bearing, no shaft. Somebody has to design
+all three, and this project has not. Its mass is not in the total either.
+
+## The flanges the fastening needs
+
+A 3 mm wall cannot take a 6.4 mm counterbore or hold 9 mm of thread, so each
+link now carries a 9 mm flange at each end and their mass is counted: 1.267
+kg against 1.330 kg of tube. The joints of this arm weigh as much as its
+links.
+
+That number is an upper bound and deliberately so. A real flange has a central
+bore for the actuator shaft and the wiring, and on the 98 mm wrist bodies that
+bore would remove most of the plate. No actuator page prints a shaft or boss
+diameter, so the flange is counted as solid and the error runs one way, which
+the code says where it computes it.
 
 ## What a drawing of this design found
 
