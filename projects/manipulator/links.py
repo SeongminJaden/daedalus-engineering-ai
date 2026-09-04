@@ -482,8 +482,18 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
                            faces=np.asarray(exported.triangles), process=False)
     body, clipped = clip_to_domain(body, span, height, width, EXPORT_SCALE)
     before_mm3 = float(abs(body.volume))
+    # CUT THE DRIVES OUT, do not merely ask the optimiser to avoid them.
+    # Holding elements empty works on element CENTRES, and the iso surface
+    # then runs between a void element and its solid neighbour, so material
+    # stands up to half a cell into the pocket. Half a cell here is 4.1 mm
+    # against a radial clearance of 1.0, and an assembly measured what that
+    # leaves: 104 cubic centimetres of link inside a motor even with every
+    # pocket in the right place. A motor is a solid steel part and its space
+    # is not a preference, so it is subtracted rather than requested.
+    envelopes = drive_envelopes(spec, link_index, drives, span, height, width,
+                                mine)
     holes, unresolved = mounting_holes(spec, link_index, drives, span)
-    body, hole_report = cut_holes(body, holes, height, width,
+    body, hole_report = cut_holes(body, holes + envelopes, height, width,
                                   scale=EXPORT_SCALE)
     after_mm3 = float(abs(body.volume))
     body.export(str(out_dir / f"{link.name}.stl"))
@@ -743,6 +753,41 @@ def mounting_holes(spec: ManipulatorSpec, link_index: int,
     return holes, unresolved
 
 
+def drive_envelopes(spec, link_index, drives, span_m, height_m, width_m, box
+                    ) -> list[dict]:
+    """The drives' own volumes, as cutters in the hole format.
+
+    Same shape the pockets use and the same placement, so a body cut with
+    these cannot be inside a motor whatever the mesh resolution was.
+    """
+    joints = spec.joints()
+    following = (joints[link_index + 1]
+                 if link_index + 1 < len(joints) else None)
+    cutters = []
+    for other, at_x in ((joints[link_index], 0.0), (following, span_m)):
+        if other is None:
+            continue
+        actuator = actuator_for(other.name, drives)
+        if actuator is None or not (actuator.outer_diameter_m
+                                    and actuator.axial_length_m):
+            continue
+        axis = local_axis(spec, link_index, other.axis)
+        centre = _drive_centre(spec, link_index, other, actuator, at_x,
+                              height_m, width_m, box)
+        half = 0.5 * actuator.axial_length_m
+        radius = (0.5 * actuator.outer_diameter_m
+                  + ACTUATOR_RADIAL_CLEARANCE_M)
+        start, end = centre - axis * half, centre + axis * half
+        cutters.append({
+            "end": "drive", "kind": "envelope", "face": other.name,
+            "thread": "", "diameter_m": 2.0 * radius,
+            "axis": [float(v) for v in axis],
+            "start_m": [float(v) for v in start],
+            "end_m": [float(v) for v in end],
+            "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0})
+    return cutters
+
+
 def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
               scale: float = 1.0, sections: int = 24):
     """Subtract the holes from the extracted body.
@@ -761,6 +806,22 @@ def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
     centre_y, centre_z = 0.5 * height_m * scale, 0.5 * width_m * scale
     cutters = []
     for hole in holes:
+        if hole.get("kind") == "envelope":
+            # An envelope carries its own axis and endpoints, because a drive
+            # does not lie along the link the way a bolt does.
+            start = np.asarray(hole["start_m"], dtype=float) * scale
+            end = np.asarray(hole["end_m"], dtype=float) * scale
+            axis = end - start
+            length = float(np.linalg.norm(axis))
+            if length <= 0.0:
+                continue
+            transform = trimesh.geometry.align_vectors([0.0, 0.0, 1.0],
+                                                       axis / length)
+            transform[:3, 3] = 0.5 * (start + end)
+            cutters.append(trimesh.creation.cylinder(
+                radius=0.5 * hole["diameter_m"] * scale, height=length,
+                sections=sections, transform=transform))
+            continue
         length = (hole["x1_m"] - hole["x0_m"]) * scale
         transform = trimesh.transformations.rotation_matrix(
             np.pi / 2.0, [0.0, 1.0, 0.0])
