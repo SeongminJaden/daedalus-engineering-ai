@@ -628,52 +628,45 @@ def interfaces_are_reachable(spec: ManipulatorSpec, link_index: int,
 
 def domain_severance(spec: ManipulatorSpec, link_index: int,
                      drives: dict[str, str], mesh, passive_void) -> dict:
-    """WHY the domain severs an interface, which is a different question.
+    """WHERE a domain is cut, measured rather than reasoned about.
 
-    Two causes were found and they are not the same defect.
+    A CORRECTION LIVES HERE. This first reported that the upper arm's domain
+    was a union of two boxes 42.7 mm apart in z and that the gap was what
+    severed it. The gap is real, and it is not the cause. `domain_extent`
+    returns the BOUNDING extent of its boxes, so the mesh spans the hull and
+    the region between them is meshed like any other: measured, no z slab of
+    the upper arm is more than 65 percent void and none is empty.
 
-    The upper arm's domain is a UNION OF TWO BOXES THAT DO NOT TOUCH. It is
-    driven across at one end and carries a crossing axis at the other, so it
-    gets a box above its own output face and a box below the next drive's
-    housing face, and nothing puts a box between them. The two are 42.7 mm
-    apart in z. The base column and the wrist roll body have the same union
-    and generate, because being driven COAXIALLY gives them a third box on
-    the axis that bridges the other two. The upper arm has no coaxial end.
+    What actually severs both links is the same thing, in x rather than z.
+    The proximal 88 mm of the upper arm is 78 to 99 percent held empty and
+    its body begins at 99 mm; the proximal 100 mm of the forearm is 97 to 99
+    percent held empty and its body begins at 103. In both the mounting disc
+    is stranded inside that void. Reasoning from the box construction gave a
+    confident wrong answer where profiling the mask gives the right one, so
+    this reports the profile and nothing else.
 
-    The forearm's domain is one contiguous box and its proximal 96 mm is 97
-    to 99 percent HELD EMPTY, by the elbow drive's envelope and by the upper
-    arm's own box. Its mounting disc is stranded inside that void.
-
-    So one is a domain that was never connected and the other is a domain
-    emptied until it disconnected. Reported separately because the fixes are
-    not the same.
+    `domain_boxes` still exists and the gap it finds is still worth knowing,
+    but it is reported as a separate observation and never as a cause.
     """
     import numpy as np
 
-    boxes = domain_boxes(spec, link_index, drives)
-    gaps = [(low, high) for low, high in zip(
-        [b[1] for b in boxes[:-1]], [b[0] for b in boxes[1:]]) if high > low]
-    if gaps:
-        widest = max(gaps, key=lambda pair: pair[1] - pair[0])
-        return {"cause": "disjoint boxes",
-                "gap_m": widest[1] - widest[0],
-                "severance": (
-                    f"Its domain is a union of {len(boxes)} boxes that do not "
-                    f"touch: there is a {(widest[1] - widest[0]) * 1000:.1f} "
-                    f"mm gap in z between them, so the two halves were never "
-                    f"connected in the first place")}
-
     void = np.asarray(passive_void).reshape(mesh.nx, mesh.ny, mesh.nz)
     by_slab = void.reshape(mesh.nx, -1).mean(axis=1)
-    emptied = int((by_slab > 0.95).sum())
+    emptied = by_slab > 0.75
+    if not emptied.any():
+        return {"cause": "not a slab of void",
+                "severance": ("no slab along the link is mostly empty, so "
+                              "the cut is not a band across it and this "
+                              "diagnosis does not cover it")}
+    first_solid = int(np.argmax(~emptied))
     return {"cause": "emptied until disconnected",
-            "emptied_slabs": emptied,
-            "emptied_length_m": emptied * mesh.dx,
+            "emptied_slabs": int(emptied.sum()),
+            "emptied_length_m": float(emptied.sum()) * mesh.dx,
+            "body_starts_m": first_solid * mesh.dx,
             "severance": (
-                f"Its domain is contiguous but {emptied} of {mesh.nx} slabs "
-                f"along it, {emptied * mesh.dx * 1000:.0f} mm, are more than "
-                f"95 percent held empty, so its mounting disc is stranded "
-                f"inside that void")}
+                f"Its proximal {first_solid * mesh.dx * 1000:.0f} mm is more "
+                f"than 75 percent held empty and its body begins there, so "
+                f"the mounting disc is stranded inside that void")}
 
 
 def domain_boxes(spec: ManipulatorSpec, link_index: int,

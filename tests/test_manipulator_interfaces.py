@@ -1310,94 +1310,74 @@ def test_the_base_yaws_bolted_joint_does_not_open_so_the_bolts_are_not_the_path(
         "the mass estimate is known to be rising")
 
 
-def test_the_face_contact_is_computed_because_assuming_it_costs_a_third():
-    """A term that was measured and found not to dominate is not the same as
-    a term that was never looked at.
+def test_the_out_of_plane_margin_is_withdrawn_and_not_replaced_by_a_better_one():
+    """The trap in deleting a term for a part that will not be built.
 
-    Across a closed interface the bolts and the clamped faces are parallel
-    paths, and that pair is in series with the housing shell. Setting the
-    face contact rigid would leave the shell as the whole answer and report
-    3.9 times the 0.04 mm requirement. Computing it gives 1.8 times the
-    shell, not an order above it, and the answer becomes 2.63. A third of it
-    sits in the term that was nearly assumed away.
+    The chain read 1,759,305 N m/rad, a crossed roller housing shell of
+    2,620,553 in series with the bolted interface of 5,353,102, for 2.63
+    times what a 0.04 mm allowance asks. The arm is not getting a crossed
+    roller: the decision is to rely on the actuator's own output bearing.
+
+    So that shell describes a part that will not exist, and taking it out
+    leaves 5,353,102, which is 3.04 times better and would read as a margin
+    of 8.00. REPORTING THAT AS AN IMPROVEMENT WOULD BE THE DEFECT THIS
+    PROJECT KEEPS CATCHING, a failure arriving as a pass. Removing a member
+    that was never there is not a stiffness gain.
+
+    What is actually in series with the bolted face is the actuator's own
+    housing, its internal output bearing's tilt stiffness and its torsional
+    stiffness, and CubeMars publishes none of them. So the term is replaced
+    by three stated unknowns and the stage reports NO margin at all.
     """
-    from projects.manipulator.stages import out_of_plane_stage
+    from projects.manipulator.stages import (ACTUATOR_STIFFNESS_GAPS,
+                                             out_of_plane_stage)
 
     stage = out_of_plane_stage()
+    assert stage.data["structure_nm_rad"] is None, (
+        "there is no computable structural stiffness for this joint, and a "
+        "number here would be read as one")
+    assert stage.data["unknown_terms"] == list(ACTUATOR_STIFFNESS_GAPS)
+    assert len(ACTUATOR_STIFFNESS_GAPS) == 3
+
+    interface = stage.data["closed_interface_nm_rad"]
+    assert interface == pytest.approx(5_353_102, rel=0.01)
     required = {row["tip_allowance_m"]: row["stiffness_nm_rad"]
                 for row in stage.rows}
-    assert required[4.0e-5] == pytest.approx(669_221, rel=0.01)
-    assert required[8.0e-5] == pytest.approx(334_610, rel=0.01)
 
-    shell = stage.data["housing_shell_nm_rad"]
-    faces = stage.data["face_contact_nm_rad"]
-    bolts = stage.data["bolt_ring_nm_rad"]
-    structure = stage.data["structure_nm_rad"]
-
-    assert faces == pytest.approx(4_771_634, rel=0.01)
-    assert 1.0 < faces / shell < 3.0, (
-        "if the face contact ever does come out an order above the shell, "
-        "the point of this test is gone and it should say so")
-    assert stage.data["closed_interface_nm_rad"] == pytest.approx(bolts + faces)
-    assert structure == pytest.approx(1_759_305, rel=0.01)
-    assert structure > required[4.0e-5]
-    assert structure / required[4.0e-5] == pytest.approx(2.63, rel=0.02)
-    assert shell / required[4.0e-5] == pytest.approx(3.92, rel=0.02)
-
-    assert any("pressure cone" in item for item in stage.could_not)
-    assert any("presser flange" in item for item in stage.could_not)
+    #: the tempting number, asserted so that its absence is deliberate
+    tempting = interface / required[4.0e-5]
+    assert tempting == pytest.approx(8.0, rel=0.02)
+    assert not any(f"{tempting:.2f} times over" in note
+                   for note in stage.notes), (
+        "8.00 must never be presented as a margin this joint has")
+    assert any("WITHDRAWN" in note for note in stage.notes)
+    assert any("not computable" in item.lower() for item in stage.could_not)
 
 
-def test_the_pitch_joints_out_of_plane_load_is_twenty_times_smaller():
-    """Measured rather than dismissed, because negligible is not a number.
+def test_the_three_actuator_unknowns_are_one_measurement():
+    """The useful half of an unknown: what would close it.
 
-    Gravity makes NO out of plane moment at the shoulder, elbow or wrist
-    pitch, since it lies along those axes. What is left is the payload's own
-    z offset, which exists only because the payload is a stated 100 mm cube,
-    and the sideways force the base yaw makes while it accelerates. Together
-    they are under 2 N m against the base yaw's 43.3.
+    All three sit inside the actuator, and none of them has to be separated
+    from the others to be useful. Load the output with a known moment and a
+    known torque, read the output face's angular displacement, and what comes
+    back is the actuator's whole contribution to joint compliance with
+    nothing dismantled.
+
+    It is a different kind of test from the PLA bar round. That one checked a
+    solver against a part whose properties were known; this one acquires a
+    part property that no datasheet carries. The planning order is the same
+    though: size the LOAD to the resolution available before choosing
+    anything else.
     """
-    gravity = 9.80665
-    offset = 0.5 * SPEC.payload_extent_m
-    payload = float(np.linalg.norm(np.cross(
-        np.array([0.0, 0.0, offset]),
-        np.array([0.0, -SPEC.payload_kg * gravity, 0.0]))))
-    assert payload == pytest.approx(1.471, rel=0.01)
+    from projects.manipulator.stages import (ACTUATOR_STIFFNESS_TEST,
+                                             out_of_plane_stage)
 
-    from projects.manipulator.stages import out_of_plane_stage
-
-    stage = out_of_plane_stage()
-    assert payload + 0.4737 < stage.data["overturning_nm"] / 20.0
-
-
-def test_every_stage_that_reports_a_stiffness_says_which_one():
-    """The check that would have caught the mistake this session made twice.
-
-    A bending stiffness was computed, called the joint stiffness, and used to
-    conclude that the bearing was the whole of it. The number was right and
-    the question was the wrong one. The fix is not a better number, it is a
-    docstring that says what the value is a value OF before it says anything
-    else, so the next reader cannot take it for the other quantity.
-    """
-    import ast
-    import pathlib
-
-    source = pathlib.Path("projects/manipulator/stages.py").read_text()
-    wanted = {"compliance_stage", "joint_stiffness_stage",
-              "joint_torsion_stage", "out_of_plane_stage",
-              "joint_module_stiffness_stage"}
-    seen = set()
-    for node in ast.parse(source).body:
-        if not isinstance(node, ast.FunctionDef) or node.name not in wanted:
-            continue
-        seen.add(node.name)
-        doc = ast.get_docstring(node) or ""
-        opening = doc[:900]
-        assert any(word in opening for word in
-                   ("TORSIONAL", "OUT OF PLANE", "along the joint axis",
-                    "ACROSS", "SCOPE")), (
-            f"{node.name} does not say which stiffness it means")
-    assert seen == wanted
+    assert "angular displacement" in ACTUATOR_STIFFNESS_TEST
+    assert "resolution" in ACTUATOR_STIFFNESS_TEST
+    assert any(ACTUATOR_STIFFNESS_TEST in note
+               for note in out_of_plane_stage().notes), (
+        "a measurement that would close a gap belongs beside the gap, not in "
+        "a document nobody opens at the same time")
 
 
 def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
@@ -1418,12 +1398,11 @@ def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
     between 144 and 180 mm around a 98 mm motor on an arm of 98 mm links.
     """
     from projects.manipulator.bearings import RB_RINGS, housing_meets_thk
-    from projects.manipulator.stages import (HOUSING_WALL_M,
-                                             bearing_housing_stage,
-                                             out_of_plane_stage)
+    from projects.manipulator.stages import (REDUCER_HOUSING_WALL_M,
+                                             bearing_housing_stage)
 
     for ring in RB_RINGS:
-        meets, why = housing_meets_thk(ring, HOUSING_WALL_M)
+        meets, why = housing_meets_thk(ring, REDUCER_HOUSING_WALL_M)
         assert not meets, why
         assert ring.housing_thickness_m == pytest.approx(
             0.6 * 0.5 * (ring.outer_m - ring.bore_m))
@@ -1434,10 +1413,10 @@ def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
     #: over it would then be pinning whichever ring happened to be added
     shortfalls = []
     for row in stage.rows:
-        shortfall = row["housing_thickness_needed_m"] / HOUSING_WALL_M
+        shortfall = row["housing_thickness_needed_m"] / REDUCER_HOUSING_WALL_M
         assert shortfall > 1.0, (
             f"{row['ring']} needs {row['housing_thickness_needed_m'] * 1000:.1f} "
-            f"mm against a drawn wall of {HOUSING_WALL_M * 1000:.0f}")
+            f"mm against a drawn wall of {REDUCER_HOUSING_WALL_M * 1000:.0f}")
         shortfalls.append(shortfall)
     assert len(stage.rows) == len(RB_RINGS)
     assert min(shortfalls) > 1.8, (
@@ -1458,10 +1437,10 @@ def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
         if ring.bore_m > 0.098:
             assert by_ring[ring.model]["shell_gain"] > 2.5
     assert by_ring["RB 5013"]["shell_gain"] < 1.0
-    assert any("cannot hold the bearing" in item.lower()
-               for item in out_of_plane_stage().could_not), (
-        "the out of plane stage leans on this shell, so it has to carry the "
-        "warning rather than leaving it in a stage nobody reads")
+    #: this stage is now a record of an option that was REVIEWED AND NOT
+    #: TAKEN, which is not the same as an option never looked at. The arm
+    #: relies on the actuator's own output bearing, and the reason a separate
+    #: ring was refused is these numbers.
 
 
 def test_naming_the_bearing_does_not_narrow_the_presser_flange():
@@ -1610,7 +1589,7 @@ def test_the_generator_refuses_an_unreachable_domain_before_it_optimises():
         "but pyflakes catches the class of thing that kills a worker")
 
 
-def test_the_housing_shell_is_marked_as_a_part_that_does_not_exist():
+def test_the_reviewed_and_rejected_bearing_option_is_kept_not_deleted():
     """The out of plane chain leans on a housing nothing has designed.
 
     Every generated link is a flat mounting disc, a bolt ring and optimised
@@ -1624,12 +1603,19 @@ def test_the_housing_shell_is_marked_as_a_part_that_does_not_exist():
     That has to be said where the number is used, not only where it is
     defined, or it is not said at all.
     """
-    from projects.manipulator.stages import (HOUSING_IS_AN_IDEALISATION,
-                                             out_of_plane_stage)
+    from projects.manipulator.bearings import RB_RINGS, THK_SOURCE
+    from projects.manipulator.stages import (HOUSING_TERM_IS_WITHDRAWN,
+                                             bearing_housing_stage)
 
-    assert "not measured" in HOUSING_IS_AN_IDEALISATION
-    assert any("DOES NOT EXIST" in item
-               for item in out_of_plane_stage().could_not)
+    #: kept, because "reviewed and not adopted" is not "never looked at",
+    #: and if the decision is ever revisited the table and the moment curve
+    #: condition are exactly what is needed again
+    assert len(RB_RINGS) >= 10
+    assert bearing_housing_stage().rows
+    assert "NOT read by this one" in THK_SOURCE
+    assert "WITHDRAWN" in HOUSING_TERM_IS_WITHDRAWN
+    assert "must not be reported as a stiffness gain" in (
+        HOUSING_TERM_IS_WITHDRAWN)
 
 
 def test_no_link_domain_has_room_around_its_own_actuator():
@@ -1682,20 +1668,22 @@ def test_no_link_domain_has_room_around_its_own_actuator():
         "again as wide as the domain it has to live in")
 
 
-def test_the_two_severed_links_are_severed_for_different_reasons():
-    """One domain was never connected; the other was emptied until it came
-    apart. The fixes are not the same, so the diagnosis has to separate them.
+def test_both_severed_links_are_cut_the_same_way_and_the_box_gap_is_not_it():
+    """A CORRECTION. This test previously asserted that the two links were
+    severed for different reasons, and that was wrong about one of them.
 
-    The upper arm is driven across at one end and carries a crossing axis at
-    the other, so it gets a box above its own output face and a box below the
-    next drive's housing face, and NOTHING PUTS A BOX BETWEEN THEM. They sit
-    42.7 mm apart in z. The base column and the wrist roll body have the same
-    union and generate, because a coaxial end gives them a third box on the
-    axis that bridges the other two. The upper arm has no coaxial end.
+    The upper arm's domain IS a union of two boxes 42.7 mm apart in z, and
+    that gap is real. It is not what severs the link. `domain_extent` returns
+    the bounding extent of its boxes, so the mesh spans the hull and the
+    region between them is meshed like any other: measured, no z slab of the
+    upper arm is more than 65 percent void and none is empty. Reasoning from
+    the construction gave a confident wrong answer where profiling the mask
+    gives the right one.
 
-    The forearm's domain is one contiguous box whose proximal 100 mm is more
-    than 95 percent held empty, by the elbow drive's envelope and the upper
-    arm's own box, with its mounting disc stranded inside that void.
+    Both links are cut the same way and in x, not z. The proximal 94 mm of
+    the upper arm and the proximal 100 mm of the forearm are more than 75
+    percent held empty, and in both the mounting disc is stranded inside that
+    void while the body begins beyond it.
     """
     from projects.manipulator.links import (domain_boxes,
                                             interfaces_are_reachable)
@@ -1712,63 +1700,62 @@ def test_the_two_severed_links_are_severed_for_different_reasons():
         if not ok:
             causes[link.name] = counts
 
-    assert causes["upper_arm"]["cause"] == "disjoint boxes"
-    assert causes["upper_arm"]["gap_m"] == pytest.approx(0.0427, abs=0.001)
-    assert causes["forearm"]["cause"] == "emptied until disconnected"
-    assert causes["forearm"]["emptied_length_m"] == pytest.approx(0.100,
-                                                                  abs=0.01)
+    assert set(causes) == {"upper_arm", "forearm"}
+    for name in causes:
+        assert causes[name]["cause"] == "emptied until disconnected"
+        assert causes[name]["body_starts_m"] > 0.09
+    assert causes["upper_arm"]["body_starts_m"] == pytest.approx(0.094,
+                                                                 abs=0.005)
+    assert causes["forearm"]["body_starts_m"] == pytest.approx(0.100,
+                                                               abs=0.005)
 
-    #: the links that DO generate and share the union shape have a bridging
-    #: box, which is what makes the upper arm's case specific rather than
-    #: general to cranks
-    for name, index in (("base_column", 0), ("wrist_roll_body", 3)):
-        boxes = domain_boxes(SPEC, index, drives)
-        assert len(boxes) > 1, f"{name} should be a union too"
-        for lower, upper in zip(boxes[:-1], boxes[1:]):
-            assert upper[0] <= lower[1] + 1e-9, (
-                f"{name} generates, so its boxes have to overlap")
+    #: the box gap is a real fact about the construction and is reported
+    #: nowhere as a cause, which is the point of this half of the test
+    gap_boxes = domain_boxes(SPEC, 1, drives)
+    gap = gap_boxes[1][0] - gap_boxes[0][1]
+    assert gap > 0.0, "the upper arm's boxes really are disjoint"
+    assert "gap_m" not in causes["upper_arm"], (
+        "the severance report must not name the box gap, because the mesh "
+        "spans the hull and the gap is not what cuts the link")
 
 
-def test_a_coaxial_bearing_leaves_the_upper_arm_gap_and_an_axial_one_widens_it():
-    """What the 0.2 second check can say about a decision not yet taken.
+def test_the_upper_arms_boxes_are_disjoint_by_exactly_the_face_separation():
+    """A true fact about the domain that is NOT the reason it fails.
 
-    The upper arm's gap is EXACTLY the drive's output to housing face
-    separation, 42.7 mm, and that quantity does not depend on the link's
-    width at all. So growing the joint to 168 mm to fit a coaxial ring leaves
-    the defect precisely where it is: option B neither helps nor hurts it.
+    The upper arm is driven across at one end and carries a crossing axis at
+    the other, so it gets a box above its own output face and a box below the
+    next drive's housing face, and nothing puts a box between them. The gap
+    is exactly the drive's output to housing face separation, which is why it
+    does not contain the link's width at all. The links that share the union
+    shape and do generate have a coaxial end, and that third box on the axis
+    bridges the other two.
 
-    Stacking a ring axially instead adds its own width and its presser flange
-    to that separation, which widens the gap to between 62 and 71 mm for an
-    RB 5013. Option C makes the thing that is already broken worse, and by an
-    amount that depends on a flange thickness nobody has chosen.
-
-    Either way the upper arm needs its own fix. That is worth knowing before
-    the bearing decision rather than after, because at four to five hours a
-    link nobody wants to regenerate twice.
+    This was reported as the cause of the upper arm's failure and it is not.
+    `domain_extent` returns the bounding extent, so the mesh spans the hull
+    and the gap is meshed like anything else. It is kept as an observation
+    because a domain built from boxes that do not touch is worth knowing
+    about, and because the next person to read the box construction will ask.
     """
-    from projects.manipulator.bearings import RB_RINGS
     from projects.manipulator.interfaces import face_separation_m
     from projects.manipulator.links import domain_boxes
     from projects.manipulator.loop import run_loop
 
     loop = run_loop()
     drives = dict(loop.data["history"][-1].selected)
+
     boxes = domain_boxes(SPEC, 1, drives)
+    assert len(boxes) == 2
     gap = boxes[1][0] - boxes[0][1]
-    separation = face_separation_m("cubemars_ak80_64_kv80")
-    assert gap == pytest.approx(separation, abs=1e-9), (
-        "the gap IS the face separation; if that stops being true the whole "
-        "argument below about which option moves it has to be redone")
+    assert gap == pytest.approx(face_separation_m("cubemars_ak80_64_kv80"),
+                                abs=1e-9)
 
-    #: option B changes the width and the width is not in that quantity
-    wider = domain_boxes(SPEC, 1, drives)
-    assert wider[1][0] - wider[0][1] == pytest.approx(gap)
-
-    #: option C adds the ring and its flange to the separation
-    ring = next(r for r in RB_RINGS if r.model == "RB 5013")
-    low, high = ring.flange_thickness_range_m
-    assert gap + ring.width_m + low == pytest.approx(0.0622, abs=0.001)
-    assert gap + ring.width_m + high == pytest.approx(0.0713, abs=0.001)
+    #: the links that generate have a bridging box, which is what makes the
+    #: upper arm's construction specific rather than general to cranks
+    for index in (0, 3):
+        bridged = domain_boxes(SPEC, index, drives)
+        assert len(bridged) > 1
+        for lower, upper in zip(bridged[:-1], bridged[1:]):
+            assert upper[0] <= lower[1] + 1e-9
 
 
 def test_the_ring_is_chosen_on_three_axes_and_not_on_housing_size():

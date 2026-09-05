@@ -1930,39 +1930,71 @@ CYCLOIDAL_DISC_THICKNESS_BASIS = (
 #: the loads are far below what 3 mm of steel carries.
 MINIMUM_DISC_LIGAMENT_M = 0.003
 
-#: The housing the reducer sits in, as a thin walled tube in TORSION. Note
-#: that this is not the calculation in `joint_module_stiffness_stage`, which
-#: uses E and a bending second moment and answers the out of plane question.
-#: Torsion needs G and J, and G here is E over 2(1 + nu) for the link alloy.
+#: WITHDRAWN 2026-09-05. These described a crossed roller bearing housing,
+#: 124 mm across a 4 mm wall, and the arm is not getting one: the decision is
+#: to rely on the AK80's own output bearing rather than add a separate ring.
+#: So the part these numbers were about does not exist and will not.
 #:
-#: THESE THREE NUMBERS ARE AN IDEALISATION AND THEY ARE NOT MEASURED OFF
-#: ANYTHING. No generated link contains a bearing housing: the parts on disk
-#: are a flat mounting disc, a bolt ring and optimised struts behind it, with
-#: the actuator hung off the face and reaching outwards. There is no bearing
-#: bore, no shoulder, no presser flange and no presser bolt circle anywhere
-#: in the model. So every stiffness computed from these constants describes a
-#: part that has not been designed, and the chain the out of plane budget
-#: reports is really about the ACTUATOR TO LINK BOLTED FACE that does exist,
-#: with a housing term added for a housing that does not.
-#:
-#: `bearing_housing_stage` then shows the wall is 1.9 to 3.7 times under what
-#: THK asks for the rings this joint would need, which is a second thing
-#: wrong with the same number.
-HOUSING_DIAMETER_M = 0.124
-HOUSING_WALL_M = 0.004
-HOUSING_LENGTH_M = 0.080
-HOUSING_IS_AN_IDEALISATION = (
-    "CHOSEN and not measured. No generated part contains a bearing housing, "
-    "a bearing bore, a shoulder or a presser flange, so this shell is an "
-    "idealisation of a part that has not been designed")
-HOUSING_POISSON = 0.33
+#: THE DANGEROUS THING IS THAT DELETING THEM LOOKS LIKE AN IMPROVEMENT. The
+#: shell sat in series with the closed interface, 2,620,553 against
+#: 5,353,102 for 1,759,305 in all. Take it out and the chain reads 5,353,102,
+#: which is 3.04 times better and would turn a margin of 2.63 into 8.00.
+#: Removing a member that was never there is not a stiffness gain, and a
+#: failure that reports as a pass is the exact defect this project keeps
+#: finding. The number is NOT recomputed. What replaces the term is a stated
+#: gap, because in this arrangement there really is something in series with
+#: the bolted face and it really is unknown.
+#: The CYCLOIDAL REDUCER's own housing, which is a different part and is
+#: still being designed. It holds the ring pins and it is in the torsional
+#: chain legitimately. Its dimensions are CHOSEN and are not measured off
+#: anything either, but the part at least exists in the design.
+REDUCER_HOUSING_DIAMETER_M = 0.124
+REDUCER_HOUSING_WALL_M = 0.004
+REDUCER_HOUSING_LENGTH_M = 0.080
+REDUCER_HOUSING_POISSON = 0.33
+
+HOUSING_TERM_IS_WITHDRAWN = (
+    "WITHDRAWN. The housing shell described a crossed roller mount that is "
+    "not being built. Its removal must not be reported as a stiffness gain: "
+    "the chain does not become 5,353,102 and the margin does not become "
+    "8.00. The term is replaced by three unknowns, not by nothing")
+
+#: What sits in series with the bolted face now, and what is known about it.
+#: Nothing. All three are the actuator's own internals and CubeMars publishes
+#: none of them, the same wall the torsional stiffness ran into.
+ACTUATOR_STIFFNESS_GAPS = (
+    "the AK80-64's own housing stiffness, which is not published",
+    "the tilt stiffness of its internal output bearing, which is not "
+    "published",
+    "its torsional stiffness, which is not published and was already the "
+    "reason every deflection here is link elasticity only",
+)
+
+#: The one useful thing about those three: they are one measurement, not
+#: three. Apply a known moment and a known torque at the actuator's output
+#: and read the output face's angular displacement, and what comes back is
+#: the actuator's whole contribution to joint compliance without anything
+#: being taken apart. It is a different kind of test from the PLA bar round,
+#: which checked a solver; this one acquires a part property that no
+#: datasheet carries.
+ACTUATOR_STIFFNESS_TEST = (
+    "One test closes all three. Load the actuator's output with a known "
+    "moment and a known torque and measure the output face's angular "
+    "displacement. That gives the actuator's total contribution to joint "
+    "compliance directly, with nothing dismantled. Size the LOAD to the "
+    "resolution available before choosing anything else, the way the PLA bar "
+    "round was planned: at 43.28 N m the arm needs to resolve about 0.04 mm "
+    "at the tool, and whether that is readable decides the whole fixture"
+)
 
 
 def housing_torsion_nm_rad(spec: ManipulatorSpec = SPEC) -> float:
     modulus = get_material(spec.materials["link"]).youngs_modulus_pa
-    return shell_torsion_nm_rad(HOUSING_DIAMETER_M, HOUSING_WALL_M,
-                                HOUSING_LENGTH_M,
-                                modulus / (2.0 * (1.0 + HOUSING_POISSON)))
+    return shell_torsion_nm_rad(REDUCER_HOUSING_DIAMETER_M,
+                                REDUCER_HOUSING_WALL_M,
+                                REDUCER_HOUSING_LENGTH_M,
+                                modulus / (2.0 * (1.0
+                                                  + REDUCER_HOUSING_POISSON)))
 
 
 def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
@@ -2258,8 +2290,6 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
 
     #: What is actually in hand, against those.
     modulus = get_material(spec.materials["link"]).youngs_modulus_pa
-    shell = (modulus * np.pi * (0.5 * HOUSING_DIAMETER_M) ** 3
-             * HOUSING_WALL_M / HOUSING_LENGTH_M)
     pattern = AK80_64_HOUSING.patterns[0]
     grip = spec.flange_thickness_m + 0.5 * pattern.thread_depth_m
     bolts = bolt_ring_tilt_stiffness_nm_rad(pattern.thread, pattern.count,
@@ -2283,15 +2313,16 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         pattern.count, pattern.bolt_circle_m, grip,
         ISO_4762[pattern.thread][1] / 1000.0,
         ISO_273_MEDIUM_M[pattern.thread], modulus)
-    #: The bolts and the clamped faces are PARALLEL paths across one
-    #: interface, and that interface is in series with the housing shell.
+    #: The bolts and the clamped faces are PARALLEL paths across the one
+    #: interface this design actually has. Nothing is put in series with it,
+    #: because what IS in series is the actuator's own internals and not one
+    #: of the three numbers that would need exists.
     interface = bolts + faces
-    structure = 1.0 / (1.0 / shell + 1.0 / interface)
-    result.data["housing_shell_nm_rad"] = shell
     result.data["bolt_ring_nm_rad"] = bolts
     result.data["face_contact_nm_rad"] = faces
     result.data["closed_interface_nm_rad"] = interface
-    result.data["structure_nm_rad"] = structure
+    result.data["structure_nm_rad"] = None
+    result.data["unknown_terms"] = list(ACTUATOR_STIFFNESS_GAPS)
 
     at_four = moment * lever / 4.0e-5
     at_eight = moment * lever / 8.0e-5
@@ -2313,20 +2344,25 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         f"{lowest / moment:.1f} and the faces would part only at an arm mass "
         f"of {(lowest - spec.payload_kg * 9.80665 * spec.reach_m) / (9.80665 * 0.5 * spec.reach_m):.0f} kg")
     result.notes.append(
-        f"the structure around the bearing is not negligible here, which is "
-        f"the point THK makes itself. The housing shell in BENDING is "
-        f"{shell:,.0f} N m/rad. Across the CLOSED interface the bolts and the "
-        f"clamped faces are PARALLEL paths, {bolts:,.0f} and {faces:,.0f}, "
-        f"and that pair is in series with the shell for {structure:,.0f}. "
-        f"Against the {at_four:,.0f} a 0.04 mm allowance asks that is "
-        f"{structure / at_four:.2f} times over, before the bearing is added")
+        f"the interface this design has is {interface:,.0f} N m/rad, with "
+        f"the bolts and the clamped faces as parallel paths, {bolts:,.0f} and "
+        f"{faces:,.0f}. NO MARGIN IS QUOTED AGAINST IT. What sits in series "
+        f"with it is the actuator's own housing, its internal output "
+        f"bearing's tilt stiffness and its torsional stiffness, and CubeMars "
+        f"publishes none of the three, so the joint's out of plane stiffness "
+        f"is not computable and 0.04 mm is neither afforded nor missed")
     result.notes.append(
-        f"the face contact was COMPUTED rather than assumed away, and it "
-        f"mattered. It comes out {faces / shell:.1f} times the shell, not an "
-        f"order above it, so calling it rigid would have reported "
-        f"{shell / at_four:.1f} times the 0.04 mm requirement instead of "
-        f"{structure / at_four:.2f}. A third of the answer sits in a term "
-        f"that was nearly left out")
+        f"A 2.63 TIMES MARGIN WAS REPORTED HERE AND IS WITHDRAWN. It put a "
+        f"crossed roller housing shell of 2,620,553 in series with this "
+        f"interface for 1,759,305. The arm is not getting a crossed roller: "
+        f"the decision is to rely on the actuator's own output bearing, so "
+        f"that shell describes a part that will not exist. Deleting it would "
+        f"raise the chain to {interface:,.0f} and the margin to "
+        f"{interface / at_four:.2f}, and reporting that as an improvement "
+        f"would be the same defect this project keeps catching: a failure "
+        f"arriving as a pass. The term is replaced by three unknowns, not by "
+        f"nothing")
+    result.notes.append(ACTUATOR_STIFFNESS_TEST)
     result.notes.append(
         "the other joints' out of plane loads are small and it is worth "
         "saying by how much rather than saying negligible. Gravity makes no "
@@ -2337,30 +2373,12 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "0.47 N m. Together under 2 N m against the base yaw's 43.3, a factor "
         "of twenty two")
     result.could_not.append(
-        "THE HOUSING SHELL IS AN IDEALISATION OF A PART THAT DOES NOT EXIST. "
-        "No generated link contains a bearing housing: the parts on disk are "
-        "a flat mounting disc, a bolt ring and optimised struts, with the "
-        "actuator hung off the face. There is no bearing bore, no shoulder, "
-        "no presser flange and no presser bolt circle in the model at all. "
-        "So the presser flange is not one term missing from this chain, it "
-        "is one member of a whole sub assembly that is missing, and what the "
-        "chain actually describes is the actuator to link bolted face with a "
-        "housing term bolted on to it.")
-    result.could_not.append(
-        "THE HOUSING SHELL TERM IS ABOUT A HOUSING THAT CANNOT HOLD THE "
-        "BEARING. Its wall is 4 mm and THK's A18-36 asks for 0.6 of the "
-        "ring's radial section, which is 9 to 15 mm for every candidate "
-        "ring, so the wall is short by 1.9 to 3.7 times. See "
-        "`bearing_housing_stage`. Meeting it makes the shell 3.6 to 8.8 "
-        "times stiffer and takes it out of contention, and puts the joint's "
-        "outside diameter between 144 and 180 mm, which is a decision about "
-        "the whole arm.")
-    result.could_not.append(
-        "The presser flange is still not in this chain, so 1,759,305 is "
-        "optimistic. It is a series term and can only reduce the number, and "
-        "choosing the bearing does not pin it: A18-38 allows 0.5 to 1.2 "
-        "times the ring width and plate bending goes as thickness cubed, so "
-        "it is free to move by 13.8 times until someone names the thickness.")
+        "THE JOINT'S OUT OF PLANE STIFFNESS IS NOT COMPUTABLE. Three terms "
+        "sit in series with the bolted face and none of them has a value: "
+        + "; ".join(ACTUATOR_STIFFNESS_GAPS) + ". So the interface number is "
+        "an UPPER BOUND on the joint and not an answer, and no margin is "
+        "quoted against the requirement.")
+    result.could_not.append(HOUSING_TERM_IS_WITHDRAWN)
     result.could_not.append(
         "The face contact rests on a pressure cone half angle of 30 degrees, "
         "which is the usual figure and which this project has no source for. "
@@ -2403,8 +2421,9 @@ def _base_yaw_preload_n(spec: ManipulatorSpec = SPEC) -> float:
 
 
 def bearing_housing_stage(spec: ManipulatorSpec = SPEC,
-                          wall_m: float = HOUSING_WALL_M,
-                          length_m: float = HOUSING_LENGTH_M) -> StageResult:
+                          wall_m: float = REDUCER_HOUSING_WALL_M,
+                          length_m: float = REDUCER_HOUSING_LENGTH_M
+                          ) -> StageResult:
     """The housing this joint was drawn with cannot hold a crossed roller ring.
 
     THE WALL IS 4 mm AND THK ASKS FOR 9 TO 15. A18-36 puts the housing
@@ -2436,7 +2455,8 @@ def bearing_housing_stage(spec: ManipulatorSpec = SPEC,
     """
     result = StageResult(name="the housing THK asks for, against the one drawn")
     modulus = get_material(spec.materials["link"]).youngs_modulus_pa
-    drawn = shell_bending_nm_rad(HOUSING_DIAMETER_M, wall_m, length_m, modulus)
+    drawn = shell_bending_nm_rad(REDUCER_HOUSING_DIAMETER_M, wall_m,
+                                 length_m, modulus)
     result.data["drawn_wall_m"] = wall_m
     result.data["drawn_shell_nm_rad"] = drawn
 

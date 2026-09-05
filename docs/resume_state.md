@@ -229,120 +229,87 @@ The whole arm stands on the base yaw and the tool is 618.5 mm away along the
 hypotenuse of the reach and the base height, so that bearing's tilt goes
 straight into the tip at full lever. At 43.28 N m of overturning:
 
-| tip allowance | required tilt stiffness | against the 1.7e6 upper bound |
-|---|---:|---:|
-| 0.02 mm | 1,338,441 | 79% |
-| 0.04 mm | 669,221 | 39% |
-| 0.08 mm | 334,610 | 20% |
-| 0.10 mm | 267,688 | 16% |
+| tip allowance | required tilt stiffness |
+|---|---:|
+| 0.02 mm | 1,338,441 |
+| 0.04 mm | 669,221 |
+| 0.08 mm | 334,610 |
 
-THE JOINT DOES NOT OPEN, and that decides which model applies. Reading the
-interface as an unpreloaded bolt ring gives 581,468 N m/rad, under what a
-0.04 mm allowance asks, and taking that as a conservative answer would have
-been wrong. A moment joint whose faces have parted is not a stiff design
-assessed harshly, it is a FAILING design: the moment goes into bolt bending,
-the load alternates, and fatigue arrives before stiffness does. Conservatism
-belongs on a valid design.
+DECIDED BY THE USER, 2026-09-05: NO SEPARATE CROSS ROLLER RING. The arm
+relies on the AK80's own output bearing. The domain stays as it is and the
+links are regenerated once.
 
-The preload was never an unknown. The spigot work already takes M3 class 8.8
-off its proof load at 2188 N, which is 1.31 N m at a nut factor of 0.2. Take
-the contact as a thin ring of radius R and width t: its section modulus is
-pi R squared t and the preload's mean pressure is F over 2 pi R t, so the
-faces begin to lift at F R / 2 and the width cancels, which is why this can
-be answered without knowing how wide the contact band is. Eight bolts on the
-85 mm circle give 372 N m, 260 at the low end of the 30 percent torque to
-preload scatter, against 43.3 applied. Margin 6.0, and the faces would part
-only at an arm mass of 83 kg.
+THE 2.63 TIMES MARGIN IS WITHDRAWN AND IS NOT REPLACED BY A BETTER ONE.
+That figure put a crossed roller housing shell of 2,620,553 N m/rad in
+series with the bolted interface of 5,353,102, giving 1,759,305. With no
+crossed roller that shell describes a part that will not exist. Taking it
+out leaves 5,353,102, which is 3.04 times better and would read as a margin
+of 8.00, and REPORTING THAT AS AN IMPROVEMENT WOULD BE THE DEFECT THIS
+PROJECT KEEPS CATCHING: a failure arriving as a pass. Removing a member that
+was never there is not a stiffness gain. The stage reports no margin at all
+now.
 
-So the bolts are not the load path. Across the closed interface the bolts
-and the clamped faces are PARALLEL, and that pair is in series with the
-shell:
+What is genuinely in hand is the interface, and it survives the decision
+intact because it is the actuator to link bolted face, which exists:
 
 | term | N m/rad |
 |---|---:|
-| housing shell, in bending | 2,620,553 |
 | bolt ring | 581,468 |
 | face contact | 4,771,634 |
 | interface, bolts parallel with faces | 5,353,102 |
-| **structure, that in series with the shell** | **1,759,305** |
 
-That is 2.63 times what a 0.04 mm allowance asks, so 0.04 mm survives after
-all, and what is left over for the bearing itself is 1.08e6 N m/rad against
-a 1.7e6 upper bound read where this arm works under five percent along the
-chart. Not settled either way, but a much narrower question.
+That is an UPPER BOUND on the joint and not an answer. Three terms sit in
+series with it and not one has a value, all three inside the actuator and
+all three unpublished: the AK80-64's own housing stiffness, the tilt
+stiffness of its internal output bearing, and its torsional stiffness, which
+was already the reason every deflection here is link elasticity only. So the
+joint's out of plane stiffness is not computable and 0.04 mm is neither
+afforded nor missed.
+
+THE THREE UNKNOWNS ARE ONE MEASUREMENT. Load the actuator's output with a
+known moment and a known torque and read the output face's angular
+displacement, and what comes back is the actuator's whole contribution to
+joint compliance with nothing dismantled. It is a different kind of test from
+the PLA bar round, which checked a solver against a part whose properties
+were known; this acquires a part property no datasheet carries. The planning
+order is the same: size the LOAD to the resolution available before choosing
+anything else. This belongs in the measurement guidelines as a second round
+and it is now on the critical path.
+
+The other joints' out of plane loads are small and the size is written down
+rather than the word negligible. Gravity contributes nothing at the shoulder,
+elbow or wrist pitch. What is left is the payload's own z offset, worth 1.47
+N m, and the sideways force the base yaw makes while accelerating, worth 0.47
+N m. Under 2 N m against 43.3, a factor of twenty two.
+
+THE BOLTED JOINT DOES NOT OPEN, and that decides which model applies to the
+interface above. Reading it as an unpreloaded bolt ring gives 581,468 alone,
+and taking that as a conservative answer would be wrong: a moment joint whose
+faces have parted is not a stiff design assessed harshly, it is a FAILING
+design, because the moment goes into bolt bending, the load alternates, and
+fatigue arrives before stiffness does. The preload was never an unknown
+either. The spigot work already takes M3 class 8.8 off its proof load at 2188
+N, 1.31 N m at a nut factor of 0.2. Take the contact as a thin ring of radius
+R and width t: its section modulus is pi R squared t and the preload's mean
+pressure is F over 2 pi R t, so the faces begin to lift at F R / 2 and the
+width cancels. Eight bolts on the 85 mm circle give 372 N m, 260 at the low
+end of the 30 percent scatter, against 43.3 applied. Margin 6.0, and the
+faces would part only at an arm mass of 83 kg.
 
 THE FACE CONTACT WAS COMPUTED RATHER THAN ASSUMED AWAY AND IT MATTERED. It
-comes out 1.8 times the shell, not an order above it, so calling it rigid
-would have reported 3.9 times the requirement instead of 2.63. A third of
-the answer sits in a term that was nearly left out. A term measured and
-found not to dominate is not the same as a term never looked at.
+comes out 1.8 times the withdrawn shell, not an order above it. A term
+measured and found not to dominate is not the same as a term never looked at.
+It rests on a pressure cone half angle of 30 degrees, which is the usual
+figure and which this project has no source for; the clamped area is
+proportional to it. The clamped stack is treated as a short beam of the grip
+length, which is crude. The separation check assumes uniform preload round
+the ring and rigid members, and clears by six at the low end of the scatter.
 
-THERE IS NO HOUSING. This is worse than the wall being thin and it was
-found by the Fusion session measuring the generated STLs directly. Every
-link on disk is a flat mounting disc, a bolt ring, and optimised struts
-behind it, with the actuator hung off the face and reaching outwards. There
-is no bearing bore, no shoulder, no presser flange and no presser bolt
-circle anywhere in the model. Confirmed here: `HOUSING_DIAMETER_M`,
-`HOUSING_WALL_M` and `HOUSING_LENGTH_M` are CHOSEN constants and are not
-measured off any generated part.
-
-So the presser flange is not one term missing from the out of plane chain,
-it is one member of a whole sub assembly that is missing, and what that
-chain describes is the ACTUATOR TO LINK BOLTED FACE with a housing term
-added for a housing that does not exist. The 1,759,305 keeps its optimistic
-marking for a bigger reason than before.
-
-AND THERE IS NOWHERE TO PUT ONE. Confirmed independently here: every link
-domain's smallest cross section is EXACTLY its actuator's outside diameter,
-98 mm around a 98 mm AK80 and 79 around a 79 mm AK60. The radial clearance
-is not small, it is zero. A ring that goes round the actuator needs a bore
-over 98, and the tightest housing among those is 166 mm across on an RB
-11015, which is 1.7 times the domain. Not the RB 10020 at 180: it has the
-narrowest bore of the three that clear and the widest ring section, and
-THK's wall rule scales with the section rather than the bore. Stacking a
-smaller ring axially instead fits an RB 5013 at exactly 98.0 mm with zero
-margin, and its 50 mm bore then collides with the cable routing that
-base_column already lists as unresolved.
-
-WHICH RING, IF ONE IS ADDED, IS A THREE AXIS CHOICE and minimising any one
-of them loses. Housing outside diameter says how much the joint grows.
-Whether a moment rigidity curve exists says whether the ring's stiffness can
-be known at all. Bore says whether a cable fits, which is a live unresolved
-item on the base column. THK's dimension tables list far more rings than its
-diagrams plot:
-
-| ring | bore | housing OD | x98 | plotted |
-|---|---:|---:|---:|---|
-| RB 11012 | 110 | 150 | 1.53 | no |
-| RB 10016 | 100 | 164 | 1.67 | no |
-| RB 11015 | 110 | 166 | 1.69 | no |
-| RB 12016 | 120 | 168 | 1.71 | YES |
-| RB 13015 | 130 | 178 | 1.82 | no |
-| RB 10020 | 100 | 180 | 1.84 | yes |
-
-The two smallest housings are both unplotted, so taking either repeats the
-trade model RU is refused for: delete a term that can be computed, admit one
-that cannot. The choice is the RB 12016 at 168 mm, two millimetres more than
-the RB 11015, and its 120 mm bore is also the roomiest of the three for a
-cable. It wins on two axes and loses only on diameter.
-
-WHAT THE 0.2 SECOND CHECK CAN ALREADY SAY ABOUT A DECISION NOT YET TAKEN.
-The upper arm's gap is exactly the drive's face separation and that quantity
-does not depend on the link's width. So growing the joint to 168 mm for a
-coaxial ring leaves the defect precisely where it is: option B neither helps
-nor hurts it. Stacking a ring axially adds its own width and its presser
-flange to that separation and widens the gap to between 62 and 71 mm for an
-RB 5013, so option C makes the broken thing worse by an amount that depends
-on a flange thickness nobody has chosen. Either way the upper arm needs its
-own fix, and that is worth knowing before the bearing decision rather than
-after.
-
-So the first question is not which ring, it is WHETHER A SEPARATE RING IS
-ADDED AT ALL. The AK80 has its own output bearing. If one is added the price
-is a domain 1.7 times wider or a 50 mm bore, and either changes the domain,
-which means the links are regenerated. If one is not added, the actuator's
-own bearing tilt stiffness becomes the unknown, and CubeMars does not
-publish it any more than it publishes torsional stiffness.
+REVIEWED AND NOT ADOPTED IS NOT THE SAME AS NEVER LOOKED AT, so
+`projects/manipulator/bearings.py` and `bearing_housing_stage` stay. They
+carry the reason a separate ring was refused, and if that decision is ever
+revisited the ring table and the moment rigidity condition are exactly what
+is needed again. What follows is that record.
 
 THE HOUSING THAT SHELL TERM IS ABOUT CANNOT HOLD A CROSSED ROLLER RING.
 `bearing_housing_stage`. THK's A18-36 puts the housing thickness at 0.6 of
@@ -513,19 +480,23 @@ Defects found by standing the parts up, none of which a check here could see:
   the only thing that found it was a test that actually generates a mount, 17
   minutes of it. The two parameters are gone now, and the mount holes are
   pinned by their coordinates rather than by their count.
-- THE TWO SEVERED LINKS ARE SEVERED FOR DIFFERENT REASONS, and the fixes are
-  not the same. The UPPER ARM's domain is a union of two boxes that DO NOT
-  TOUCH: it is driven across at one end and carries a crossing axis at the
-  other, so it gets a box above its own output face and a box below the next
-  drive's housing face, and nothing puts a box between them. They sit 42.7 mm
-  apart in z, and that gap is exactly the drive's output to housing face
-  separation. The base column and the wrist roll body have the same union
-  and generate, because a coaxial end gives them a third box on the axis that
-  bridges the other two; the upper arm has no coaxial end. The FOREARM's
-  domain is one contiguous box whose proximal 100 mm, 13 of its 28 slabs, is
-  more than 95 percent held empty by the elbow drive's envelope and the upper
-  arm's box, with its mounting disc stranded inside that void. One domain was
-  never connected, the other was emptied until it came apart.
+- WITHDRAWN, SAME DAY. It was written here that the two severed links were
+  severed for different reasons, the upper arm by a 42.7 mm gap between two
+  domain boxes that do not touch and the forearm by a void. THE BOX GAP IS
+  REAL AND IT IS NOT THE CAUSE. `domain_extent` returns the BOUNDING extent
+  of its boxes, so the mesh spans the hull and the gap between them is meshed
+  like anything else: measured, no z slab of the upper arm is more than 65
+  percent void and none is empty. Reasoning from the box construction gave a
+  confident wrong answer where profiling the mask gives the right one, and
+  the wrong one was published to the Fusion session before it was checked.
+- BOTH SEVERED LINKS ARE CUT THE SAME WAY, in x and not z. The upper arm's
+  proximal 94 mm is 78 to 99 percent held empty and its body begins at 99 mm;
+  the forearm's proximal 100 mm is 97 to 99 percent held empty and its body
+  begins at 103. In both the proximal mounting disc is stranded inside that
+  void, put there by the drive envelopes, the neighbour's box and the
+  withdrawal corridor. The upper arm's boxes really are disjoint, by exactly
+  the drive's output to housing face separation, and that is kept as an
+  observation and never again as a cause.
 - THE UPPER ARM AND FOREARM DO NOT LACK MATERIAL, THEIR DOMAINS ARE WRONG.
   Both refuse to generate because the extraction drops elements held solid
   for their interfaces, and the obvious reading was that the optimiser had
