@@ -1258,37 +1258,93 @@ def test_the_base_yaws_gravity_moment_is_perpendicular_to_its_axis():
     assert abs(along) == pytest.approx(0.0, abs=1e-12)
 
 
-def test_the_base_yaws_structure_alone_misses_a_forty_micron_allowance():
-    """The out of plane requirement, and what is already in the way of it.
+def test_the_base_yaws_bolted_joint_does_not_open_so_the_bolts_are_not_the_path():
+    """Judging this joint on its bolts alone was judging a different design.
 
-    The whole arm stands on the base yaw and the tool is 618.5 mm off along
-    the hypotenuse of the reach and the base height, so the bearing's tilt
-    multiplies straight into the tip. At 43.3 N m of overturning a 0.04 mm
-    allowance asks 669,221 N m/rad and a 0.08 mm one asks 334,610.
+    An unpreloaded bolt ring gives 581,468 N m/rad, which is under what a
+    0.04 mm tip allowance asks, and reading that as a conservative answer is
+    wrong. A moment joint whose faces have parted is not a stiff design being
+    assessed harshly, it is a failing design: the moment goes into bolt
+    bending, the load alternates, and fatigue arrives before stiffness does.
+    Conservatism belongs on a valid design.
 
-    The housing shell in bending gives 2.62 million and the ring of eight M3
-    on the 85 mm circle gives 581,468 with no preload, which is 475,877 in
-    series. That is already under the 0.04 mm figure BEFORE any bearing is
-    added, so a 0.04 mm allowance is not clearly affordable and a 0.08 mm one
-    probably is. That is narrower than the question this started as and it is
-    as far as it can be taken without a preload and a bearing curve.
+    And the preload is not an unknown. The spigot work already takes M3 class
+    8.8 off its proof load at 2188 N, which is 1.31 N m at a nut factor of
+    0.2. Take the contact as a thin ring: its section modulus is pi R squared
+    t and the preload's mean pressure is F over 2 pi R t, so the faces begin
+    to lift at F R / 2 and the contact width cancels. Eight bolts on the 85
+    mm circle give 372 N m, and 260 at the low end of a 30 percent scatter,
+    against 43.3 applied. The faces would part at an arm mass of 83 kg.
     """
-    from projects.manipulator.stages import out_of_plane_stage
+    from projects.manipulator.stages import (PRELOAD_SCATTER,
+                                             bolt_ring_separation_moment_nm,
+                                             out_of_plane_stage)
 
     stage = out_of_plane_stage()
     assert stage.data["overturning_nm"] == pytest.approx(43.28, rel=0.01)
     assert stage.data["lever_m"] == pytest.approx(0.6185, rel=0.001)
+    assert stage.data["preload_per_bolt_n"] == pytest.approx(2188, rel=0.01)
+    assert stage.data["tightening_torque_nm"] == pytest.approx(1.313, rel=0.01)
 
+    #: The contact width cancels out of F R / 2, which is why this can be
+    #: answered without knowing how wide the contact band is, and why the
+    #: function takes no width to be got wrong.
+    import inspect
+
+    assert "width" not in inspect.signature(
+        bolt_ring_separation_moment_nm).parameters
+    assert bolt_ring_separation_moment_nm(2188.05, 8, 0.085) == pytest.approx(
+        372.0, rel=0.01)
+    assert stage.data["separation_moment_nm"] == pytest.approx(372.0, rel=0.01)
+    assert stage.data["separation_moment_at_low_preload_nm"] == pytest.approx(
+        PRELOAD_SCATTER * 372.0, rel=0.01)
+    assert stage.data["separation_margin"] == pytest.approx(6.0, rel=0.02)
+
+    gravity = 9.80665
+    opens_at_mass = (stage.data["separation_moment_at_low_preload_nm"]
+                     - SPEC.payload_kg * gravity * SPEC.reach_m) / (
+                         gravity * 0.5 * SPEC.reach_m)
+    assert opens_at_mass == pytest.approx(83.0, abs=1.0), (
+        "this is the number the margin is worth: the arm mass at which the "
+        "faces part. It has to be re-read if the mass estimate moves, and "
+        "the mass estimate is known to be rising")
+
+
+def test_the_face_contact_is_computed_because_assuming_it_costs_a_third():
+    """A term that was measured and found not to dominate is not the same as
+    a term that was never looked at.
+
+    Across a closed interface the bolts and the clamped faces are parallel
+    paths, and that pair is in series with the housing shell. Setting the
+    face contact rigid would leave the shell as the whole answer and report
+    3.9 times the 0.04 mm requirement. Computing it gives 1.8 times the
+    shell, not an order above it, and the answer becomes 2.63. A third of it
+    sits in the term that was nearly assumed away.
+    """
+    from projects.manipulator.stages import out_of_plane_stage
+
+    stage = out_of_plane_stage()
     required = {row["tip_allowance_m"]: row["stiffness_nm_rad"]
                 for row in stage.rows}
     assert required[4.0e-5] == pytest.approx(669_221, rel=0.01)
     assert required[8.0e-5] == pytest.approx(334_610, rel=0.01)
 
-    structure = stage.data["structure_lower_bound_nm_rad"]
-    assert structure == pytest.approx(475_877, rel=0.01)
-    assert structure < required[4.0e-5]
-    assert structure > required[8.0e-5]
-    assert any("LOWER BOUND" in item for item in stage.could_not)
+    shell = stage.data["housing_shell_nm_rad"]
+    faces = stage.data["face_contact_nm_rad"]
+    bolts = stage.data["bolt_ring_nm_rad"]
+    structure = stage.data["structure_nm_rad"]
+
+    assert faces == pytest.approx(4_771_634, rel=0.01)
+    assert 1.0 < faces / shell < 3.0, (
+        "if the face contact ever does come out an order above the shell, "
+        "the point of this test is gone and it should say so")
+    assert stage.data["closed_interface_nm_rad"] == pytest.approx(bolts + faces)
+    assert structure == pytest.approx(1_759_305, rel=0.01)
+    assert structure > required[4.0e-5]
+    assert structure / required[4.0e-5] == pytest.approx(2.63, rel=0.02)
+    assert shell / required[4.0e-5] == pytest.approx(3.92, rel=0.02)
+
+    assert any("pressure cone" in item for item in stage.could_not)
     assert any("presser flange" in item for item in stage.could_not)
 
 

@@ -8,6 +8,7 @@ pipeline cannot do.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,7 +17,11 @@ import numpy as np
 from core.assembly import Assembly
 from core.assembly.statics import joint_torques
 from core.materials import get_material
-from projects.manipulator.interfaces import AK80_64_HOUSING
+from geometry.cad_export.standard_parts import ISO_4762
+from physics.joints import analyze_joint, tightening_torque_nm
+from physics.joints.bolted import PropertyClass
+from projects.manipulator.interfaces import (AK80_64_HOUSING,
+                                             ISO_273_MEDIUM_M)
 from projects.manipulator.mounts import base_mount_loads
 from projects.manipulator.cycloidal import (CycloidalGeometry,
                                             disc_shear_stiffness_nm_rad,
@@ -2112,24 +2117,82 @@ RING_PIN_CIRCLE_RESERVE = (
     "the joint outside diameter")
 
 
+#: The torque to preload relation scatters by about 30 percent, so the
+#: achieved preload can be this fraction of the target. Every margin that
+#: depends on preload is read at this end of it.
+PRELOAD_SCATTER = 0.70
+
+#: The pressure cone half angle used to find how much of the mating faces a
+#: bolt actually clamps. Thirty degrees is the usual figure and this project
+#: has no source for it, so it is recorded as a convention rather than a
+#: value. The face contact stiffness below is proportional to the clamped
+#: area, so this angle carries straight into that number.
+PRESSURE_CONE_HALF_ANGLE_DEG = 30.0
+
+
 def bolt_ring_tilt_stiffness_nm_rad(thread: str, count: int,
                                     bolt_circle_m: float, grip_m: float,
                                     modulus_pa: float = 200e9) -> float:
-    """Tilt stiffness of a ring of bolts, WITH NO PRELOAD. A lower bound.
+    """Tilt stiffness of the BOLTS alone, as axial springs.
 
-    Each bolt is a spring of E A / L along the axis, and a ring of them
+    Each bolt is a spring of E A / L along the axis and a ring of them
     resists tilt with the sum of the squares of their distances from the tilt
     axis, which for an even ring is count times the radius squared over two.
 
-    This is the worst case and it is the only case this project can compute.
-    A preloaded joint whose faces stay closed carries the moment through face
-    contact instead, and then this term largely disappears into the housing's
-    own stiffness. Which end the truth sits at depends on a preload that has
-    not been specified here, so the answer is a range and it is reported as
-    one.
+    On a closed joint this is one of two parallel paths across the interface
+    and the smaller one. On an open joint it is the only path, and then it is
+    not a conservative reading of this design, it is a correct reading of a
+    DIFFERENT design: once the faces part, the moment goes into bolt bending
+    and the load alternates, and fatigue arrives before stiffness does.
+    `bolt_ring_separation_moment_nm` is what decides which case applies.
     """
     area = TENSILE_STRESS_AREA_M2[thread]
     return modulus_pa * area / grip_m * count * bolt_circle_m ** 2 / 8.0
+
+
+def bolt_ring_separation_moment_nm(preload_per_bolt_n: float, count: int,
+                                   bolt_circle_m: float) -> float:
+    """The moment at which a preloaded bolt ring's faces begin to open.
+
+    Take the contact as a thin ring of radius R and radial width t. Its area
+    is 2 pi R t and its second moment about a diameter is pi R cubed t, so
+    its section modulus is pi R squared t. The preload spreads over the area
+    as a mean pressure of F over 2 pi R t, and the faces start to lift where
+    the bending stress reaches that pressure:
+
+        M = p (I / c) = F / (2 pi R t) times pi R squared t = F R / 2
+
+    The width t cancels, which is why this can be answered without knowing
+    how wide the contact band is. It is a first estimate all the same: it
+    assumes the preload is uniform round the ring and the members rigid.
+    """
+    return preload_per_bolt_n * count * 0.5 * bolt_circle_m / 2.0
+
+
+def face_contact_tilt_stiffness_nm_rad(count: int, bolt_circle_m: float,
+                                       grip_m: float, head_diameter_m: float,
+                                       hole_diameter_m: float,
+                                       modulus_pa: float) -> float:
+    """Tilt stiffness of the CLAMPED FACES, the joint's other parallel path.
+
+    NOT SET TO INFINITY, deliberately. Assuming it away would have made the
+    housing shell the whole answer and reported 3.9 times the requirement.
+    Computing it gives 2.6, because it comes out only 1.8 times the shell
+    rather than an order above it, so it costs a third of the answer. There
+    is a real difference between a term that was measured and found not to
+    dominate and a term that was never looked at.
+
+    Each bolt clamps a patch of the mating faces that spreads from under its
+    head at the pressure cone angle. The patch is taken at mid grip, as an
+    annulus between that cone diameter and the clearance hole, and the ring
+    of patches resists tilt with the sum of area times distance squared. The
+    clamped stack is then treated as a short beam of the grip length.
+    """
+    cone = head_diameter_m + grip_m * math.tan(
+        math.radians(PRESSURE_CONE_HALF_ANGLE_DEG))
+    patch = math.pi / 4.0 * (cone ** 2 - hole_diameter_m ** 2)
+    second_moment = patch * (0.5 * bolt_circle_m) ** 2 * count / 2.0
+    return modulus_pa * second_moment / grip_m
 
 
 def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
@@ -2172,15 +2235,44 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
 
     #: What is actually in hand, against those.
     modulus = get_material(spec.materials["link"]).youngs_modulus_pa
-    shell = modulus * np.pi * (0.5 * HOUSING_DIAMETER_M) ** 3 * HOUSING_WALL_M         / HOUSING_LENGTH_M
+    shell = (modulus * np.pi * (0.5 * HOUSING_DIAMETER_M) ** 3
+             * HOUSING_WALL_M / HOUSING_LENGTH_M)
     pattern = AK80_64_HOUSING.patterns[0]
     grip = spec.flange_thickness_m + 0.5 * pattern.thread_depth_m
     bolts = bolt_ring_tilt_stiffness_nm_rad(pattern.thread, pattern.count,
                                             pattern.bolt_circle_m, grip)
-    structure = 1.0 / (1.0 / shell + 1.0 / bolts)
+
+    #: DOES THE JOINT OPEN? Everything after this turns on the answer, and
+    #: the preload is not an unknown: the same M3 class 8.8 figure the
+    #: spigot work took off the proof load, 2188 N, applies here.
+    preload = analyze_joint(
+        size=pattern.thread, grade=PropertyClass.C8_8,
+        grip_length_m=spec.flange_thickness_m, external_load_n=0.0,
+        external_load_min_n=0.0, member_material="aluminium",
+        member_modulus_pa=modulus).preload_n
+    opens_at = bolt_ring_separation_moment_nm(preload, pattern.count,
+                                              pattern.bolt_circle_m)
+    lowest = PRELOAD_SCATTER * opens_at
+    result.data["preload_per_bolt_n"] = preload
+    result.data["tightening_torque_nm"] = tightening_torque_nm(preload,
+                                                               pattern.thread)
+    result.data["separation_moment_nm"] = opens_at
+    result.data["separation_moment_at_low_preload_nm"] = lowest
+    result.data["separation_margin"] = lowest / moment
+
+    faces = face_contact_tilt_stiffness_nm_rad(
+        pattern.count, pattern.bolt_circle_m, grip,
+        ISO_4762[pattern.thread][1] / 1000.0,
+        ISO_273_MEDIUM_M[pattern.thread], modulus)
+    #: The bolts and the clamped faces are PARALLEL paths across one
+    #: interface, and that interface is in series with the housing shell.
+    interface = bolts + faces
+    structure = 1.0 / (1.0 / shell + 1.0 / interface)
     result.data["housing_shell_nm_rad"] = shell
-    result.data["bolt_ring_lower_bound_nm_rad"] = bolts
-    result.data["structure_lower_bound_nm_rad"] = structure
+    result.data["bolt_ring_nm_rad"] = bolts
+    result.data["face_contact_nm_rad"] = faces
+    result.data["closed_interface_nm_rad"] = interface
+    result.data["structure_nm_rad"] = structure
 
     at_four = moment * lever / 4.0e-5
     at_eight = moment * lever / 8.0e-5
@@ -2193,13 +2285,29 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         f"and that 1.7e6 is an upper bound read at 0.4 kN m where this arm "
         f"works under five percent along the chart")
     result.notes.append(
+        f"THE JOINT DOES NOT OPEN, so the bolts are not the load path. At "
+        f"{preload:.0f} N a bolt, which is {tightening_torque_nm(preload, pattern.thread):.2f} "
+        f"N m at a nut factor of 0.2, the {pattern.count} {pattern.thread} on "
+        f"a {pattern.bolt_circle_m * 1000:.0f} mm circle begin to lift at "
+        f"{opens_at:.0f} N m, and {lowest:.0f} at the low end of the 30 "
+        f"percent scatter. The arm applies {moment:.1f}, so the margin is "
+        f"{lowest / moment:.1f} and the faces would part only at an arm mass "
+        f"of {(lowest - spec.payload_kg * 9.80665 * spec.reach_m) / (9.80665 * 0.5 * spec.reach_m):.0f} kg")
+    result.notes.append(
         f"the structure around the bearing is not negligible here, which is "
         f"the point THK makes itself. The housing shell in BENDING is "
-        f"{shell:,.0f} N m/rad and the ring of {pattern.count} {pattern.thread} "
-        f"on a {pattern.bolt_circle_m * 1000:.0f} mm circle is {bolts:,.0f} "
-        f"with NO PRELOAD, giving {structure:,.0f} in series. That is already "
-        f"under the {at_four:,.0f} a 0.04 mm allowance asks, before the "
-        f"bearing is added at all")
+        f"{shell:,.0f} N m/rad. Across the CLOSED interface the bolts and the "
+        f"clamped faces are PARALLEL paths, {bolts:,.0f} and {faces:,.0f}, "
+        f"and that pair is in series with the shell for {structure:,.0f}. "
+        f"Against the {at_four:,.0f} a 0.04 mm allowance asks that is "
+        f"{structure / at_four:.2f} times over, before the bearing is added")
+    result.notes.append(
+        f"the face contact was COMPUTED rather than assumed away, and it "
+        f"mattered. It comes out {faces / shell:.1f} times the shell, not an "
+        f"order above it, so calling it rigid would have reported "
+        f"{shell / at_four:.1f} times the 0.04 mm requirement instead of "
+        f"{structure / at_four:.2f}. A third of the answer sits in a term "
+        f"that was nearly left out")
     result.notes.append(
         "the other joints' out of plane loads are small and it is worth "
         "saying by how much rather than saying negligible. Gravity makes no "
@@ -2210,14 +2318,16 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "0.47 N m. Together under 2 N m against the base yaw's 43.3, a factor "
         "of twenty two")
     result.could_not.append(
-        "The bolt ring figure is a LOWER BOUND and the only one this project "
-        "can compute. It treats each bolt as E A / L with no preload, which "
-        "is the case where the faces have already parted. A preloaded joint "
-        "whose faces stay closed carries the moment through face contact and "
-        "this term mostly disappears into the housing. No preload is "
-        "specified anywhere in this design, so the true structural stiffness "
-        "is somewhere between that lower bound and the shell alone, and "
-        "which end it sits at is not decidable here.")
+        "The face contact rests on a pressure cone half angle of 30 degrees, "
+        "which is the usual figure and which this project has no source for. "
+        "The clamped area is proportional to it and so is the stiffness, so "
+        "that convention carries straight into the answer. The clamped stack "
+        "is also treated as a short beam of the grip length, which is crude.")
+    result.could_not.append(
+        "The separation check assumes the preload is uniform round the ring "
+        "and the members rigid. It clears by six times at the low end of the "
+        "scatter, so neither assumption has to be tight for the conclusion "
+        "to survive, but the number itself is a first estimate.")
     result.could_not.append(
         "The presser flange THK names as the third contributor is not in "
         "this calculation because no presser flange has been designed. So "
@@ -2234,9 +2344,11 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
     result.could_not.append(
         "No bearing stiffness is known at this arm's operating moment. The "
         "requirement is decidable and the answer is not. What this stage "
-        "establishes is that a 0.04 mm allowance at the tip is NOT clearly "
-        "affordable and a 0.08 mm one probably is, which is a narrower "
-        "question than the one it started with.")
+        "establishes is that the STRUCTURE affords a 0.04 mm allowance with "
+        "2.6 times to spare, so what is left of that allowance for the "
+        "bearing is 1.08e6 N m/rad. Against an upper bound of 1.7e6 read "
+        "where this arm works under five percent along the chart, that is "
+        "not settled either way.")
     return result
 
 

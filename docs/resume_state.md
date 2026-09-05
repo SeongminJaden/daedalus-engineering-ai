@@ -236,21 +236,55 @@ straight into the tip at full lever. At 43.28 N m of overturning:
 | 0.08 mm | 334,610 | 20% |
 | 0.10 mm | 267,688 | 16% |
 
-What is already in the way of it: the housing shell IN BENDING is 2,620,553
-N m/rad and the ring of eight M3 on the 85 mm circle is 581,468 with NO
-PRELOAD, which is 475,877 in series. That is under the 0.04 mm figure BEFORE
-any bearing is added. So a 0.04 mm allowance at the tip is not clearly
-affordable and a 0.08 mm one probably is. That is a narrower question than
-the one this started as, and it is as far as it goes without a preload
-figure and a bearing curve at this arm's operating moment.
+THE JOINT DOES NOT OPEN, and that decides which model applies. Reading the
+interface as an unpreloaded bolt ring gives 581,468 N m/rad, under what a
+0.04 mm allowance asks, and taking that as a conservative answer would have
+been wrong. A moment joint whose faces have parted is not a stiff design
+assessed harshly, it is a FAILING design: the moment goes into bolt bending,
+the load alternates, and fatigue arrives before stiffness does. Conservatism
+belongs on a valid design.
 
-The bolt ring number is a LOWER BOUND, treating each bolt as E A / L with no
-preload, which is the case where the faces have already parted. A preloaded
-joint whose faces stay closed carries the moment through face contact and
-that term mostly disappears into the housing. No preload is specified
-anywhere in this design. The presser flange THK names as its third
-contributor is not in the calculation at all, because none has been
-designed.
+The preload was never an unknown. The spigot work already takes M3 class 8.8
+off its proof load at 2188 N, which is 1.31 N m at a nut factor of 0.2. Take
+the contact as a thin ring of radius R and width t: its section modulus is
+pi R squared t and the preload's mean pressure is F over 2 pi R t, so the
+faces begin to lift at F R / 2 and the width cancels, which is why this can
+be answered without knowing how wide the contact band is. Eight bolts on the
+85 mm circle give 372 N m, 260 at the low end of the 30 percent torque to
+preload scatter, against 43.3 applied. Margin 6.0, and the faces would part
+only at an arm mass of 83 kg.
+
+So the bolts are not the load path. Across the closed interface the bolts
+and the clamped faces are PARALLEL, and that pair is in series with the
+shell:
+
+| term | N m/rad |
+|---|---:|
+| housing shell, in bending | 2,620,553 |
+| bolt ring | 581,468 |
+| face contact | 4,771,634 |
+| interface, bolts parallel with faces | 5,353,102 |
+| **structure, that in series with the shell** | **1,759,305** |
+
+That is 2.63 times what a 0.04 mm allowance asks, so 0.04 mm survives after
+all, and what is left over for the bearing itself is 1.08e6 N m/rad against
+a 1.7e6 upper bound read where this arm works under five percent along the
+chart. Not settled either way, but a much narrower question.
+
+THE FACE CONTACT WAS COMPUTED RATHER THAN ASSUMED AWAY AND IT MATTERED. It
+comes out 1.8 times the shell, not an order above it, so calling it rigid
+would have reported 3.9 times the requirement instead of 2.63. A third of
+the answer sits in a term that was nearly left out. A term measured and
+found not to dominate is not the same as a term never looked at.
+
+It rests on a pressure cone half angle of 30 degrees, which is the usual
+figure and which this project has no source for; the clamped area is
+proportional to it. The clamped stack is treated as a short beam of the grip
+length, which is crude. The separation check assumes uniform preload round
+the ring and rigid members, and clears by six at the low end of the scatter,
+so neither assumption has to be tight for that conclusion. The presser
+flange THK names as its third contributor is still not in the calculation,
+because none has been designed.
 
 The other joints' out of plane loads are small and the size is written down
 rather than the word negligible. Gravity contributes nothing at the shoulder,
@@ -550,6 +584,16 @@ writes a timestamp into its header.
 - Overlap between methods is cross-validation, not a new capability. Limits
   are pinned by tests.
 - Measurement beats expectation, including the user's own instructions.
+- A DEAD PARAMETER IS WORSE THAN NO PARAMETER. A missing argument fails at
+  once with a TypeError; an argument that is accepted and never read lets the
+  caller believe it has supplied something. `cut_holes` took a height and a
+  width, used neither, and the mount generator went on passing both while
+  omitting the coordinates the function actually reads. Argument counts
+  matched, so no static check and no smoke test could see it.
+- A TERM MEASURED AND FOUND NOT TO DOMINATE IS NOT A TERM NEVER LOOKED AT.
+  The face contact stiffness was about to be treated as rigid on the grounds
+  that the housing would dominate. It came out 1.8 times the housing and cost
+  a third of the answer.
 - Robot and hardware execution is done by the user, not by the software.
 
 ## Last full suite run
