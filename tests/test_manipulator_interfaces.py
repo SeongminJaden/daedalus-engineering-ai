@@ -19,6 +19,7 @@ from projects.manipulator.interfaces import (AK80_9_HOUSING, AK80_9_OUTPUT,
                                              link_interfaces,
                                              unresolved_features)
 from projects.manipulator.links import mounting_holes
+from projects.manipulator.stages import MINIMUM_DISC_LIGAMENT_M
 from projects.manipulator.spec import SPEC
 
 DRIVES = {"j1_base_yaw": "cubemars_ak80_64_kv80",
@@ -927,36 +928,140 @@ def test_the_gravity_moment_at_the_shoulder_lies_on_the_joint_axis():
     assert abs(along) == pytest.approx(1.0, abs=1e-12)
 
 
+def test_no_ring_pin_gets_a_lever_longer_than_the_pitch_radius():
+    """The geometric fact that cost the first torsion estimate a factor of 3.3.
+
+    A cycloidal contact normal passes through the instantaneous pitch point.
+    In the disc's own frame that point sits at the eccentricity times the
+    lobe count from the disc centre, so no ring pin's moment arm about that
+    centre can exceed it, whatever radius the pin circle is drawn at. With
+    2.5 mm and ten lobes the bound is 25 mm and the pin circle is 45.
+
+    The first estimate used the pin circle radius as the lever, which is
+    where a sum of squares of 5,569 mm^2 came from instead of 1,700. This
+    test computes the arms from the envelope and checks them against the
+    bound rather than against the number they happened to produce, so it
+    would still hold if the geometry changed.
+    """
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                ring_pin_moment_arms)
+
+    geometry = CycloidalGeometry()
+    assert geometry.pitch_radius_m == pytest.approx(0.025)
+    assert geometry.pitch_radius_m < geometry.ring_pin_circle_radius_m
+
+    worst = 0.0
+    for angle in np.linspace(0.0, 2.0 * np.pi, 97):
+        arms = ring_pin_moment_arms(geometry, float(angle))
+        worst = max(worst, float(np.abs(arms).max()))
+    assert worst <= geometry.pitch_radius_m + 1e-9
+    assert worst == pytest.approx(geometry.pitch_radius_m, rel=0.002), (
+        "the envelope should reach the pitch point bound almost exactly; if "
+        "it does not, the normals are being taken wrongly")
+
+
+def test_the_output_pin_circle_cannot_be_opened_to_sixty():
+    """A 44 percent gain that the disc's root radius does not allow.
+
+    Widening the output pin circle buys stiffness as the radius squared, and
+    Ø60 was proposed on the grounds that the disc's outline is at 42.5 mm. It
+    is not. 42.5 is the TIP radius. The binding one is the ROOT, at the pin
+    circle less the pin radius less the eccentricity, which is 37.5, and an
+    output pin hole is the pin plus the eccentricity across its own radius.
+
+    At Ø50 that leaves a 5 mm web. At Ø60 it leaves 0.00 mm exactly: the hole
+    breaks out through the root. The tip and the root differ by twice the
+    eccentricity and that is the whole of the error.
+    """
+    import dataclasses
+
+    from projects.manipulator.cycloidal import CycloidalGeometry
+
+    geometry = CycloidalGeometry()
+    assert geometry.disc_tip_radius_m - geometry.disc_root_radius_m == (
+        pytest.approx(2.0 * geometry.eccentricity_m))
+    assert geometry.output_web_m == pytest.approx(0.005, abs=1e-9)
+
+    wider = dataclasses.replace(geometry, output_pin_circle_radius_m=0.030)
+    assert wider.output_web_m == pytest.approx(0.0, abs=1e-9)
+    assert wider.output_web_m < MINIMUM_DISC_LIGAMENT_M
+
+
+def test_the_eccentric_bearings_lever_is_the_pitch_radius_squared():
+    """Derived rather than assumed, because it is the one term with no value.
+
+    The disc centre sits at the eccentricity along the input angle and the
+    disc turns at minus that angle over the ratio. A tangential shift d at
+    the centre is indistinguishable from the input angle being larger by
+    d / e, so the disc's rotation errs by d / (e * N). The force follows from
+    power: the input torque is the output torque over the ratio and acts at
+    the orbit radius, so it is T / (N * e). Put together, the torsional
+    stiffness is the radial stiffness times (e * N) squared, and each disc
+    brings its own bearing in parallel.
+
+    The lever is therefore the pitch radius, 25 mm, not the eccentricity,
+    2.5 mm. Those two readings differ by a hundred in the answer, which is
+    why this is a test and not a comment.
+    """
+    from projects.manipulator.cycloidal import (
+        CycloidalGeometry, eccentric_bearing_stiffness_nm_rad,
+        required_bearing_stiffness_n_m)
+
+    geometry = CycloidalGeometry()
+    radial = 1.0e8
+    stiffness = eccentric_bearing_stiffness_nm_rad(radial, geometry)
+    assert stiffness == pytest.approx(
+        radial * geometry.pitch_radius_m ** 2 * geometry.disc_count)
+    assert stiffness == pytest.approx(125_000.0, rel=1e-9)
+    assert required_bearing_stiffness_n_m(stiffness, geometry) == (
+        pytest.approx(radial, rel=1e-9))
+
+
 def test_the_reducers_torsion_clears_the_requirement_but_only_as_an_estimate():
+
     """The drive train's own stiffness, against the 50,689 the arm asks for.
 
     The chain is the output flange, six output pins, the disc, eleven ring
-    pins and the housing. Two contact interfaces in series with the discs'
-    own in plane shear. The output pins dominate because they sit at half the
-    ring pins' radius and carry three times the force each, and the discs are
-    stiff enough to barely appear in the sum.
+    pins and the housing, with the discs' in plane shear alongside. Four
+    terms have numbers and one, the eccentric bearing, has none.
 
-    The factor is thirteen, which is a pass and is not a verified one: the
-    pressure angle is dropped, the eccentric bearing is absent, the housing
-    torsion is absent, the engaged pin counts are assumed, and Palmgren's
-    approach is a roller bearing relation being used on a cycloidal flank.
-    The test pins the number so that a later correction is visible as a
-    change rather than as a new opinion.
+    241,801 N m/rad, a factor of 4.8. THIS REPLACES 682,012 AND A FACTOR OF
+    13.5 reported the same day, and the whole of the difference is in lever
+    arms rather than loads: the ring pins were given their pin circle radius
+    instead of the pitch radius bound, and the output pins were given a hand
+    picked count of engaged pins at full radius instead of a load share
+    solved from their arms. Both errors made the drive look stiffer.
+
+    It is a pass and it is not verified. Palmgren's approach is still a
+    roller bearing relation applied to a cycloidal flank and to a pin in a
+    hole, and those two terms carry 86 percent of the compliance. The test
+    pins the numbers so that the next correction shows up as a change rather
+    than as a new opinion.
     """
     from projects.manipulator.stages import joint_torsion_stage
 
     stage = joint_torsion_stage()
     terms = {row["term"]: row["stiffness_nm_rad"] for row in stage.rows}
-    assert set(terms) == {"output pins on 50", "ring pins on 90",
-                          "two discs, in plane shear"}
-    assert terms["output pins on 50"] < terms["ring pins on 90"]
-    assert terms["ring pins on 90"] < terms["two discs, in plane shear"]
+    assert set(terms) == {"ring pin contact", "output pin contact",
+                          "discs, in plane shear", "housing, in torsion"}
+    assert terms["output pin contact"] < terms["ring pin contact"]
+    assert terms["ring pin contact"] < terms["housing, in torsion"]
+    assert terms["housing, in torsion"] < terms["discs, in plane shear"]
 
-    series = stage.data["torsional_stiffness_nm_rad"]
-    assert series < min(terms.values())
-    assert series == pytest.approx(682_012, rel=0.01)
-    assert stage.data["margin"] == pytest.approx(13.5, rel=0.02)
-    assert any("not a verified result" in item for item in stage.could_not)
+    shares = {row["term"]: row["share_of_compliance"] for row in stage.rows}
+    assert shares["output pin contact"] + shares["ring pin contact"] == (
+        pytest.approx(0.86, abs=0.02))
+
+    known = stage.data["known_terms_nm_rad"]
+    assert known < min(terms.values())
+    assert known == pytest.approx(241_801, rel=0.01)
+    assert stage.data["margin_before_the_bearing"] == pytest.approx(4.77,
+                                                                    rel=0.02)
+    assert stage.data[
+        "eccentric_bearing_radial_stiffness_needed_n_m"] == pytest.approx(
+            5.13e7, rel=0.02)
+    assert any("not a verified result" in item.lower()
+               for item in stage.could_not)
 
 
 def test_no_computed_floor_comes_near_the_discs_eight_millimetres():
@@ -969,23 +1074,35 @@ def test_no_computed_floor_comes_near_the_discs_eight_millimetres():
     magnitude of 8 mm, so the thickness answers to handling and flatness of a
     wire cut part, which this repository cannot compute and does not claim to.
     """
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                disc_shear_stiffness_nm_rad)
     from projects.manipulator.stages import (CYCLOIDAL_DISC_THICKNESS_BASIS,
-                                             CYCLOIDAL_DISC_THICKNESS_M,
-                                             disc_shear_stiffness_nm_rad)
+                                             CYCLOIDAL_DISC_THICKNESS_M)
 
     required = 50_689.0
-    floor = CYCLOIDAL_DISC_THICKNESS_M * required / (
-        2.0 * disc_shear_stiffness_nm_rad(CYCLOIDAL_DISC_THICKNESS_M))
+    geometry = CycloidalGeometry()
+    assert geometry.disc_thickness_m == CYCLOIDAL_DISC_THICKNESS_M
+    floor = CYCLOIDAL_DISC_THICKNESS_M * required / disc_shear_stiffness_nm_rad(
+        geometry)
     assert floor == pytest.approx(2.8e-5, rel=0.05)
     assert floor < CYCLOIDAL_DISC_THICKNESS_M / 100.0
     assert CYCLOIDAL_DISC_THICKNESS_BASIS.startswith("CHOSEN")
     assert "handling" in CYCLOIDAL_DISC_THICKNESS_BASIS
+    assert "0.940 mm" in CYCLOIDAL_DISC_THICKNESS_BASIS, (
+        "the contact floor moved from 0.292 to 0.940 when the lever arms "
+        "were corrected; the basis string has to carry the current number")
 
 
 def test_disc_shear_stiffness_is_linear_in_thickness():
     """The property the floor above is read off, asserted rather than assumed."""
-    from projects.manipulator.stages import disc_shear_stiffness_nm_rad
+    import dataclasses
 
-    one = disc_shear_stiffness_nm_rad(0.004)
-    two = disc_shear_stiffness_nm_rad(0.008)
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                disc_shear_stiffness_nm_rad)
+
+    base = CycloidalGeometry()
+    one = disc_shear_stiffness_nm_rad(dataclasses.replace(base,
+                                                          disc_thickness_m=0.004))
+    two = disc_shear_stiffness_nm_rad(dataclasses.replace(base,
+                                                          disc_thickness_m=0.008))
     assert two == pytest.approx(2.0 * one, rel=1e-12)

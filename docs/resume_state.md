@@ -100,32 +100,91 @@ off THK 382-5E page 16 for an RB10020 at 0.4 kN m is an UPPER BOUND only:
 this arm's operating moment is under five percent of that chart's range,
 where the curve is steepest and unreadable.
 
-`joint_torsion_stage` computes the reducer's own number. The chain is the
-output flange, six output pins on a 50 mm circle, the disc, eleven ring pins
-on a 90 mm circle, the housing, with the two contact interfaces in series
-with the discs' in plane shear. At the 22.76 N m static shoulder torque:
-output pin contact 851,687, ring pin contact 4,489,678, two discs in shear
-14,413,851, and 682,012 N m/rad in series. That is 13.5 times the
-requirement. The output pins dominate because they sit at half the ring
-pins' radius and carry three times the force each; the discs barely appear.
+`joint_torsion_stage` computes the reducer's own number, from
+`projects/manipulator/cycloidal.py`. The chain is the output flange, six
+output pins, the disc, eleven ring pins and the housing, with the discs' in
+plane shear alongside. At the 22.76 N m static shoulder torque:
 
-It is an estimate and not a verified result. The pressure angle is dropped,
-so the contact approach is taken as fully tangential. The eccentric bearing
-is not in the chain. Housing and output flange torsion are not in it. The
-engaged pin fractions are assumed rather than solved. Palmgren's line
-contact relation is a ROLLER BEARING formula being used on a cycloidal
-flank. A factor of thirteen is room to be wrong in. What it does establish
-is a direction: the reducer is not obviously the thing that fails the 1 mm
-budget, and that budget stays UNVERIFIED either way.
+| term | N m/rad | share of the compliance |
+|---|---:|---:|
+| output pin contact | 446,246 | 54% |
+| ring pin contact | 758,834 | 32% |
+| housing, in torsion | 1,970,341 | 12% |
+| discs, in plane shear | 14,413,851 | 2% |
+| **four known terms in series** | **241,801** | **4.8 times the requirement** |
+
+WHAT IS CONFIRMED HERE IS A DIRECTION AND NOTHING MORE. The reducer is not
+obviously the thing that fails the 1 mm limit. That limit stays UNVERIFIED,
+because every deflection this design computes is still link elasticity alone.
+Do not read 4.8 as a verified margin. Palmgren's line contact relation is a
+ROLLER BEARING formula applied to a cycloidal flank and to a pin in a hole,
+and those two terms carry 86 percent of the compliance.
+
+The fifth term, the eccentric bearing, has no value at all. Its lever is
+derived: a tangential shift d of the disc centre is indistinguishable from
+the input angle being larger by d / e, so the disc's rotation errs by
+d / (e N), and the torsional stiffness is the bearing's radial stiffness
+times (e N) squared. e N is the pitch radius, 25 mm, NOT the eccentricity,
+2.5 mm; those two readings differ by a hundred. Asked in reverse, the
+bearing needs at least 5.13e7 N/m radial for the joint to reach 50,689 at
+all. That is the requirement to carry into bearing selection.
+
+CORRECTION WITHIN THE DAY. This first read 682,012 N m/rad and a factor of
+13.5. It was optimistic by 2.8 and the whole of the error was in lever arms,
+not loads:
+
+- Every cycloidal contact normal passes through the instantaneous pitch
+  point, which in the disc's frame is at e N from the disc centre. So NO
+  RING PIN CAN HAVE A LONGER MOMENT ARM THAN THAT, whatever radius its
+  circle is drawn at: 25 mm here against a 45 mm circle. The computed
+  maximum is 24.98. The first estimate used 45 and got a sum of squares of
+  5,569 mm2 where the envelope gives 1,700.
+- The output pins' normals are all parallel, along the line of the disc's
+  offset, so a hole's moment arm is its radius times the sine of its angle
+  from that line. The share is solved from those arms now. The first
+  estimate put in a hand picked count of engaged pins at full radius.
+
+A proposal to open the output pin circle from Ø50 to Ø60, worth 44 percent
+on the term that dominates, is REFUSED ON GEOMETRY. It was argued from the
+disc's outline at 42.5 mm, which is the TIP radius. The binding one is the
+ROOT, at pin circle less pin radius less eccentricity, 37.5 mm. An output
+hole is the pin plus the eccentricity across its radius, so Ø50 leaves a 5.00
+mm web and Ø60 leaves 0.00 mm exactly: the hole breaks out of the disc. The
+tip and the root differ by twice the eccentricity and that is the whole of
+it. A 3 mm web and ligament floor is CHOSEN and is what refuses it.
+
+Scanned against that floor, nothing available buys much. Eight output pins
+give 276,173 instead of 241,801. A 3.5 mm eccentricity with the output
+circle moved to suit gives 252,420 and lowers the bearing requirement to
+2.59e7 N/m, which is the more useful of the two. Ten output pins, a 4.5 mm
+eccentricity, and both together all fail the ligament floor.
+
+`joint_module_stiffness_stage` computed 2.6 million N m/rad for the same
+housing and concluded the bearing was the whole of the joint stiffness. That
+stage uses E and a BENDING second moment, so its scope is the OUT OF PLANE
+budget, and within that scope the finding stands. In torsion the same shell
+is 1.97 million, using G and J, and it is 12 percent of the drive train's
+compliance rather than a rounding error. Same part, different question.
 
 The same calculation closes the disc thickness question that was left open.
-In plane shear is linear in thickness, so 0.028 mm would carry the
-stiffness alone; the contact terms go as thickness to the 0.8, putting their
-floor at 0.292 mm; pin contact stress was already six times under its
-allowable and output pin hole bearing needs 0.20 mm. Four computed floors
-and not one of them within an order of magnitude of 8 mm. The thickness is
+In plane shear is linear in thickness, so 0.028 mm would carry the stiffness
+alone. The two contacts in series go as thickness to the 0.8 and put their
+floor at 0.940 mm, which replaces a 0.292 written earlier the same day from
+the same too long lever arms. Pin contact stress was already six times under
+its allowable and output pin hole bearing needs 0.20 mm. Four computed
+floors, the largest still an order of magnitude under 8 mm. The thickness is
 CHOSEN, for what a wire cut disc can be handled, stacked and kept flat at,
 which this repository cannot compute and no longer pretends to.
+
+On the out of plane side, THK's A18-1 page 18 carries NO FORMULA, only the
+diagram, and it prints two conditions that both matter. The diagram's
+condition is RADIAL CLEARANCE ZERO, so it is neither a preloaded nor a
+clearanced figure. And THK writes in the text that rigidity is affected by
+the deformation of the housing, the presser flange and the bolts, and that
+their strength must be taken into account. So the 1.7e6 N m/rad for an
+RB10020 is the BEARING ALONE, on top of being an upper bound read at 0.4
+kN m where this arm works under five percent along the chart. Any out of
+plane budget built on it has to carry the structure as well.
 
 CORRECTION, same day. This was first reported as 205,000 N m/rad and 4.7
 times the stiffest available, and that was wrong by a factor of four in the

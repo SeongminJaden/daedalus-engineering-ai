@@ -8,7 +8,6 @@ pipeline cannot do.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +16,13 @@ import numpy as np
 from core.assembly import Assembly
 from core.assembly.statics import joint_torques
 from core.materials import get_material
+from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                            disc_shear_stiffness_nm_rad,
+                                            output_pin_moment_arms,
+                                            pin_set_stiffness_nm_rad,
+                                            required_bearing_stiffness_n_m,
+                                            ring_pin_moment_arms,
+                                            shell_torsion_nm_rad)
 from physics.dynamics import inverse_dynamics, plan_move, torque_profile
 from physics.dynamics.actuator import (DriveDemand, best_ratio,
                                        inertia_matched_ratio, motor_torque_nm,
@@ -1856,12 +1862,17 @@ def backlash_stage(dynamics: StageResult, drivetrain: StageResult,
 #:
 #: So the thickness is not carried by either of the loads it obviously
 #: carries, and calling it a strength result would be false. Disc stiffness
-#: was the last open candidate and `joint_torsion_stage` has now closed it:
-#: the in plane shear of the annulus between the two pin circles is
-#: 7.21e6 N m/rad per disc, 284 times the arm's requirement, and it is linear
-#: in thickness, so 0.028 mm of steel would carry the stiffness on its own.
-#: The contact stiffness floor is 0.292 mm. Every computed floor is now more
-#: than an order of magnitude below 8 mm.
+#: was the last open candidate and `joint_torsion_stage` closes it: the in
+#: plane shear of the annulus between the two pin circles is 284 times the
+#: requirement and linear in thickness, so 0.028 mm of steel would carry it
+#: alone. The two contacts in series go as thickness to the 0.8 and put their
+#: own floor at 0.940 mm, which is the largest of the four and still an order
+#: of magnitude under 8.
+#:
+#: That 0.940 replaces a 0.292 written earlier the same day, from a contact
+#: model whose lever arms were too long. The conclusion did not move, but the
+#: margin did, by a factor of three, and that is the sort of thing worth
+#: recording rather than quietly overwriting.
 #:
 #: The thickness is therefore CHOSEN, and it is chosen for what a wire cut
 #: disc can be handled, stacked and kept flat at, which is not something this
@@ -1873,104 +1884,138 @@ CYCLOIDAL_DISC_THICKNESS_BASIS = (
     "computed here. Four floors were computed and none of them binds: pin "
     "contact stress is six times under its allowable, output pin hole "
     "bearing needs 0.20 mm, disc in plane shear stiffness needs 0.028 mm, "
-    "and contact stiffness needs 0.292 mm")
+    "and the pin contacts in series need 0.940 mm")
 
 
-#: Palmgren's empirical approach for a steel line contact, delta in mm from
-#: F in newtons and L in millimetres. It is a ROLLER BEARING formula and it
-#: is used here on a cycloidal flank, which is the largest of several
-#: approximations in the torsion estimate below.
-def line_contact_approach_mm(force_n: float, length_mm: float) -> float:
-    return 3.84e-5 * force_n ** 0.9 / length_mm ** 0.8
+#: CHOSEN, and the gate that refuses a disc. A wire cut steel disc needs
+#: material between an output pin hole and its own outer profile, and
+#: between one hole and the next. Three millimetres is the floor used here.
+#: It is a judgement about handling a thin ligament, not a strength result:
+#: the loads are far below what 3 mm of steel carries.
+MINIMUM_DISC_LIGAMENT_M = 0.003
+
+#: The housing the reducer sits in, as a thin walled tube in TORSION. Note
+#: that this is not the calculation in `joint_module_stiffness_stage`, which
+#: uses E and a bending second moment and answers the out of plane question.
+#: Torsion needs G and J, and G here is E over 2(1 + nu) for the link alloy.
+HOUSING_DIAMETER_M = 0.124
+HOUSING_WALL_M = 0.004
+HOUSING_LENGTH_M = 0.080
+HOUSING_POISSON = 0.33
 
 
-#: In plane torsional stiffness of the annulus a cycloidal disc has between
-#: its output pin circle and its ring pin circle. Torque enters at the outer
-#: radius and leaves at the inner one, so the shear stress is T / (2 pi r^2 t)
-#: and the relative rotation integrates to T / (4 pi G t) * (1/a^2 - 1/b^2).
-#: The holes through the disc are ignored, which makes this an upper bound.
-def disc_shear_stiffness_nm_rad(thickness_m: float,
-                                inner_radius_m: float = 0.025,
-                                outer_radius_m: float = 0.045,
-                                shear_modulus_pa: float = 79.3e9) -> float:
-    return (4.0 * math.pi * shear_modulus_pa * thickness_m
-            / (1.0 / inner_radius_m ** 2 - 1.0 / outer_radius_m ** 2))
+def housing_torsion_nm_rad(spec: ManipulatorSpec = SPEC) -> float:
+    modulus = get_material(spec.materials["link"]).youngs_modulus_pa
+    return shell_torsion_nm_rad(HOUSING_DIAMETER_M, HOUSING_WALL_M,
+                                HOUSING_LENGTH_M,
+                                modulus / (2.0 * (1.0 + HOUSING_POISSON)))
 
 
 def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
+                        geometry: CycloidalGeometry | None = None,
                         torque_nm: float = 22.76,
-                        required_nm_rad: float = 50_689.0) -> StageResult:
+                        required_nm_rad: float = 50_689.0,
+                        samples: int = 24) -> StageResult:
     """The stiffness the deflection budget actually asks for, and where it is.
 
     IT IS NOT THE BEARING'S. The tool sags because the joint output rotates
     about its own axis, and at the shoulder the gravity moment lies entirely
-    along that axis: taking the cross product of the 600 mm lever with
-    gravity gives a moment whose component on the joint axis is exactly one.
-    That is the single direction a joint bearing does not resist, because it
-    is the direction the joint turns in. What resists it is the drive train.
+    along that axis: the cross product of the 600 mm lever with gravity has a
+    component on the joint axis of exactly one. That is the single direction
+    a joint bearing does not resist, because it is the direction the joint
+    turns in. What resists it is the drive train.
 
-    So the 50,689 N m/rad is a TORSIONAL requirement on the reducer, and the
-    crossed roller's tilting rigidity answers a different question: the
-    out of plane budget, where the bearing carries moments about the two axes
-    across the joint. Both are needed and they are not the same number.
+    So 50,689 N m/rad is a TORSIONAL requirement on the reducer, and the
+    crossed roller's tilting rigidity answers a different question, the out
+    of plane budget. Both are needed and they are not the same number.
 
-    The chain here is flange, six output pins, disc, eleven ring pins,
-    housing, with the two contact interfaces in series.
+    CORRECTION TO THE FIRST ESTIMATE, which reported 682,012 N m/rad and a
+    factor of 13.5 on the same day. That was optimistic by 2.8, and both
+    halves of the error were in the lever arms rather than in the loads:
+
+    The ring pins do not act at their pin circle radius. Every cycloidal
+    contact normal passes through the instantaneous pitch point, which in the
+    disc's frame sits at e * N from the disc centre, so no ring pin can have
+    a moment arm larger than that whatever radius its circle is drawn at.
+    Here that is 25 mm against a 45 mm circle, and the computed maximum arm
+    is 24.98. The sum of squares is 1,700 mm^2 where a radius times a count
+    would have given 5,569.
+
+    The output pins do not all act at their full radius either. Their contact
+    normals are all parallel, along the line of the disc's offset, so the
+    moment arm of a hole is the circle radius times the sine of its angle
+    from that line. The share is now solved from those arms instead of a
+    fraction of engaged pins being put in by hand.
+
+    The housing is in the chain now, in torsion. The discs' in plane shear
+    barely appears.
     """
+    geometry = geometry or CycloidalGeometry()
     result = StageResult(name="joint torsion, which is what the budget asks")
-    thickness_mm = CYCLOIDAL_DISC_THICKNESS_M * 1000.0
-    terms = []
-    for name, radius_m, engaged in (("output pins on 50", 0.025, 3.0),
-                                    ("ring pins on 90", 0.045, 5.5)):
-        force = torque_nm / radius_m / engaged / 2.0      # two discs share it
-        approach = line_contact_approach_mm(force, thickness_mm) / 1000.0
-        rotation = approach / radius_m
-        stiffness = torque_nm / rotation
-        terms.append(stiffness)
+    angles = np.linspace(0.0, 2.0 * np.pi / geometry.ring_pin_count, samples)
+
+    def worst(arms_of) -> float:
+        return min(pin_set_stiffness_nm_rad(
+            torque_nm, arms_of(geometry, angle), geometry.disc_thickness_m,
+            geometry.disc_count) for angle in angles)
+
+    terms = {
+        "ring pin contact": worst(ring_pin_moment_arms),
+        "output pin contact": worst(output_pin_moment_arms),
+        "discs, in plane shear": disc_shear_stiffness_nm_rad(geometry),
+        "housing, in torsion": housing_torsion_nm_rad(spec),
+    }
+    total_compliance = sum(1.0 / value for value in terms.values())
+    for name, value in terms.items():
         result.rows.append({
-            "term": name, "radius_m": radius_m,
-            "force_per_pin_per_disc_n": force,
-            "approach_m": approach, "rotation_rad": rotation,
-            "stiffness_nm_rad": stiffness,
-            "times_required": stiffness / required_nm_rad})
+            "term": name, "stiffness_nm_rad": value,
+            "compliance_rad_nm": 1.0 / value,
+            "share_of_compliance": (1.0 / value) / total_compliance,
+            "times_required": value / required_nm_rad})
 
-    disc = 2.0 * disc_shear_stiffness_nm_rad(CYCLOIDAL_DISC_THICKNESS_M)
-    terms.append(disc)
-    result.rows.append({
-        "term": "two discs, in plane shear", "radius_m": None,
-        "force_per_pin_per_disc_n": None, "approach_m": None,
-        "rotation_rad": torque_nm / disc, "stiffness_nm_rad": disc,
-        "times_required": disc / required_nm_rad})
-
-    series = 1.0 / sum(1.0 / value for value in terms)
-    result.data["torsional_stiffness_nm_rad"] = series
+    known = 1.0 / total_compliance
+    result.data["known_terms_nm_rad"] = known
     result.data["required_nm_rad"] = required_nm_rad
-    result.data["margin"] = series / required_nm_rad
+    result.data["margin_before_the_bearing"] = known / required_nm_rad
+    result.data["pitch_radius_m"] = geometry.pitch_radius_m
+    result.data["output_web_m"] = geometry.output_web_m
+    result.data["output_ligament_m"] = geometry.output_ligament_m
+
+    #: The eccentric bearing has no catalogue value here, so the question is
+    #: turned round the way the friction grip was: not what it gives, but
+    #: what it has to be.
+    allowance = 1.0 / (1.0 / required_nm_rad - 1.0 / known)
+    needed = required_bearing_stiffness_n_m(allowance, geometry)
+    result.data["eccentric_bearing_radial_stiffness_needed_n_m"] = needed
+
     result.notes.append(
-        f"the three terms in series give {series:,.0f} N m/rad against the "
-        f"{required_nm_rad:,.0f} the arm needs, a factor of "
-        f"{series / required_nm_rad:.1f}. The output pin contact dominates, "
-        f"because those pins sit at half the radius of the ring pins and so "
-        f"carry three times the force each; the discs themselves are stiff "
-        f"enough to be almost absent from the sum")
+        f"the four computed terms give {known:,.0f} N m/rad in series, "
+        f"{known / required_nm_rad:.1f} times the {required_nm_rad:,.0f} the "
+        f"arm needs. The output pin contact carries "
+        f"{max(row['share_of_compliance'] for row in result.rows):.0%} of the "
+        f"compliance, the ring pins most of the rest, and the discs are stiff "
+        f"enough to be almost absent")
     result.notes.append(
-        "this also closes the disc thickness question. In plane shear is "
-        "linear in thickness, so 0.028 mm would carry the stiffness alone, "
-        "and the contact terms go as thickness to the 0.8, putting their "
-        "floor at 0.292 mm. With pin contact stress and hole bearing already "
-        "clear by a factor of six and forty, no computed floor comes within "
-        "an order of magnitude of 8 mm: the thickness is chosen for handling")
+        f"the eccentric bearing is the one term with no number, and its lever "
+        f"is the pitch radius {geometry.pitch_radius_m * 1000:.1f} mm, "
+        f"SQUARED. Asked in reverse, its radial stiffness has to be at least "
+        f"{needed:.2e} N/m for the joint to reach the requirement at all")
+    result.notes.append(
+        f"a Ø{2000 * geometry.output_pin_circle_radius_m:.0f} output pin "
+        f"circle leaves {geometry.output_web_m * 1000:.2f} mm of web to the "
+        f"disc's ROOT radius and {geometry.output_ligament_m * 1000:.2f} mm "
+        f"between holes. Ø60 was proposed and it is not available: measured "
+        f"to the root rather than the tip the web comes out 0.00 mm exactly, "
+        f"so the hole breaks out of the disc")
     result.could_not.append(
-        "This is a first estimate and every simplification in it is either "
-        "optimistic or unquantified: the pressure angle is ignored so the "
-        "contact approach is taken as fully tangential, the eccentric "
-        "bearing is not in the chain at all, the housing and output flange "
-        "torsion are not in it, the engaged pin fractions are assumed rather "
-        "than solved, and Palmgren's relation is a roller bearing formula "
-        "applied to a cycloidal flank. A factor of thirteen is room to be "
-        "wrong in and it is not a verified result. What it does establish is "
-        "the direction: the reducer is not obviously the thing that fails "
-        "the 1 mm budget, and the budget stays UNVERIFIED either way.")
+        "Not a verified result. The load share now falls out of the geometry "
+        "rather than being assumed, and the housing is in the chain, but "
+        "Palmgren's relation is still a roller bearing formula applied to a "
+        "cycloidal flank and to a pin in a hole, and that carries 86 percent "
+        "of the compliance. The eccentric bearing has no value at all, only "
+        "a requirement. The 1 mm tip limit stays UNVERIFIED either way, "
+        "because every deflection this design computes is link elasticity "
+        "alone.")
     return result
 
 
@@ -1979,20 +2024,25 @@ def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,
                                  ) -> StageResult:
     """Which part of a built joint decides its stiffness.
 
-    The joint's torsional and moment stiffness is the thing the whole
-    deflection budget now turns on, and a module has three candidates for
-    where it is lost: the housing shell, the output flange, and the output
-    bearing. Only one of them can be sized from what this project holds, and
-    knowing WHICH one dominates decides whether the bearing selection is
-    everything or a detail.
+    READ THE SCOPE OF THIS STAGE FIRST. Every number below uses E and a
+    BENDING second moment, so what it computes is the housing's resistance to
+    moments ACROSS the joint. That is the out of plane budget. It is not the
+    torsional budget, which is what the tool's sag at full reach actually
+    draws on, and `joint_torsion_stage` is where that lives. This stage was
+    written believing the two were the same question and its conclusion,
+    that "the bearing is the whole of it", was wrong for that reason.
 
-    It is the bearing. A cylindrical housing of the size this module needs,
-    in the weaker of the two candidate alloys, comes out one to two orders of
-    magnitude above the requirement: 2.6 million N m/rad at 124 mm across a 4
-    mm wall, against 50,689 needed. Even at half the wall and half again the
-    length it stays 24 times clear. The structure is not where the compliance
-    is, so no amount of FEA on the housing changes the answer and the
-    bearing's own stiffness is the whole of it.
+    Within its own scope the finding stands. A cylindrical housing of the
+    size this module needs, in the weaker of the two candidate alloys, comes
+    out one to two orders of magnitude above 50,689 N m/rad in bending: 2.6
+    million at 124 mm across a 4 mm wall, and still 24 times clear at half
+    the wall and half again the length. So for out of plane moments the
+    structure is not where the compliance is and the bearing is.
+
+    For TORSION the same shell is 1.97 million N m/rad, using G and J rather
+    than E and I, and it is 12 percent of the drive train's compliance
+    instead of a rounding error. Same part, different question, and the two
+    answers differ by more than the change of modulus alone.
 
     The two layouts scale differently, which is the interesting part. A
     crossed roller carries the moment on a raceway all the way round, so its
@@ -2024,10 +2074,13 @@ def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,
             "times_required": stiffness / required_nm_rad})
 
     result.notes.append(
-        f"the housing shell is between {min(r['times_required'] for r in result.rows):.0f} "
-        f"and {max(r['times_required'] for r in result.rows):.0f} times the "
-        f"{required_nm_rad:,.0f} N m/rad the arm needs, so the structure is "
-        f"not the limiting term and the output bearing is the whole of it")
+        f"IN BENDING the housing shell is between "
+        f"{min(r['times_required'] for r in result.rows):.0f} and "
+        f"{max(r['times_required'] for r in result.rows):.0f} times the "
+        f"{required_nm_rad:,.0f} N m/rad, so for moments ACROSS the joint the "
+        f"structure is not the limiting term and the bearing is. In TORSION "
+        f"the same shell is {housing_torsion_nm_rad(spec):,.0f} and carries 12 "
+        f"percent of the drive train's compliance; see joint_torsion_stage")
     result.notes.append(
         "a crossed roller's moment stiffness grows as the radius CUBED and a "
         "spread angular contact pair's as the spacing SQUARED, so the pair "
@@ -2039,6 +2092,18 @@ def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,
         "stiffness that only a manufacturer prints, and this project holds "
         "none: the standard parts library's deep groove ball entries have "
         "ASSUMED internal geometry, carry no C or C0, and are not moment "
-        "carrying parts to begin with. Until a catalogue value exists the "
-        "joint stiffness is unknown, and so is whether the 1 mm limit holds.")
+        "carrying parts to begin with.")
+    result.could_not.append(
+        "One catalogue figure is in hand and it is an upper bound, not a "
+        "value. THK 382-5E page 16 puts an RB10020 at about 1.7e6 N m/rad, "
+        "read at a moment of 0.4 kN m, and this arm works under five percent "
+        "of the way along that chart where the curve is steepest. THK's own "
+        "A18-1 page 18 carries no formula, only the diagram, and prints two "
+        "conditions with it. The first is RADIAL CLEARANCE ZERO, so the "
+        "figure is neither a preloaded nor a clearanced one. The second is "
+        "THK's own sentence that rigidity is affected by the deformation of "
+        "the housing, the presser flange and the bolts, and that their "
+        "strength must be taken into account. So the catalogue number is the "
+        "BEARING ALONE and the structure around it adds compliance on top. "
+        "Any out of plane budget built on it has to carry that structure.")
     return result
