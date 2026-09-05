@@ -489,6 +489,26 @@ Defects found by standing the parts up, none of which a check here could see:
   percent void and none is empty. Reasoning from the box construction gave a
   confident wrong answer where profiling the mask gives the right one, and
   the wrong one was published to the Fusion session before it was checked.
+- THE NEIGHBOUR CLAIM IS WHAT CUTS THEM, and the far side rule could not
+  have caught it. The upper arm's own shoulder drive accounts for only 12 to
+  24 percent of the void in the severing band; the rest is the base column.
+  The two links BOTH CLAIM THE BOX BELOW THE SHOULDER'S HOUSING FACE,
+  (-140.7, -42.7) in z, for reasons that are each correct: the base column
+  carries j2 across so it reaches below that face, and the upper arm is
+  driven across at that end so it reaches back for its own bolt circle. The
+  shared box is 98 by 98 by 189.7 mm, 1.82 litres, and the upper arm is told
+  to hold all of it empty. In its frame that is local x 0 to 98 mm and its
+  body begins at 99, so its shoulder flange is kept as an interface, quite
+  correctly, and then everything between it and the body is given away. The
+  forearm loses its elbow flange to the same rule against the upper arm.
+  Putting every link on the far side of the face it bolts to settled z and
+  removed a 235,298 cubic millimetre overlap doing it; this collision is in x
+  and survived that fix.
+- WHICH LINK OWNS THAT BOX IS NOT DECIDED. Releasing it to the upper arm
+  takes material off the base column, which carries the whole arm's
+  overturning moment. Keeping it means the upper arm needs some other path
+  from its flange to its body. Both links regenerate either way, so it is
+  one decision and not two.
 - BOTH SEVERED LINKS ARE CUT THE SAME WAY, in x and not z. The upper arm's
   proximal 94 mm is 78 to 99 percent held empty and its body begins at 99 mm;
   the forearm's proximal 100 mm is 97 to 99 percent held empty and its body

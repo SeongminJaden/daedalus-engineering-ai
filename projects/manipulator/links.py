@@ -573,6 +573,41 @@ def _near_axis(mesh, axis, at_x, height_m, width_m, box, radius_m):
     return radial <= radius_m
 
 
+#: THE SHOULDER CONFLICT THAT THE "FAR SIDE" RULE DID NOT RESOLVE, measured.
+#:
+#: Every drive's output face is the arm's z = 0 plane and each link sits on
+#: the far side of whichever face it bolts to. That rule removed the 235,298
+#: cubic millimetre overlap this project found earlier, and it does not
+#: remove this one, because it settles z and the base column and the upper
+#: arm collide in x.
+#:
+#: They share the box BELOW THE SHOULDER'S HOUSING FACE, (-140.7, -42.7) in
+#: z, and they claim it for different reasons that are both correct. The base
+#: column CARRIES j2 across, so it reaches below that housing face. The upper
+#: arm also carries a crossing axis at its far end and is driven across at
+#: this one, so it reaches back too. The shared box is 98 by 98 by 189.7 mm,
+#: 1.82 litres, and the upper arm is told to hold the whole of it empty.
+#:
+#: That band is the upper arm's local x from 0 to 98 mm, and its body begins
+#: at 99. So the neighbour claim IS the cut: the shoulder flange is kept as
+#: an interface, correctly, and then everything between it and the body is
+#: given to the base column, which strands it. The forearm loses its flange
+#: to the same rule against the upper arm.
+#:
+#: WHICH LINK SHOULD OWN THAT BOX IS A DESIGN DECISION AND IT IS NOT MADE
+#: HERE. Releasing it to the upper arm takes material off the base column,
+#: which carries the whole arm's overturning moment; keeping it means the
+#: upper arm needs some other path from its flange to its body. Both links
+#: are regenerated either way.
+SHOULDER_BOX_CONFLICT = (
+    "the base column and the upper arm both claim the box below the "
+    "shoulder's housing face, 98 by 98 by 189.7 mm and 1.82 litres of it. "
+    "The far side rule settles z and this collision is in x, so it survived "
+    "that fix. It is what strands the upper arm's shoulder flange, and the "
+    "same rule strands the forearm's elbow flange against the upper arm"
+)
+
+
 def interfaces_are_reachable(spec: ManipulatorSpec, link_index: int,
                              drives: dict[str, str],
                              sections: dict | None = None

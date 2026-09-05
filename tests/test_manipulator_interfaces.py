@@ -1796,3 +1796,51 @@ def test_the_ring_is_chosen_on_three_axes_and_not_on_housing_size():
     clears = [ring for ring in RB_RINGS if ring.bore_m > 0.098]
     assert min(clears, key=lambda r: r.bore_m).model == "RB 10016"
     assert min(clears, key=lambda r: r.housing_outer_m).model == "RB 11012"
+
+
+def test_the_neighbour_claim_is_what_strands_the_shoulder_flange():
+    """The cut, attributed rather than described.
+
+    The upper arm's own shoulder drive accounts for only 12 to 24 percent of
+    the void in the band that severs it. The rest is the neighbour rule: the
+    base column and the upper arm both claim the box below the shoulder's
+    housing face, and the upper arm is told to hold all of it empty.
+
+    They claim it for reasons that are both correct. The base column carries
+    j2 across, so it reaches below that housing face; the upper arm is driven
+    across at that end, so it reaches back for its own bolt circle. The rule
+    that every link sits on the far side of the face it bolts to settled z,
+    and removed a 235,298 cubic millimetre overlap doing it. This collision
+    is in x and survived that fix.
+
+    The shared box is 98 by 98 by 189.7 mm, which in the upper arm's frame is
+    its local x from 0 to 98 mm, and its body begins at 99. So the flange is
+    kept as an interface, correctly, and then everything between it and the
+    body is given away.
+    """
+    import numpy as np
+
+    from projects.manipulator.links import domain_boxes, world_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+
+    boxes = {box["link"]: box for box in world_boxes(SPEC, drives, sections)}
+    mine, neighbour = boxes["upper_arm"], boxes["base_column"]
+    low = np.maximum(mine["low"], neighbour["low"])
+    high = np.minimum(mine["high"], neighbour["high"])
+    overlap = np.maximum(high - low, 0.0)
+    assert np.all(overlap > 0.0), "they really do share a box"
+    assert overlap[0] == pytest.approx(0.098, abs=1e-6)
+    assert float(np.prod(overlap)) * 1e9 == pytest.approx(1_821_879, rel=0.01)
+
+    #: and the same z box appears in both links' own construction, which is
+    #: why the far side rule could not have caught it
+    theirs = domain_boxes(SPEC, 0, drives)
+    ours = domain_boxes(SPEC, 1, drives)
+    assert theirs[0] == pytest.approx(ours[0]), (
+        "both links claim the box below the shoulder housing face, and they "
+        "claim it for reasons that are each correct on their own"
+    )
