@@ -1001,9 +1001,14 @@ def mounting_holes(spec: ManipulatorSpec, link_index: int,
         low, high = (-0.002, flange + 0.002) if side > 0 else (
             -flange - 0.002, 0.002)
 
-        def _record(kind, thread, diameter, u, v, deep=None):
-            start = centre + axis * side * (low if deep is None else -deep)
-            end_at = centre + axis * side * (high if deep is None else 0.002)
+        def _record(kind, thread, diameter, u, v, deep=None, plane=0.0):
+            # THE PLANE THIS CIRCLE IS IN. An output face has two: the outer
+            # circle lies in the mounting face and the inner one on the END
+            # OF THE BOSS, which stands proud of it by the face inset. One
+            # plane for both put the inner holes inside the motor.
+            base = centre + axis * side * plane
+            start = base + axis * side * (low if deep is None else -deep)
+            end_at = base + axis * side * (high if deep is None else 0.002)
             offset = first * u + second * v
             return {"end": end, "kind": kind, "face": face.face,
                     "thread": thread, "diameter_m": diameter,
@@ -1015,11 +1020,13 @@ def mounting_holes(spec: ManipulatorSpec, link_index: int,
 
         for hole in bolt_holes(face, clock_deg):
             holes.append(_record("clearance", hole["thread"],
-                                 hole["diameter_m"], hole["y_m"], hole["z_m"]))
+                                 hole["diameter_m"], hole["y_m"], hole["z_m"],
+                                 plane=hole.get("plane_offset_m", 0.0)))
         for dowel in dowel_holes(face):
             holes.append(_record("dowel", "", dowel["diameter_m"],
                                  dowel["y_m"], dowel["z_m"],
-                                 deep=dowel["depth_m"]))
+                                 deep=dowel["depth_m"],
+                                 plane=dowel.get("plane_offset_m", 0.0)))
         bore = face.central_bore_m or CABLE_BORE_M
         holes.append(_record("bore", "", bore, 0.0, 0.0))
         unresolved.extend(unresolved_features(face))
@@ -1133,8 +1140,31 @@ def interface_solids(spec, link_index, drives, span_m, height_m, width_m,
             beyond = [seg for seg in profile
                       if seg[1] <= -(separation or 0.0) + 1e-9]
         inner = max((seg[2] for seg in beyond), default=0.0)
+        # ONE SEAT PER PLANE. The outer circle gets an annulus round the
+        # boss at the mounting face; the inner circle needs its own disc ON
+        # the boss end, a face inset further out, and that disc is what its
+        # bolts pull against. There was no material there at all before,
+        # which is why the wrist pitch body's inner ring reported nothing at
+        # 64 of 64 points and reported it correctly.
+        for pattern in face.patterns:
+            if not pattern.plane_offset_m or side <= 0:
+                continue
+            seat = 0.5 * pattern.bolt_circle_m + 0.005
+            base = origin + axis * pattern.plane_offset_m
+            solids.append({
+                "kind": "seat", "face": other.name,
+                "outer_diameter_m": 2.0 * seat, "inner_diameter_m": 0.0,
+                "axis": [float(v) for v in axis],
+                "start_m": [float(v) for v in base],
+                "end_m": [float(v) for v in (base + axis * flange)],
+                "note": (f"the seat {other.name}'s inner {pattern.count} by "
+                         f"{pattern.thread} circle pulls against, on the boss "
+                         f"end {pattern.plane_offset_m * 1000:.1f} mm proud "
+                         f"of the mounting face")})
+
         outer = max(0.5 * actuator.outer_diameter_m,
-                    0.5 * face.largest_bolt_circle_m() + 0.005)
+                    0.5 * max((p.bolt_circle_m for p in face.patterns
+                               if not p.plane_offset_m), default=0.0) + 0.005)
         width = outer - inner
         if width < MINIMUM_RING_WIDTH_M:
             solids.append({

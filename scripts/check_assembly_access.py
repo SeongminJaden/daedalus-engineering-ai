@@ -311,15 +311,21 @@ def check_link(index: int, spec, drives, sections, path: Path,
         if axis is None:
             continue
         separation = face_separation_m(str(drives.get(joint.name, "")))
-        # Two millimetres into the link from the face it bolts to.
-        offset = 0.002 if side > 0 else -((separation or 0.0) + 0.002)
-        plane = origin + axis * offset
         seed = (np.array([0.0, 1.0, 0.0]) if abs(axis[1]) < 0.9
                 else np.array([1.0, 0.0, 0.0]))
         first = seed - axis * float(np.dot(seed, axis))
         first = first / np.linalg.norm(first)
         second = np.cross(axis, first)
         for pattern in face.patterns:
+            # EACH CIRCLE IN ITS OWN PLANE, two millimetres into the link.
+            # The outer one is in the mounting face; the inner one is on the
+            # boss end, a face inset further out. Sampling both at the
+            # mounting face looked for link material where the boss is and
+            # found none, which was right about the material and wrong about
+            # what it meant.
+            offset = ((pattern.plane_offset_m + 0.002) if side > 0
+                      else -((separation or 0.0) + 0.002))
+            plane = origin + axis * offset
             middle = 0.5 * pattern.bolt_circle_m
             angles = np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False)
             counts, failed = {}, None

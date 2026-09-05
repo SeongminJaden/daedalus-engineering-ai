@@ -817,3 +817,58 @@ def test_every_loaded_joint_needs_the_same_stiffness_and_it_is_reachable():
     assert next(iter(needed.values())) == pytest.approx(50_689, rel=0.02)
     assert next(iter(needed.values())) < 1.3 * PRINTED_STIFFNESS_RANGE_NM_RAD[1]
     assert any("LINK ELASTICITY ONLY" in item for item in stage.could_not)
+
+
+def test_an_output_face_has_two_mounting_planes():
+    """One face, two planes, and the offset is a number already held.
+
+    An output face carries an outer bolt circle in the mounting face and an
+    inner one on the END OF THE BOSS, which stands proud of it. Measured on
+    all three drives the offset is 8.0 mm, 3.0 and 1.5, and each equals that
+    drive's published output face inset, because the boss height IS the
+    inset. So the second plane needed no new measurement, only the
+    recognition that it exists.
+
+    Treating one face as one plane put the inner holes and their seat inside
+    the motor. The wrist pitch body's inner ring then reported metal at 0 of
+    64 sample points, which was correct about the material and wrong about
+    what it meant, and the tool flange's did the same.
+    """
+    from projects.manipulator.interfaces import (AK60_6_OUTPUT, AK80_9_OUTPUT,
+                                                 AK80_64_HOUSING,
+                                                 AK80_64_OUTPUT)
+
+    for face, expected in ((AK80_64_OUTPUT, 0.008), (AK80_9_OUTPUT, 0.003),
+                           (AK60_6_OUTPUT, 0.0015)):
+        offsets = {pattern.plane_offset_m for pattern in face.patterns}
+        assert offsets == {0.0, expected}, (face.actuator, offsets)
+        assert face.face_inset_m == expected, (
+            "the inner plane's offset should be the face inset, because the "
+            "boss height is the inset")
+        inner = next(p for p in face.patterns if p.plane_offset_m)
+        outer = next(p for p in face.patterns if not p.plane_offset_m)
+        assert inner.bolt_circle_m < outer.bolt_circle_m
+
+    # A housing face has one plane. Nothing stands proud of it.
+    assert {p.plane_offset_m for p in AK80_64_HOUSING.patterns} == {0.0}
+    assert AK80_64_OUTPUT.dowel_plane_offset_m == 0.008, (
+        "the dowels are on the boss end with the inner circle")
+
+
+def test_the_inner_bolt_circle_gets_a_seat_on_the_boss_end():
+    """And the seat is a separate solid, because it is in a separate plane."""
+    from projects.manipulator.links import interface_solids, world_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    boxes = {b["link"]: b for b in world_boxes(SPEC, drives,
+                                               loop.data["final_sections"])}
+    for index, link in enumerate(SPEC.links()):
+        box = boxes[link.name]
+        solids = interface_solids(SPEC, index, drives, box["span"],
+                                  box["height"], box["width"], box)
+        kinds = [solid["kind"] for solid in solids]
+        assert kinds.count("seat") == 1, (link.name, kinds)
+        seat = next(s for s in solids if s["kind"] == "seat")
+        assert seat["inner_diameter_m"] == 0.0, "a seat is a disc, not a ring"

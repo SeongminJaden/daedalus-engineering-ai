@@ -88,6 +88,16 @@ class BoltPattern:
     clock_deg: float | None = None
     clock_source: str = ""
     clock_tolerance_deg: float | None = None
+    #: How far this circle's plane stands proud of the face's own mounting
+    #: plane, along the drive's axis. AN OUTPUT FACE HAS TWO PLANES, not one.
+    #: The outer circle is in the mounting face; the inner circle is on the
+    #: END OF THE BOSS, which stands proud of it by exactly the face inset,
+    #: because the boss height IS the inset. Measured on all three drives:
+    #: 8.0 mm on the AK80-64, 3.0 on the AK80-9, 1.5 on the AK60-6, each
+    #: equal to that drive's published output inset. Treating one face as one
+    #: plane put the inner ring where the boss is, so the check looked for
+    #: link material inside a motor and correctly found none.
+    plane_offset_m: float = 0.0
 
     @property
     def clearance_hole_m(self) -> float:
@@ -123,6 +133,9 @@ class MountingFace:
     dowel_bolt_circle_m: float | None = None
     dowel_angles_deg: tuple[float, ...] = ()
     dowel_source: str = ""
+    #: The dowels sit on the boss end face with the inner bolt circle, not on
+    #: the mounting face, for the same reason and by the same offset.
+    dowel_plane_offset_m: float = 0.0
     notes: tuple[str, ...] = ()
 
     def largest_bolt_circle_m(self) -> float:
@@ -171,12 +184,13 @@ AK80_64_OUTPUT = MountingFace(
     patterns=(BoltPattern("M3", 8, 0.089, 0.010, "8-M3 depth 10mm, PCD 89",
                           clock_deg=0.0, clock_source=MODEL_MEASURED),
               BoltPattern("M4", 6, 0.028, 0.008, "6-M4 depth 8mm, PCD 28",
-                          clock_deg=30.0, clock_source=MODEL_MEASURED)),
+                          clock_deg=30.0, clock_source=MODEL_MEASURED,
+                          plane_offset_m=0.008)),
     central_bore_m=0.021, central_bore_depth_m=0.0045,
     boss_diameters_m=(0.080, 0.035), face_inset_m=0.008,
     dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=2,
     dowel_bolt_circle_m=0.028, dowel_angles_deg=(0.0, 180.0),
-    dowel_source=MODEL_MEASURED,
+    dowel_source=MODEL_MEASURED, dowel_plane_offset_m=0.008,
     notes=("central bore printed 21.0 +0.02/0 depth 4.5",
            "dowels printed 2-diameter 3.0 +0.05/0 depth 3, and the model "
            "puts them on the 28 mm circle at 0 and 180 degrees, the same two "
@@ -203,7 +217,8 @@ AK80_9_OUTPUT = MountingFace(
                           clock_tolerance_deg=1.5),
               BoltPattern("M4", 6, 0.028, None, "6-M4, PCD 28",
                           clock_deg=15.75, clock_source=MODEL_APPROXIMATE,
-                          clock_tolerance_deg=1.5)),
+                          clock_tolerance_deg=1.5,
+                          plane_offset_m=0.003)),
     central_bore_m=None, central_bore_depth_m=None,
     boss_diameters_m=(0.048, 0.037), face_inset_m=0.003,
     dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=None,
@@ -273,11 +288,13 @@ AK60_6_OUTPUT = MountingFace(
               BoltPattern("M3", 6, 0.020, 0.006, "6xM3 depth 6, PCD 20",
                           clock_deg=8.81,
                           clock_source=MODEL_APPROXIMATE_CROSSCHECKED,
-                          clock_tolerance_deg=1.0)),
+                          clock_tolerance_deg=1.0,
+                          plane_offset_m=0.0015)),
     boss_diameters_m=(0.049, 0.025), face_inset_m=0.0015,
     dowel_diameter_m=0.003, dowel_depth_m=0.003, dowel_count=2,
     dowel_bolt_circle_m=0.020, dowel_angles_deg=(38.81, 220.74),
     dowel_source=MODEL_APPROXIMATE_CROSSCHECKED,
+    dowel_plane_offset_m=0.0015,
     notes=("dowels printed 2x diameter 3.0 +0.02/0 depth 3. The model puts "
            "them on the 20 mm circle at 38.81 and 220.74 degrees from the "
            "outer ring, which is 181.93 degrees apart against a nominal 180. "
@@ -360,6 +377,7 @@ def bolt_holes(face: MountingFace, clock_deg: float = 0.0) -> list[dict]:
             angle = math.radians(start + index * 360.0 / pattern.count)
             holes.append({"thread": pattern.thread,
                           "diameter_m": pattern.clearance_hole_m,
+                          "plane_offset_m": pattern.plane_offset_m,
                           "y_m": radius * math.cos(angle),
                           "z_m": radius * math.sin(angle),
                           "bolt_circle_m": pattern.bolt_circle_m,
@@ -383,6 +401,7 @@ def dowel_holes(face: MountingFace) -> list[dict]:
     radius = 0.5 * face.dowel_bolt_circle_m
     return [{"diameter_m": face.dowel_diameter_m,
              "depth_m": face.dowel_depth_m,
+             "plane_offset_m": face.dowel_plane_offset_m,
              "y_m": radius * math.cos(math.radians(angle)),
              "z_m": radius * math.sin(math.radians(angle)),
              "angle_deg": angle, "source": face.dowel_source}
