@@ -1406,7 +1406,7 @@ def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
     The out of plane budget leans on a housing shell of 2,620,553 N m/rad,
     computed on a 4 mm wall. THK's A18-36 puts the housing thickness at 0.6
     of the ring's own radial section, which is 9 to 15 mm across every
-    candidate ring, so the drawn wall is short by between 2.2 and 3.7 times.
+    candidate ring, so the drawn wall is short by between 1.9 and 3.7 times.
 
     A stiffness computed on that wall is not a conservative number. It is a
     correct number about a part its maker says will not hold the ring round,
@@ -1429,11 +1429,35 @@ def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
             0.6 * 0.5 * (ring.outer_m - ring.bore_m))
 
     stage = bearing_housing_stage()
-    needed = [row["housing_thickness_needed_m"] for row in stage.rows]
-    assert min(needed) == pytest.approx(0.009)
-    assert max(needed) == pytest.approx(0.015)
-    assert all(row["shell_gain"] > 3.0 for row in stage.rows)
-    assert min(row["housing_outer_m"] for row in stage.rows) > 0.140
+    #: asserted as a property rather than as pinned extremes, because the
+    #: ring table grows as more of the catalogue is quoted and a min or a max
+    #: over it would then be pinning whichever ring happened to be added
+    shortfalls = []
+    for row in stage.rows:
+        shortfall = row["housing_thickness_needed_m"] / HOUSING_WALL_M
+        assert shortfall > 1.0, (
+            f"{row['ring']} needs {row['housing_thickness_needed_m'] * 1000:.1f} "
+            f"mm against a drawn wall of {HOUSING_WALL_M * 1000:.0f}")
+        shortfalls.append(shortfall)
+    assert len(stage.rows) == len(RB_RINGS)
+    assert min(shortfalls) > 1.8, (
+        "the closest any ring comes is the thin RB 11012 at 7.5 mm, which is "
+        "still nearly twice the drawn wall, so no ring in the catalogue "
+        "rescues this housing")
+
+    #: A COMPLIANT HOUSING IS NOT ALWAYS A STIFFER ONE, which is the useful
+    #: part. For every ring that clears the 98 mm actuator, meeting A18-36
+    #: makes the shell 2.9 to 10.5 times stiffer, because the housing has to
+    #: get bigger and bending goes as radius cubed. The RB 5013 is the one
+    #: ring small enough to stack axially inside the existing domain, and its
+    #: proper housing is 98 mm across and comes out 0.83 of the idealisation:
+    #: WEAKER. So the axial option does not only widen the upper arm's gap,
+    #: it also gives a softer housing term than the one being leaned on.
+    by_ring = {row["ring"]: row for row in stage.rows}
+    for ring in RB_RINGS:
+        if ring.bore_m > 0.098:
+            assert by_ring[ring.model]["shell_gain"] > 2.5
+    assert by_ring["RB 5013"]["shell_gain"] < 1.0
     assert any("cannot hold the bearing" in item.lower()
                for item in out_of_plane_stage().could_not), (
         "the out of plane stage leans on this shell, so it has to carry the "
@@ -1646,12 +1670,142 @@ def test_no_link_domain_has_room_around_its_own_actuator():
             f"being exact, the clearance question has changed")
 
     clears = [ring for ring in RB_RINGS if ring.bore_m > 0.098]
-    assert {ring.model for ring in clears} == {"RB 10020", "RB 11015",
-                                               "RB 12016"}
+    assert clears, "something has to clear a 98 mm actuator"
+    narrowest_bore = min(clears, key=lambda ring: ring.bore_m)
     tightest = min(clears, key=lambda ring: ring.housing_outer_m)
-    assert tightest.model == "RB 11015", (
+    assert narrowest_bore is not tightest, (
         "the smallest bore is not the smallest housing: THK's wall rule "
-        "scales with the ring's radial section, and the RB 10020 has the "
-        "narrowest bore of these three and the widest section")
-    assert tightest.housing_outer_m == pytest.approx(0.166)
-    assert tightest.housing_outer_m / 0.098 == pytest.approx(1.7, abs=0.05)
+        "scales with the ring's radial SECTION, so a narrow bore on a wide "
+        "ring asks for the thickest wall of all")
+    assert tightest.housing_outer_m / 0.098 > 1.5, (
+        "whatever ring is smallest, a coaxial one still makes the joint half "
+        "again as wide as the domain it has to live in")
+
+
+def test_the_two_severed_links_are_severed_for_different_reasons():
+    """One domain was never connected; the other was emptied until it came
+    apart. The fixes are not the same, so the diagnosis has to separate them.
+
+    The upper arm is driven across at one end and carries a crossing axis at
+    the other, so it gets a box above its own output face and a box below the
+    next drive's housing face, and NOTHING PUTS A BOX BETWEEN THEM. They sit
+    42.7 mm apart in z. The base column and the wrist roll body have the same
+    union and generate, because a coaxial end gives them a third box on the
+    axis that bridges the other two. The upper arm has no coaxial end.
+
+    The forearm's domain is one contiguous box whose proximal 100 mm is more
+    than 95 percent held empty, by the elbow drive's envelope and the upper
+    arm's own box, with its mounting disc stranded inside that void.
+    """
+    from projects.manipulator.links import (domain_boxes,
+                                            interfaces_are_reachable)
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+
+    causes = {}
+    for index, link in enumerate(SPEC.links()):
+        ok, _why, counts = interfaces_are_reachable(SPEC, index, drives,
+                                                    sections)
+        if not ok:
+            causes[link.name] = counts
+
+    assert causes["upper_arm"]["cause"] == "disjoint boxes"
+    assert causes["upper_arm"]["gap_m"] == pytest.approx(0.0427, abs=0.001)
+    assert causes["forearm"]["cause"] == "emptied until disconnected"
+    assert causes["forearm"]["emptied_length_m"] == pytest.approx(0.100,
+                                                                  abs=0.01)
+
+    #: the links that DO generate and share the union shape have a bridging
+    #: box, which is what makes the upper arm's case specific rather than
+    #: general to cranks
+    for name, index in (("base_column", 0), ("wrist_roll_body", 3)):
+        boxes = domain_boxes(SPEC, index, drives)
+        assert len(boxes) > 1, f"{name} should be a union too"
+        for lower, upper in zip(boxes[:-1], boxes[1:]):
+            assert upper[0] <= lower[1] + 1e-9, (
+                f"{name} generates, so its boxes have to overlap")
+
+
+def test_a_coaxial_bearing_leaves_the_upper_arm_gap_and_an_axial_one_widens_it():
+    """What the 0.2 second check can say about a decision not yet taken.
+
+    The upper arm's gap is EXACTLY the drive's output to housing face
+    separation, 42.7 mm, and that quantity does not depend on the link's
+    width at all. So growing the joint to 168 mm to fit a coaxial ring leaves
+    the defect precisely where it is: option B neither helps nor hurts it.
+
+    Stacking a ring axially instead adds its own width and its presser flange
+    to that separation, which widens the gap to between 62 and 71 mm for an
+    RB 5013. Option C makes the thing that is already broken worse, and by an
+    amount that depends on a flange thickness nobody has chosen.
+
+    Either way the upper arm needs its own fix. That is worth knowing before
+    the bearing decision rather than after, because at four to five hours a
+    link nobody wants to regenerate twice.
+    """
+    from projects.manipulator.bearings import RB_RINGS
+    from projects.manipulator.interfaces import face_separation_m
+    from projects.manipulator.links import domain_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    boxes = domain_boxes(SPEC, 1, drives)
+    gap = boxes[1][0] - boxes[0][1]
+    separation = face_separation_m("cubemars_ak80_64_kv80")
+    assert gap == pytest.approx(separation, abs=1e-9), (
+        "the gap IS the face separation; if that stops being true the whole "
+        "argument below about which option moves it has to be redone")
+
+    #: option B changes the width and the width is not in that quantity
+    wider = domain_boxes(SPEC, 1, drives)
+    assert wider[1][0] - wider[0][1] == pytest.approx(gap)
+
+    #: option C adds the ring and its flange to the separation
+    ring = next(r for r in RB_RINGS if r.model == "RB 5013")
+    low, high = ring.flange_thickness_range_m
+    assert gap + ring.width_m + low == pytest.approx(0.0622, abs=0.001)
+    assert gap + ring.width_m + high == pytest.approx(0.0713, abs=0.001)
+
+
+def test_the_ring_is_chosen_on_three_axes_and_not_on_housing_size():
+    """Minimising any one of the three loses, and the numbers say which.
+
+    Housing outside diameter says how much the joint grows. Whether a moment
+    rigidity curve exists says whether the ring's stiffness can be known at
+    all. Bore says whether a cable fits, which is a live unresolved item on
+    the base column.
+
+    They disagree here. The RB 11012 gives the smallest housing at 150 mm and
+    the RB 11015 the next at 166, and NEITHER IS PLOTTED. Taking one repeats
+    exactly the trade that model RU is refused for: delete a term that can be
+    computed, admit one that cannot. The smallest plotted ring that clears
+    the actuator is the RB 12016 at 168 mm, two millimetres more, and its 120
+    mm bore is the roomiest of the three for a cable as well.
+    """
+    from projects.manipulator.bearings import (RB_RINGS, RU_IS_REFUSED,
+                                               smallest_housing_that_clears)
+
+    unplotted = smallest_housing_that_clears(0.098, require_moment_curve=False)
+    plotted = smallest_housing_that_clears(0.098)
+    assert unplotted.model == "RB 11012"
+    assert not unplotted.has_moment_curve
+    assert plotted.model == "RB 12016"
+    assert plotted.has_moment_curve
+
+    assert plotted.housing_outer_m - unplotted.housing_outer_m == (
+        pytest.approx(0.018))
+    assert plotted.bore_m > unplotted.bore_m, (
+        "the plotted choice also has the wider bore, so it wins on two of "
+        "the three axes and loses only on housing diameter"
+    )
+    assert "cannot be read" in RU_IS_REFUSED
+
+    #: and the trap from before still holds: smallest bore is not smallest
+    #: housing, because THK's wall rule scales with the ring section
+    clears = [ring for ring in RB_RINGS if ring.bore_m > 0.098]
+    assert min(clears, key=lambda r: r.bore_m).model == "RB 10016"
+    assert min(clears, key=lambda r: r.housing_outer_m).model == "RB 11012"

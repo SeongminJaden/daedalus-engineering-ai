@@ -1945,7 +1945,7 @@ MINIMUM_DISC_LIGAMENT_M = 0.003
 #: reports is really about the ACTUATOR TO LINK BOLTED FACE that does exist,
 #: with a housing term added for a housing that does not.
 #:
-#: `bearing_housing_stage` then shows the wall is 2.2 to 3.7 times under what
+#: `bearing_housing_stage` then shows the wall is 1.9 to 3.7 times under what
 #: THK asks for the rings this joint would need, which is a second thing
 #: wrong with the same number.
 HOUSING_DIAMETER_M = 0.124
@@ -2350,7 +2350,7 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "THE HOUSING SHELL TERM IS ABOUT A HOUSING THAT CANNOT HOLD THE "
         "BEARING. Its wall is 4 mm and THK's A18-36 asks for 0.6 of the "
         "ring's radial section, which is 9 to 15 mm for every candidate "
-        "ring, so the wall is short by 2.2 to 3.7 times. See "
+        "ring, so the wall is short by 1.9 to 3.7 times. See "
         "`bearing_housing_stage`. Meeting it makes the shell 3.6 to 8.8 "
         "times stiffer and takes it out of contention, and puts the joint's "
         "outside diameter between 144 and 180 mm, which is a decision about "
@@ -2410,7 +2410,8 @@ def bearing_housing_stage(spec: ManipulatorSpec = SPEC,
     THE WALL IS 4 mm AND THK ASKS FOR 9 TO 15. A18-36 puts the housing
     thickness at 0.6 times the ring's own radial section, and against every
     candidate ring in the range this joint could use that makes the drawn
-    wall between 2.2 and 3.7 times too thin.
+    wall between 1.9 and 3.7 times too thin, the closest being the thin RB
+    11012 which still asks for nearly twice it.
 
     That is not a conservative stiffness. The 2,620,553 N m/rad the out of
     plane budget leans on was computed on a housing its maker says will not
@@ -2462,7 +2463,10 @@ def bearing_housing_stage(spec: ManipulatorSpec = SPEC,
         f"wall this joint was drawn with. A18-36 wants between "
         f"{min(r['housing_thickness_needed_m'] for r in result.rows) * 1000:.1f} "
         f"and {max(r['housing_thickness_needed_m'] for r in result.rows) * 1000:.1f} "
-        f"mm, so the drawn wall is short by 2.2 to 3.7 times")
+        f"mm, so the drawn wall is short by "
+        f"{min(r['housing_thickness_needed_m'] for r in result.rows) / wall_m:.1f} "
+        f"to {max(r['housing_thickness_needed_m'] for r in result.rows) / wall_m:.1f} "
+        f"times and no ring in the catalogue rescues it")
     result.notes.append(
         f"meeting it would make the shell "
         f"{min(r['shell_gain'] for r in result.rows):.1f} to "

@@ -304,6 +304,39 @@ smaller ring axially instead fits an RB 5013 at exactly 98.0 mm with zero
 margin, and its 50 mm bore then collides with the cable routing that
 base_column already lists as unresolved.
 
+WHICH RING, IF ONE IS ADDED, IS A THREE AXIS CHOICE and minimising any one
+of them loses. Housing outside diameter says how much the joint grows.
+Whether a moment rigidity curve exists says whether the ring's stiffness can
+be known at all. Bore says whether a cable fits, which is a live unresolved
+item on the base column. THK's dimension tables list far more rings than its
+diagrams plot:
+
+| ring | bore | housing OD | x98 | plotted |
+|---|---:|---:|---:|---|
+| RB 11012 | 110 | 150 | 1.53 | no |
+| RB 10016 | 100 | 164 | 1.67 | no |
+| RB 11015 | 110 | 166 | 1.69 | no |
+| RB 12016 | 120 | 168 | 1.71 | YES |
+| RB 13015 | 130 | 178 | 1.82 | no |
+| RB 10020 | 100 | 180 | 1.84 | yes |
+
+The two smallest housings are both unplotted, so taking either repeats the
+trade model RU is refused for: delete a term that can be computed, admit one
+that cannot. The choice is the RB 12016 at 168 mm, two millimetres more than
+the RB 11015, and its 120 mm bore is also the roomiest of the three for a
+cable. It wins on two axes and loses only on diameter.
+
+WHAT THE 0.2 SECOND CHECK CAN ALREADY SAY ABOUT A DECISION NOT YET TAKEN.
+The upper arm's gap is exactly the drive's face separation and that quantity
+does not depend on the link's width. So growing the joint to 168 mm for a
+coaxial ring leaves the defect precisely where it is: option B neither helps
+nor hurts it. Stacking a ring axially adds its own width and its presser
+flange to that separation and widens the gap to between 62 and 71 mm for an
+RB 5013, so option C makes the broken thing worse by an amount that depends
+on a flange thickness nobody has chosen. Either way the upper arm needs its
+own fix, and that is worth knowing before the bearing decision rather than
+after.
+
 So the first question is not which ring, it is WHETHER A SEPARATE RING IS
 ADDED AT ALL. The AK80 has its own output bearing. If one is added the price
 is a domain 1.7 times wider or a 50 mm bore, and either changes the domain,
@@ -314,15 +347,29 @@ publish it any more than it publishes torsional stiffness.
 THE HOUSING THAT SHELL TERM IS ABOUT CANNOT HOLD A CROSSED ROLLER RING.
 `bearing_housing_stage`. THK's A18-36 puts the housing thickness at 0.6 of
 the ring's own radial section, and against every candidate ring the drawn 4
-mm wall is short by 2.2 to 3.7 times:
+mm wall is short by 1.9 to 3.7 times. Nothing in the catalogue rescues it:
 
-| ring | d | D | B | wall needed | housing OD | shell if compliant | flange range |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| RB 8016 | 80 | 120 | 16 | 12.0 | 144 | x3.6 | 8.0 to 19.2 |
-| RB 9016 | 90 | 130 | 16 | 12.0 | 154 | x4.5 | 8.0 to 19.2 |
-| RB 10020 | 100 | 150 | 20 | 15.0 | 180 | x8.8 | 10.0 to 24.0 |
-| RB 11015 | 110 | 145 | 15 | 10.5 | 166 | x5.2 | 7.5 to 18.0 |
-| RB 12016 | 120 | 150 | 16 | 9.0 | 168 | x4.7 | 8.0 to 19.2 |
+| ring | bore | wall needed | housing OD | shell if compliant | plotted |
+|---|---:|---:|---:|---:|---|
+| RB 5013 | 50 | 9.0 | 98 | **x0.83** | yes |
+| RB 8016 | 80 | 12.0 | 144 | x3.6 | yes |
+| RB 9016 | 90 | 12.0 | 154 | x4.5 | yes |
+| RB 11012 | 110 | 7.5 | 150 | x2.9 | no |
+| RB 10016 | 100 | 12.0 | 164 | x5.5 | no |
+| RB 11015 | 110 | 10.5 | 166 | x5.2 | no |
+| RB 12016 | 120 | 9.0 | 168 | x4.7 | yes |
+| RB 13015 | 130 | 9.0 | 178 | x5.7 | no |
+| RB 10020 | 100 | 15.0 | 180 | x8.8 | yes |
+| RB 11020 | 110 | 15.0 | 190 | x10.5 | yes |
+
+A COMPLIANT HOUSING IS NOT ALWAYS A STIFFER ONE. Every ring that clears the
+98 mm actuator makes the shell 2.9 to 10.5 times stiffer once its proper
+wall is put on, because the housing grows and bending goes as radius cubed.
+The RB 5013, the one ring small enough to stack axially inside the existing
+domain, is the exception: its proper housing is 98 mm across and comes out
+at 0.83 of the idealisation, WEAKER. So the axial option does not merely
+widen the upper arm's gap, it also gives a softer housing term than the one
+currently being leaned on.
 
 This is the SAME SHAPE OF MISTAKE as the unpreloaded bolt ring, one layer
 out. The 2,620,553 is not a conservative stiffness, it is a correct
@@ -466,6 +513,19 @@ Defects found by standing the parts up, none of which a check here could see:
   the only thing that found it was a test that actually generates a mount, 17
   minutes of it. The two parameters are gone now, and the mount holes are
   pinned by their coordinates rather than by their count.
+- THE TWO SEVERED LINKS ARE SEVERED FOR DIFFERENT REASONS, and the fixes are
+  not the same. The UPPER ARM's domain is a union of two boxes that DO NOT
+  TOUCH: it is driven across at one end and carries a crossing axis at the
+  other, so it gets a box above its own output face and a box below the next
+  drive's housing face, and nothing puts a box between them. They sit 42.7 mm
+  apart in z, and that gap is exactly the drive's output to housing face
+  separation. The base column and the wrist roll body have the same union
+  and generate, because a coaxial end gives them a third box on the axis that
+  bridges the other two; the upper arm has no coaxial end. The FOREARM's
+  domain is one contiguous box whose proximal 100 mm, 13 of its 28 slabs, is
+  more than 95 percent held empty by the elbow drive's envelope and the upper
+  arm's box, with its mounting disc stranded inside that void. One domain was
+  never connected, the other was emptied until it came apart.
 - THE UPPER ARM AND FOREARM DO NOT LACK MATERIAL, THEIR DOMAINS ARE WRONG.
   Both refuse to generate because the extraction drops elements held solid
   for their interfaces, and the obvious reading was that the optimiser had

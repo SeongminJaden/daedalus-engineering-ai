@@ -45,12 +45,21 @@ FLANGE_THICKNESS_FACTOR = (0.5, 1.2)
 
 @dataclass(frozen=True)
 class CrossRollerRing:
-    """One RB ring's bore, outside diameter and width, all in metres."""
+    """One RB ring's bore, outside diameter and width, all in metres.
+
+    `has_moment_curve` is the field that decides selections here. THK's
+    dimension tables list far more rings than its moment rigidity diagrams
+    plot, and a ring with no curve is a ring whose moment stiffness cannot be
+    read at any load. Choosing one to save housing diameter is the same trade
+    that `RU_IS_REFUSED` refuses: delete a term that can be computed, admit a
+    term that cannot.
+    """
 
     model: str
     bore_m: float
     outer_m: float
     width_m: float
+    has_moment_curve: bool
 
     @property
     def ring_section_m(self) -> float:
@@ -72,14 +81,48 @@ class CrossRollerRing:
                 FLANGE_THICKNESS_FACTOR[1] * self.width_m)
 
 
-#: A18-24. The five sizes in the range this joint could use.
+#: A18-24 for the dimensions, and figure 5 for which of them are plotted.
+#: The thin variants are in the dimension table and NOT in the diagram: the
+#: twelve rings figure 5 carries are 5013, 6013, 7013, 8016, 9016, 10020,
+#: 12016, 11020, 12025, 13025, 14025 and 15025. Figures 6 and 7 start at
+#: 16025 and are out of this range entirely.
 RB_RINGS = (
-    CrossRollerRing("RB 8016", 0.080, 0.120, 0.016),
-    CrossRollerRing("RB 9016", 0.090, 0.130, 0.016),
-    CrossRollerRing("RB 10020", 0.100, 0.150, 0.020),
-    CrossRollerRing("RB 11015", 0.110, 0.145, 0.015),
-    CrossRollerRing("RB 12016", 0.120, 0.150, 0.016),
+    CrossRollerRing("RB 5013", 0.050, 0.080, 0.013, True),
+    CrossRollerRing("RB 8016", 0.080, 0.120, 0.016, True),
+    CrossRollerRing("RB 9016", 0.090, 0.130, 0.016, True),
+    CrossRollerRing("RB 10016", 0.100, 0.140, 0.016, False),
+    CrossRollerRing("RB 10020", 0.100, 0.150, 0.020, True),
+    CrossRollerRing("RB 11012", 0.110, 0.135, 0.012, False),
+    CrossRollerRing("RB 11015", 0.110, 0.145, 0.015, False),
+    CrossRollerRing("RB 11020", 0.110, 0.160, 0.020, True),
+    CrossRollerRing("RB 12016", 0.120, 0.150, 0.016, True),
+    CrossRollerRing("RB 13015", 0.130, 0.160, 0.015, False),
 )
+
+
+def smallest_housing_that_clears(actuator_diameter_m: float,
+                                 require_moment_curve: bool = True):
+    """The ring to use, chosen on THREE axes and not on housing size alone.
+
+    Minimising any one of them loses. Housing outside diameter says how much
+    the joint grows. Whether a moment rigidity curve exists says whether the
+    ring's own stiffness is knowable at all. Bore says whether a cable can go
+    through, which is a live unresolved item on the base column.
+
+    On this arm the three do not agree. The RB 11012 gives the smallest
+    housing at 150 mm, the RB 11015 the next at 166, and NEITHER IS PLOTTED.
+    Taking one would repeat exactly the trade `RU_IS_REFUSED` refuses. The
+    smallest ring that clears the actuator AND is plotted is the RB 12016 at
+    168 mm, two millimetres more than the RB 11015, and its 120 mm bore is
+    also the roomiest of the three for a cable. Two millimetres for a
+    knowable stiffness and a wider bore.
+    """
+    candidates = [ring for ring in RB_RINGS
+                  if ring.bore_m > actuator_diameter_m
+                  and (ring.has_moment_curve or not require_moment_curve)]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda ring: ring.housing_outer_m)
 
 #: A18-38 Table 4, the presser flange bolt tightening torques in N m. THE
 #: TABLE PRINTS NO BOLT GRADE AND NO NUT FACTOR, which is what stops these

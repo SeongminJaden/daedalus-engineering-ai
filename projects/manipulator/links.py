@@ -616,12 +616,103 @@ def interfaces_are_reachable(spec: ManipulatorSpec, link_index: int,
         return True, (f"{spec.links()[link_index].name}: all {held} interface "
                       f"elements are reachable when the domain is full"), counts
 
+    counts.update(domain_severance(spec, link_index, drives, mesh,
+                                   passive_void))
     return False, (
         f"{spec.links()[link_index].name}: {lost} of {held} elements held "
         f"solid for its interfaces are UNREACHABLE even with the domain "
         f"completely full. They are cut off by what is held empty, not by a "
         f"shortage of material, so no volume fraction will connect them and "
-        f"the domain is what has to change"), counts
+        f"the domain is what has to change. {counts['severance']}"), counts
+
+
+def domain_severance(spec: ManipulatorSpec, link_index: int,
+                     drives: dict[str, str], mesh, passive_void) -> dict:
+    """WHY the domain severs an interface, which is a different question.
+
+    Two causes were found and they are not the same defect.
+
+    The upper arm's domain is a UNION OF TWO BOXES THAT DO NOT TOUCH. It is
+    driven across at one end and carries a crossing axis at the other, so it
+    gets a box above its own output face and a box below the next drive's
+    housing face, and nothing puts a box between them. The two are 42.7 mm
+    apart in z. The base column and the wrist roll body have the same union
+    and generate, because being driven COAXIALLY gives them a third box on
+    the axis that bridges the other two. The upper arm has no coaxial end.
+
+    The forearm's domain is one contiguous box and its proximal 96 mm is 97
+    to 99 percent HELD EMPTY, by the elbow drive's envelope and by the upper
+    arm's own box. Its mounting disc is stranded inside that void.
+
+    So one is a domain that was never connected and the other is a domain
+    emptied until it disconnected. Reported separately because the fixes are
+    not the same.
+    """
+    import numpy as np
+
+    boxes = domain_boxes(spec, link_index, drives)
+    gaps = [(low, high) for low, high in zip(
+        [b[1] for b in boxes[:-1]], [b[0] for b in boxes[1:]]) if high > low]
+    if gaps:
+        widest = max(gaps, key=lambda pair: pair[1] - pair[0])
+        return {"cause": "disjoint boxes",
+                "gap_m": widest[1] - widest[0],
+                "severance": (
+                    f"Its domain is a union of {len(boxes)} boxes that do not "
+                    f"touch: there is a {(widest[1] - widest[0]) * 1000:.1f} "
+                    f"mm gap in z between them, so the two halves were never "
+                    f"connected in the first place")}
+
+    void = np.asarray(passive_void).reshape(mesh.nx, mesh.ny, mesh.nz)
+    by_slab = void.reshape(mesh.nx, -1).mean(axis=1)
+    emptied = int((by_slab > 0.95).sum())
+    return {"cause": "emptied until disconnected",
+            "emptied_slabs": emptied,
+            "emptied_length_m": emptied * mesh.dx,
+            "severance": (
+                f"Its domain is contiguous but {emptied} of {mesh.nx} slabs "
+                f"along it, {emptied * mesh.dx * 1000:.0f} mm, are more than "
+                f"95 percent held empty, so its mounting disc is stranded "
+                f"inside that void")}
+
+
+def domain_boxes(spec: ManipulatorSpec, link_index: int,
+                 drives: dict[str, str]) -> list[tuple[float, float]]:
+    """The z boxes a link's domain is the union of, sorted and in metres.
+
+    Pulled out of `domain_extent`, which computes them and returns only their
+    bounding extent. The bounding extent cannot show a gap, and the gap is
+    what stops the upper arm generating.
+    """
+    from .interfaces import face_separation_m
+
+    joints = spec.joints()
+    links = spec.links()
+    joint = joints[link_index]
+    following = (joints[link_index + 1]
+                 if link_index + 1 < len(joints) else None)
+
+    actuator = actuator_for(joint.name, drives)
+    link = links[link_index]
+    width = max(link.outer_width_m, spec.minimum_section_m)
+    if actuator is not None and actuator.outer_diameter_m:
+        width = max(width, actuator.outer_diameter_m)
+
+    driven_across = abs(float(local_axis(spec, link_index,
+                                         joint.axis)[0])) <= 0.5
+    carries_across = (
+        following is not None
+        and abs(float(local_axis(spec, link_index,
+                                 following.axis)[0])) <= 0.5)
+    boxes = []
+    if driven_across:
+        boxes.append((0.0, width))
+    if carries_across and following is not None:
+        drop = face_separation_m(str(drives.get(following.name, ""))) or 0.0
+        boxes.append((-drop - width, -drop))
+    if not driven_across:
+        boxes.append((-0.5 * width, 0.5 * width))
+    return sorted(boxes)
 
 
 def generate_link(spec: ManipulatorSpec, link_index: int,
