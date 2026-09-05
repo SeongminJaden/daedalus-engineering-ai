@@ -155,8 +155,8 @@ def undefined_names() -> list[str]:
 
 def main(iterations: int = 60, volume_fraction: float = 0.3,
          workers: int = 1, threads_per_worker: int = 4,
-         search: str = "data/generated/manipulator_volume_search/search.json"
-         ) -> int:
+         search: str = "data/generated/manipulator_volume_search/search.json",
+         only: set | None = None) -> int:
     blocking = undefined_names()
     if blocking:
         print(json.dumps({"refused": "undefined names in the repository",
@@ -176,7 +176,11 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
     payloads = [(index, link.name, drives, torques, str(OUT), iterations,
                  fractions.get(link.name, volume_fraction),
                  threads_per_worker, sections)
-                for index, link in enumerate(SPEC.links())]
+                for index, link in enumerate(SPEC.links())
+                if not only or link.name in only]
+    if not payloads:
+        print(json.dumps({"refused": "no link matched", "asked": sorted(only)}))
+        return 1
     if workers > 1:
         # SPAWN, not fork. The parent has already touched Warp to size the
         # arm, so it holds a CUDA context, and a forked child inherits that
@@ -210,7 +214,8 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
         done = [_one_link(payload) for payload in payloads]
 
     rows = []
-    for (index, design, seconds, files), link in zip(done, SPEC.links()):
+    wanted = [link for link in SPEC.links() if not only or link.name in only]
+    for (index, design, seconds, files), link in zip(done, wanted):
         row = {"link": link.name, "generated": design.generated,
                "mass_kg": design.mass_kg, "volume_m3": design.volume_m3,
                "compliance_j": design.compliance_j,
@@ -257,6 +262,7 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
         "workers": workers,
         "threads_per_worker": threads_per_worker,
         "links": rows,
+        "only": sorted(only) if only else None,
         "generated_count": len(generated),
         "total_mass_kg": sum(r["mass_kg"] for r in generated),
         "joints": joint_rows(drives),
@@ -277,10 +283,13 @@ if __name__ == "__main__":
                              "own CUDA context, so this is bounded by video "
                              "memory as well as by cores")
     parser.add_argument("--threads-per-worker", type=int, default=4)
+    parser.add_argument("--links", default="",
+                        help="regenerate only these links, comma separated")
     parser.add_argument(
         "--search",
         default="data/generated/manipulator_volume_search/search.json",
         help="per link volume fractions from scripts/size_links_by_volume.py")
     args = parser.parse_args()
     raise SystemExit(main(args.iterations, args.volume_fraction,
-                          args.workers, args.threads_per_worker, args.search))
+                          args.workers, args.threads_per_worker, args.search,
+                          {name for name in args.links.split(",") if name}))
