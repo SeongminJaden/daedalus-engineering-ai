@@ -33,6 +33,7 @@ from projects.manipulator.stages import (assembly_stage, bolted_joint_stage,  # 
                                          measurement_plan_stage,
                                          mount_stage,
                                          pinocchio_cross_check, policy_stage,
+                                         backlash_stage,
                                          joint_stiffness_stage,
                                          reflected_inertia_stage,
                                          spigot_stage,
@@ -102,6 +103,8 @@ def main() -> int:
     stages["comparison"] = drive_comparison_stage(stages["drivetrain"], SPEC)
     stages["compliance"] = compliance_stage(arm, stages["drivetrain"], SPEC)
     stages["joint_stiffness"] = joint_stiffness_stage(
+        stages["dynamics"], stages["drivetrain"], arm, SPEC)
+    stages["backlash"] = backlash_stage(
         stages["dynamics"], stages["drivetrain"], arm, SPEC)
     stages["bus"] = bus_voltage_stage(stages["dynamics"], load_inertias, SPEC)
     stages["envelope"] = envelope_stage(arm, stages["drivetrain"], sections, SPEC)
@@ -186,6 +189,8 @@ def main() -> int:
                 stages["compliance"]),
         section("3d2. The joint stiffness this arm would need, since none is "
                 "published", stages["joint_stiffness"]),
+        section("3d3. Backlash at the tool, which IS published and is the "
+                "largest term", stages["backlash"]),
         section("3e. What the bus voltage costs", stages["bus"]),
         section("3f. Does each joint contain its own drive", stages["envelope"]),
         section("3g. What each link bolts to", stages["interfaces"]),

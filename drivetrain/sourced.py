@@ -477,7 +477,11 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         notes=("An integrated actuator: the torques and speeds are at the "
                "OUTPUT of its own 9:1 planetary stage, so it is not a bare "
                "motor and must not be paired with another gearbox in the "
-               "selection without dividing them back out.")),
+               "selection without dividing them back out. NO TORSIONAL "
+               "STIFFNESS IS PUBLISHED: the product page was read on "
+               "2026-09-05 and prints backlash, inertia and back drive "
+               "torque but no stiffness, so it is withheld rather than "
+               "unmeasured.")),
     SourcedMotor(
         id="cubemars_ak60_6_v3_kv80",
         manufacturer="CubeMars", part_number="AK60-6 V3.0 KV80",

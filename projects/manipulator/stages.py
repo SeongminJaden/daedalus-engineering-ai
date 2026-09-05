@@ -1595,6 +1595,27 @@ JOINT_SHARE_OF_BUDGET = 0.5
 #: stiffness is ordinary or absurd.
 PRINTED_STIFFNESS_RANGE_NM_RAD = (10_313.0, 44_000.0)
 
+#: THE 44,000 IS NOT THIS ARM'S NUMBER. It belongs to a Harmonic Drive gear
+#: unit that this design refused to pair, for a separate reason, and it is
+#: quoted only so a required stiffness can be told from an absurd one. Read
+#: quickly, "1.15 times the stiffest printed unit" sounds like the design
+#: nearly works. What it actually says is that the requirement is of an
+#: ordinary size. The stiffness of the actuators this arm SELECTED is
+#: unknown, because not one of them publishes it, and unknown is not near.
+STIFFNESS_RANGE_IS_NOT_THIS_ARM = (
+    "the 10,313 to 44,000 N m/rad range belongs to gear units this design "
+    "does not use and has refused to pair. It bounds what parts of this size "
+    "achieve; it says nothing about the actuators actually selected, whose "
+    "stiffness no source in this project gives")
+
+#: The status of the one millimetre requirement. Not met, not missed:
+#: UNDECIDABLE, because the joints between the links have no published
+#: stiffness and their contribution is unknown. The user's decision on
+#: 2026-09-05 was to keep the specification and obtain the real stiffness
+#: from the manufacturer or by measurement, so this stays undecidable until
+#: that value exists.
+TIP_DEFLECTION_STATUS = "UNVERIFIED: not met, not missed, undecidable"
+
 
 def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
                           arm: Assembly, spec: ManipulatorSpec = SPEC,
@@ -1695,6 +1716,19 @@ def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
         f"{budget * 1000:.2f} mm budget, which is a CHOSEN split: links and "
         f"joints are in series and nothing says how to divide it. Within the "
         f"joints it is split by torque times lever, not equally")
+    result.data["status_of_the_requirement"] = TIP_DEFLECTION_STATUS
+    result.data["required_stiffness_nm_rad"] = uniform
+    result.data["allocation"] = (
+        "the joints take a CHOSEN 50 percent of the budget and divide it by "
+        "torque times lever, not equally. Equally would give a sixth to each "
+        "of three joints that carry no gravity moment at full reach and the "
+        "same sixth to the shoulder, which carries 67 percent of the demand")
+    result.notes.append(STIFFNESS_RANGE_IS_NOT_THIS_ARM)
+    result.notes.append(
+        f"the status of the 1 mm requirement is {TIP_DEFLECTION_STATUS}. It "
+        f"is not a pass and not a failure. The value that decides it is the "
+        f"selected actuators' torsional stiffness, which is being sought "
+        f"from the manufacturer or by measurement")
     result.could_not.append(
         "NO TORSIONAL STIFFNESS IS PUBLISHED for any integrated actuator in "
         "this catalogue, so no joint compliance is modelled and every "
@@ -1702,4 +1736,111 @@ def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
         "not a conservative simplification: the missing term adds to the one "
         "that is modelled, so the real tool deflection is larger than any "
         "number here by an amount nobody in this design knows.")
+    return result
+
+
+def backlash_stage(dynamics: StageResult, drivetrain: StageResult,
+                   arm: Assembly, spec: ManipulatorSpec = SPEC) -> StageResult:
+    """The tool error the drives' own printed backlash puts on the arm.
+
+    THIS IS THE LARGEST TERM AND IT IS THE ONLY ONE THAT IS PUBLISHED. The
+    deflection work has been arguing over link elasticity, which is
+    computed, and joint stiffness, which nobody prints. Backlash is printed:
+    0.18 degrees for the AK80-64 and 15 arcmin for the AK80-9. Multiplied by
+    the levers already established it comes to 3.87 mm in the bending plane,
+    against a 1 mm limit, and it does not depend on how stiff anything is.
+
+    BACKLASH IS NOT DEFLECTION and the two must not be added carelessly.
+    Deflection is determined by load: know the load and it can be corrected.
+    Backlash is a dead band, and where the joint sits inside it depends on
+    which way the torque last pushed. While the torque keeps one sign the
+    band is a fixed offset that a calibration can remove. It is only an
+    error when the torque REVERSES and the joint crosses the band.
+
+    So the stage asks that question rather than assuming either answer, and
+    it asks it twice. Between carrying the payload and not carrying it, at
+    full reach, no joint's torque changes sign: gravity dominates and always
+    pulls the same way, so picking a part up and putting it down does not
+    cross the band. Over the commanded move it is the opposite: every joint
+    reverses, because the arm accelerates and then decelerates. A moving arm
+    crosses the band at every joint, every cycle.
+    """
+    import numpy as np
+
+    from core.assembly.kinematics import forward_kinematics
+    from core.assembly.statics import joint_torques
+    from drivetrain.sourced import sourced_motor
+
+    result = StageResult(name="backlash at the tool")
+    pose = forward_kinematics(arm, stretched_pose(spec))
+    tool = pose.tool_position()
+    density = get_material(arm.material_id).density_kg_m3
+    q0 = stretched_pose(spec)
+    carrying = joint_torques(arm, q0, density, tip_force_n=payload_force_n(spec))
+    empty = joint_torques(arm, q0, density, tip_force_n=np.zeros(3))
+    names = [joint.name for joint in arm.actuated_joints()]
+    profile = dynamics.data["profiles"]["trapezoidal"]
+    torque = np.asarray(profile.torque_nm)
+
+    bending = {"j2_shoulder", "j3_elbow", "j5_wrist_pitch"}
+    total_bending = 0.0
+    for row in drivetrain.rows:
+        if row.get("status") != "selected":
+            continue
+        joint = row["joint"]
+        motor = sourced_motor(str(row["selected"]))
+        lever = float(np.linalg.norm(tool - pose.joint_origins[joint]))
+        index = names.index(joint)
+        column = torque[:, index]
+        entry = {
+            "joint": joint, "drive": motor.part_number, "lever_m": lever,
+            "backlash_arcmin": motor.backlash_arcmin,
+            "torque_carrying_nm": float(carrying[index]),
+            "torque_empty_nm": float(empty[index]),
+            "reverses_when_the_payload_is_set_down": bool(
+                carrying[index] * empty[index] < 0.0),
+            "reverses_during_the_move": bool(column.min() * column.max() < 0.0),
+        }
+        if motor.backlash_arcmin:
+            band = motor.backlash_arcmin * (np.pi / (180.0 * 60.0)) * lever
+            entry["band_at_the_tool_m"] = band
+            if joint in bending:
+                total_bending += band
+        else:
+            entry["band_at_the_tool_m"] = None
+            entry["note"] = ("no backlash is printed for this drive, so its "
+                             "band is unknown and is NOT zero")
+        result.rows.append(entry)
+
+    result.data["bending_plane_total_m"] = total_bending
+    result.data["limit_m"] = spec.tip_deflection_limit_m
+    result.notes.append(
+        f"the printed backlash alone puts {total_bending * 1000:.3f} mm at "
+        f"the tool in the bending plane, which is "
+        f"{total_bending / spec.tip_deflection_limit_m:.1f} times the "
+        f"{spec.tip_deflection_limit_m * 1000:.1f} mm limit. It comes from "
+        f"printed values and established levers, so unlike the stiffness it "
+        f"is not waiting on anything")
+    moving = [r["joint"] for r in result.rows if r["reverses_during_the_move"]]
+    setting_down = [r["joint"] for r in result.rows
+                    if r["reverses_when_the_payload_is_set_down"]]
+    result.notes.append(
+        f"setting the payload down reverses the torque at "
+        f"{len(setting_down)} joints, so that alone does not cross the band: "
+        f"gravity dominates at full reach and keeps pulling one way")
+    result.notes.append(
+        f"the commanded move reverses it at {len(moving)} of "
+        f"{len(result.rows)}, because the arm accelerates and then "
+        f"decelerates. A MOVING ARM CROSSES THE BAND AT EVERY JOINT ON EVERY "
+        f"CYCLE, so the band is not a calibratable offset here")
+    result.could_not.append(
+        "Whether the 1 mm requirement is about deflection under load or "
+        "about tool position cannot be decided here. If it is elastic "
+        "deflection then backlash is a separate budget and the limit still "
+        "means something. If it is position, this arm is a 4 mm machine and "
+        "no amount of link stiffness changes that. The specification does "
+        "not say, and it is the specifier's answer to give.")
+    result.could_not.append(
+        "The AK60-6 prints no backlash at all, only the words low backlash, "
+        "so the tool roll's band is unknown. Unknown is not zero.")
     return result

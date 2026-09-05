@@ -52,6 +52,7 @@ def _search_one(payload):
     from optimization.topology import SimpProblem
     from optimization.topology.manufacturing import support_projection_with_gradient
     from optimization.topology.multiload import optimize_multiload
+    from optimization.topology.export import largest_connected_component
     from optimization.topology.verify import face_motion_of_extracted
     from projects.manipulator.links import link_domain, link_load_cases
     from projects.manipulator.spec import SPEC
@@ -96,6 +97,30 @@ def _search_one(payload):
         problem = build_problem(fraction)
         result = runner(problem, max_iterations=iterations)
         point = {"volume_fraction": fraction}
+
+        # A FRACTION THAT CANNOT REACH ITS OWN INTERFACES IS OUTSIDE THE
+        # DOMAIN, not a point on the curve. At 0.3 of the free region the
+        # upper arm and the forearm left their bolt rings unconnected, and
+        # keeping the largest connected component threw them away. A body
+        # like that still deflects, and its deflection is cheap, so it would
+        # sit on the curve as an attractive point and the allocator would
+        # choose it. It is not a lighter design; it is a part with no bolt
+        # seats.
+        kept_field = largest_connected_component(problem.mesh, result.density,
+                                                 0.5)
+        if problem.passive_solid is not None:
+            lost = int((np.asarray(problem.passive_solid)
+                        & (kept_field < 0.5)).sum())
+            if lost:
+                point.update({
+                    "feasible": False,
+                    "note": (f"the extraction dropped {lost} of "
+                             f"{int(np.sum(problem.passive_solid))} elements "
+                             f"held solid for the interfaces, so this "
+                             f"fraction cannot reach them and is outside the "
+                             f"domain rather than a point on the curve")})
+                curve.append(point)
+                continue
         try:
             motion = face_motion_of_extracted(problem, result.density, 0.5)
         except Exception as exc:
@@ -248,9 +273,13 @@ def allocate(curves: list[dict], budget_m: float,
     usable = [[point for point in row.get("curve", []) if point.get("feasible")]
               for row in curves]
     if any(not options for options in usable):
+        empty = [row["link"] for row, options in zip(curves, usable)
+                 if not options]
         return {"allocated": False,
-                "reason": "at least one link has no feasible point on its "
-                          "curve, so no allocation exists"}
+                "reason": f"no allocation exists: {', '.join(empty)} has no "
+                          f"feasible point on its curve, so every fraction "
+                          f"tried either failed to reach its interfaces or "
+                          f"failed to solve"}
     best = None
     for combination in itertools.product(*usable):
         vector = sum((at_tool(row, point)

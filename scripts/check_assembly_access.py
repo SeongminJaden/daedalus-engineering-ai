@@ -63,12 +63,24 @@ def _cylinder(radius_m, length_m, centre_m, axis, scale=1000.0):
 
 
 def _blocked(body, tool) -> float:
-    """Volume of the link the swept tool would have to pass through."""
+    """Volume of the link the swept tool would have to pass through.
+
+    A FAILED BOOLEAN RETURNS NaN AND NaN IS NOT ZERO. It used to be compared
+    with a threshold, and every comparison against NaN is False, so a boolean
+    that never ran was counted as a clean pass. Four of the six links
+    reported no material inside their motors that way, which is the precise
+    failure the whole project has been warned about: a check that cannot run
+    must say so, not agree.
+    """
     try:
         hit = body.intersection(tool)
     except Exception:
         return float("nan")
     return 0.0 if hit.is_empty else float(abs(hit.volume))
+
+
+def _failed(value) -> bool:
+    return value != value                      # NaN is the only such value
 
 
 def _sweep_line(published: dict, link_name: str, joint_name: str):
@@ -126,9 +138,10 @@ def check_link(index: int, spec, drives, sections, path: Path,
                published: dict) -> dict:
     import trimesh
 
-    from projects.manipulator.interfaces import bolt_holes, face_for
+    from projects.manipulator.interfaces import (face_for,
+                                                 face_separation_m)
     from projects.manipulator.links import (actuator_for, link_domain,
-                                            local_axis, mounting_holes)
+                                            mounting_holes)
 
     link = spec.links()[index]
     row = {"link": link.name, "checked": False}
@@ -250,10 +263,12 @@ def check_link(index: int, spec, drives, sections, path: Path,
             "end": hole["end"], "thread": hole["thread"],
             "blocked_mm3": _blocked(body, tool)})
 
-    inside = [d for d in row.get("drive_overlap", [])
-              if d["overlap_mm3"] > 1.0]
-    row["inside_a_motor_mm3"] = sum(d["overlap_mm3"]
-                                    for d in row.get("drive_overlap", []))
+    overlaps = row.get("drive_overlap", [])
+    inside = [d for d in overlaps if d["overlap_mm3"] > 1.0]
+    unrun = [d for d in overlaps if _failed(d["overlap_mm3"])]
+    row["inside_a_motor_mm3"] = sum(d["overlap_mm3"] for d in overlaps
+                                    if not _failed(d["overlap_mm3"]))
+    row["overlap_checks_that_would_not_run"] = len(unrun)
     # IS THERE ANYTHING LEFT TO TIGHTEN AGAINST? The ring the bolts bear on
     # is 8 mm wide with eight 3.4 mm holes through it, and nothing else in
     # the problem knows it matters. This walks the bolt circle itself at 64
@@ -262,32 +277,37 @@ def check_link(index: int, spec, drives, sections, path: Path,
     # in-plane basis the generator used, and sharing that basis is how the
     # last three defects survived. A surviving ring is mostly solid, broken
     # only where the holes are, which is about a tenth of it.
+    # ONE RING PER MOUNTING FACE, not one per profile segment. This looped
+    # over the drive envelopes, of which there are now three per drive since
+    # they became stepped, and tested every bolt circle once per segment: the
+    # same ring was reported three times, at two of the three from a plane
+    # that is not its mounting plane. It also used the OUTPUT face's bolt
+    # circle at both ends of a link, where the far end bolts to the next
+    # drive's HOUSING and the circles differ by 4 mm on the AK80-64.
     row["bolt_rings"] = []
-    for envelope in drive_envelopes(spec, index, drives, span, height, width,
-                                    box):
-        face = face_for(str(drives.get(envelope["face"], "")), "output")
+    ends = [("proximal", joints[index], "output", +1.0)]
+    if index + 1 < len(joints):
+        ends.append(("distal", joints[index + 1], "housing", -1.0))
+    for end, joint, which, side in ends:
+        face = face_for(str(drives.get(joint.name, "")), which)
         if face is None:
             continue
-        axis = np.asarray(envelope["axis"], dtype=float)
+        axis, origin = _sweep_line(published, link.name, joint.name)
+        if axis is None:
+            continue
+        separation = face_separation_m(str(drives.get(joint.name, "")))
+        # Two millimetres into the link from the face it bolts to.
+        offset = 0.002 if side > 0 else -((separation or 0.0) + 0.002)
+        plane = origin + axis * offset
         seed = (np.array([0.0, 1.0, 0.0]) if abs(axis[1]) < 0.9
                 else np.array([1.0, 0.0, 0.0]))
         first = seed - axis * float(np.dot(seed, axis))
         first = first / np.linalg.norm(first)
         second = np.cross(axis, first)
-        plane = np.asarray(envelope["end_m"], dtype=float)
         for pattern in face.patterns:
-            # WALK THREE RADII, not one. A single walk on the bolt circle
-            # says the ring exists somewhere near that radius and says
-            # nothing about its width, so a ring squeezed to half its size by
-            # a grid still passes. Walking 1.5 mm each side as well asks
-            # whether it is the width the drawing calls for: if the inner
-            # walk finds air the ring has been pushed outward, if the outer
-            # walk does it has been pushed in, and either way the bolt seat
-            # is not the designed one.
             middle = 0.5 * pattern.bolt_circle_m
             angles = np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False)
-            counts = {}
-            failed = None
+            counts, failed = {}, None
             for label, radius in (("inner", middle - 0.0015),
                                   ("centre", middle),
                                   ("outer", middle + 0.0015)):
@@ -301,19 +321,19 @@ def check_link(index: int, spec, drives, sections, path: Path,
                     failed = str(exc)[:80]
                     break
             if failed is not None:
-                row["bolt_rings"].append({"joint": envelope["face"],
+                row["bolt_rings"].append({"joint": joint.name, "end": end,
                                           "thread": pattern.thread,
                                           "error": failed})
                 continue
             thin = [name for name, n in counts.items() if n < 40]
             row["bolt_rings"].append({
-                "joint": envelope["face"], "thread": pattern.thread,
+                "joint": joint.name, "end": end, "face": which,
+                "thread": pattern.thread,
                 "bolt_circle_mm": pattern.bolt_circle_m * 1000.0,
                 "inside_of_64": counts,
-                "verdict": ("ring is there and the right width" if not thin else
-                            f"RING IS WRONG at {', '.join(thin)}: the bolts "
-                            f"have less to bear on than the drawing calls "
-                            f"for")})
+                "verdict": ("ring is there and the right width" if not thin
+                            else f"RING IS WRONG at {', '.join(thin)}")})
+
     lost_rings = [r for r in row["bolt_rings"]
                   if "GONE" in str(r.get("verdict"))]
     row["rings_lost"] = len(lost_rings)
@@ -322,7 +342,8 @@ def check_link(index: int, spec, drives, sections, path: Path,
     row["bolts_blocked"] = len(blocked)
     row["bolts_checked"] = len(row["bolts"])
     row["verdict"] = (
-        "assembles" if not blocked and not inside and not lost_rings and all(
+        "assembles" if not blocked and not inside and not lost_rings
+        and not unrun and all(
             "CANNOT" not in d.get("verdict", "") for d in row["drives"])
         else "DOES NOT ASSEMBLE")
     return row
