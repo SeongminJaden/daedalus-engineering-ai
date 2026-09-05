@@ -1844,3 +1844,91 @@ def backlash_stage(dynamics: StageResult, drivetrain: StageResult,
         "The AK60-6 prints no backlash at all, only the words low backlash, "
         "so the tool roll's band is unknown. Unknown is not zero.")
     return result
+
+
+#: CHOSEN, and the two things that do NOT set it are recorded with it. The
+#: cycloidal disc is 8 mm thick. Hertzian contact at the ring pins wants
+#: nothing: 244 MPa at peak torque against roughly 1500 allowable for a
+#: hardened pin, a factor of six. Bearing in the output pin holes wants less
+#: still: 196 N on a 10 mm pin needs 0.20 mm of aluminium at a conservative
+#: 100 MPa, or 0.03 of hardened steel. At 8 mm the hole sees 2.45 MPa.
+#:
+#: So the thickness is not carried by either of the loads it obviously
+#: carries, and calling it a strength result would be false. What is left is
+#: disc stiffness, which has not been computed, and what a wire cut disc can
+#: be handled and stacked at. It is a choice until one of those is done.
+CYCLOIDAL_DISC_THICKNESS_M = 0.008
+CYCLOIDAL_DISC_THICKNESS_BASIS = (
+    "CHOSEN. Not set by pin contact, which is six times under its allowable, "
+    "and not by output pin hole bearing, which needs 0.20 mm. Disc stiffness "
+    "and handling are the remaining candidates and neither has been computed")
+
+
+def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,
+                                 required_nm_rad: float = 50_689.0
+                                 ) -> StageResult:
+    """Which part of a built joint decides its stiffness.
+
+    The joint's torsional and moment stiffness is the thing the whole
+    deflection budget now turns on, and a module has three candidates for
+    where it is lost: the housing shell, the output flange, and the output
+    bearing. Only one of them can be sized from what this project holds, and
+    knowing WHICH one dominates decides whether the bearing selection is
+    everything or a detail.
+
+    It is the bearing. A cylindrical housing of the size this module needs,
+    in the weaker of the two candidate alloys, comes out one to two orders of
+    magnitude above the requirement: 2.6 million N m/rad at 124 mm across a 4
+    mm wall, against 50,689 needed. Even at half the wall and half again the
+    length it stays 24 times clear. The structure is not where the compliance
+    is, so no amount of FEA on the housing changes the answer and the
+    bearing's own stiffness is the whole of it.
+
+    The two layouts scale differently, which is the interesting part. A
+    crossed roller carries the moment on a raceway all the way round, so its
+    stiffness grows as the RADIUS CUBED. A spread pair of angular contact
+    bearings carries it as a force couple, so its stiffness grows as the
+    SPACING SQUARED and does not care about diameter. A pair therefore wins
+    only where it can be spread, and loses on a short module.
+
+    NEITHER CAN BE EVALUATED HERE. Both need a raceway stiffness that only a
+    manufacturer prints, and this project has none: the standard parts
+    library's deep groove entries have assumed internal geometry, no ratings,
+    and are not moment carrying parts in the first place.
+    """
+    import numpy as np
+
+    result = StageResult(name="where a joint module's stiffness is lost")
+    modulus = get_material(spec.materials["link"]).youngs_modulus_pa
+    for name, diameter, wall, length in (
+            ("crossed roller, 124 mm across", 0.124, 0.004, 0.080),
+            ("angular contact pair, 110 mm", 0.110, 0.004, 0.080),
+            ("124 mm on a 2 mm wall", 0.124, 0.002, 0.080),
+            ("110 mm over a 120 mm module", 0.110, 0.004, 0.120)):
+        radius = 0.5 * diameter
+        second_moment = np.pi * radius ** 3 * wall
+        stiffness = modulus * second_moment / length
+        result.rows.append({
+            "layout": name, "diameter_m": diameter, "wall_m": wall,
+            "length_m": length, "shell_stiffness_nm_rad": stiffness,
+            "times_required": stiffness / required_nm_rad})
+
+    result.notes.append(
+        f"the housing shell is between {min(r['times_required'] for r in result.rows):.0f} "
+        f"and {max(r['times_required'] for r in result.rows):.0f} times the "
+        f"{required_nm_rad:,.0f} N m/rad the arm needs, so the structure is "
+        f"not the limiting term and the output bearing is the whole of it")
+    result.notes.append(
+        "a crossed roller's moment stiffness grows as the radius CUBED and a "
+        "spread angular contact pair's as the spacing SQUARED, so the pair "
+        "wins only where it can be spread and loses on a short module. At "
+        "124 against 110 mm the crossed roller is 1.43 times ahead on radius "
+        "before any spacing is considered")
+    result.could_not.append(
+        "Neither bearing layout can be evaluated. Both need a raceway "
+        "stiffness that only a manufacturer prints, and this project holds "
+        "none: the standard parts library's deep groove ball entries have "
+        "ASSUMED internal geometry, carry no C or C0, and are not moment "
+        "carrying parts to begin with. Until a catalogue value exists the "
+        "joint stiffness is unknown, and so is whether the 1 mm limit holds.")
+    return result
