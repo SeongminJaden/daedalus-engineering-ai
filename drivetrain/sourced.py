@@ -169,6 +169,12 @@ class SourcedMotor(SourcedPart):
     #: motor in a 40 mm link. Most pages do not print them, and then the
     #: envelope simply cannot be checked, which is itself a finding.
     outer_diameter_m: float | None = None
+    #: A frameless motor's own geometry, which is what a housing is designed
+    #: around. Printed on the outline page of the same catalogue that carries
+    #: the performance table.
+    stator_stack_m: float | None = None
+    rotor_stack_m: float | None = None
+    rotor_bore_m: float | None = None
     axial_length_m: float | None = None
 
     def require(self, name: str) -> float:
@@ -727,6 +733,20 @@ SOURCED_MOTORS: list[SourcedMotor] = [
     # is refused for it.
     SourcedMotor(
         id="kollmorgen_tbm_6013_a",
+        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
+        # catalogue's outline drawings page prints the whole frameless
+        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
+        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
+        # model. What it does not print is a housing or a bolt pattern, and
+        # that is not an omission: a frameless motor has neither, which is
+        # the point of buying one. Refusing it for "no published outline"
+        # confused the two, and the numbers to design a housing around it
+        # were on a page of the same PDF that had not been read.
+        outer_diameter_m=0.06035,
+        axial_length_m=0.0127,
+        stator_stack_m=0.0127,
+        rotor_stack_m=0.01676,
+        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
@@ -760,6 +780,20 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "the speed check conservative.")),
     SourcedMotor(
         id="kollmorgen_tbm_6025_a",
+        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
+        # catalogue's outline drawings page prints the whole frameless
+        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
+        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
+        # model. What it does not print is a housing or a bolt pattern, and
+        # that is not an omission: a frameless motor has neither, which is
+        # the point of buying one. Refusing it for "no published outline"
+        # confused the two, and the numbers to design a housing around it
+        # were on a page of the same PDF that had not been read.
+        outer_diameter_m=0.06035,
+        axial_length_m=0.0254,
+        stator_stack_m=0.0254,
+        rotor_stack_m=0.02946,
+        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
@@ -788,6 +822,20 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         notes="Frameless, same caveat as the 6013."),
     SourcedMotor(
         id="kollmorgen_tbm_6051_a",
+        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
+        # catalogue's outline drawings page prints the whole frameless
+        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
+        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
+        # model. What it does not print is a housing or a bolt pattern, and
+        # that is not an omission: a frameless motor has neither, which is
+        # the point of buying one. Refusing it for "no published outline"
+        # confused the two, and the numbers to design a housing around it
+        # were on a page of the same PDF that had not been read.
+        outer_diameter_m=0.06035,
+        axial_length_m=0.0508,
+        stator_stack_m=0.0508,
+        rotor_stack_m=0.05486,
+        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
