@@ -1398,3 +1398,260 @@ def test_every_stage_that_reports_a_stiffness_says_which_one():
                     "ACROSS", "SCOPE")), (
             f"{node.name} does not say which stiffness it means")
     assert seen == wanted
+
+
+def test_the_drawn_housing_cannot_hold_any_candidate_crossed_roller():
+    """The same shape of mistake as the unpreloaded bolt ring, one layer out.
+
+    The out of plane budget leans on a housing shell of 2,620,553 N m/rad,
+    computed on a 4 mm wall. THK's A18-36 puts the housing thickness at 0.6
+    of the ring's own radial section, which is 9 to 15 mm across every
+    candidate ring, so the drawn wall is short by between 2.2 and 3.7 times.
+
+    A stiffness computed on that wall is not a conservative number. It is a
+    correct number about a part its maker says will not hold the ring round,
+    which is exactly what the unpreloaded bolt ring was: a right answer to a
+    design nobody would build.
+
+    Meeting the guide moves the shell the right way, 3.6 to 8.8 times
+    stiffer, and the envelope the wrong way, to a housing outside diameter
+    between 144 and 180 mm around a 98 mm motor on an arm of 98 mm links.
+    """
+    from projects.manipulator.bearings import RB_RINGS, housing_meets_thk
+    from projects.manipulator.stages import (HOUSING_WALL_M,
+                                             bearing_housing_stage,
+                                             out_of_plane_stage)
+
+    for ring in RB_RINGS:
+        meets, why = housing_meets_thk(ring, HOUSING_WALL_M)
+        assert not meets, why
+        assert ring.housing_thickness_m == pytest.approx(
+            0.6 * 0.5 * (ring.outer_m - ring.bore_m))
+
+    stage = bearing_housing_stage()
+    needed = [row["housing_thickness_needed_m"] for row in stage.rows]
+    assert min(needed) == pytest.approx(0.009)
+    assert max(needed) == pytest.approx(0.015)
+    assert all(row["shell_gain"] > 3.0 for row in stage.rows)
+    assert min(row["housing_outer_m"] for row in stage.rows) > 0.140
+    assert any("cannot hold the bearing" in item.lower()
+               for item in out_of_plane_stage().could_not), (
+        "the out of plane stage leans on this shell, so it has to carry the "
+        "warning rather than leaving it in a stage nobody reads")
+
+
+def test_naming_the_bearing_does_not_narrow_the_presser_flange():
+    """A fourteen fold band that survives the decision meant to close it.
+
+    The reason to pick the bearing first would be that it settles the flange.
+    It does not. A18-38 allows the flange thickness anywhere between 0.5 and
+    1.2 times the ring width, and any plate's bending stiffness goes as
+    thickness cubed, so the term spans the cube of 2.4 whatever ring is
+    named. That is 13.8, and it needs no flange model to say so, which is
+    what makes it worth asserting.
+    """
+    from projects.manipulator.bearings import RB_RINGS, flange_thickness_spread
+
+    for ring in RB_RINGS:
+        low, high = ring.flange_thickness_range_m
+        assert low == pytest.approx(0.5 * ring.width_m)
+        assert high == pytest.approx(1.2 * ring.width_m)
+        assert flange_thickness_spread(ring) == pytest.approx(13.8, rel=0.01)
+
+    spreads = {flange_thickness_spread(ring) for ring in RB_RINGS}
+    assert len(spreads) == 1, (
+        "the spread is a ratio of thicknesses cubed, so it cannot depend on "
+        "which ring is chosen; if it does, the model has picked up a size "
+        "dependence it should not have")
+
+
+def test_the_thk_bolt_torques_and_this_projects_preloads_are_not_mixed():
+    """They disagree, and by how much says what the disagreement is.
+
+    At the 0.2 nut factor this project uses, THK's Table 4 implies 1.5 times
+    the M3 preload this project takes from 75 percent of a class 8.8 proof
+    load, which is above the proof load outright. At a nut factor of 0.30
+    they agree. Since 0.2 to 0.3 is the usual dry range and the table prints
+    neither a grade nor a nut factor, the likely explanation is the nut
+    factor and it cannot be settled either way.
+
+    They are also not the same joint: THK's bolts hold a presser flange down
+    and this project's hold a housing to a link. The test exists so that
+    nobody later reads one number as confirming the other.
+    """
+    from projects.manipulator.bearings import flange_bolt_torque_disagreement
+
+    row = flange_bolt_torque_disagreement("M3", 2188.05)
+    assert row["implied_preload_n"] == pytest.approx(3333, rel=0.01)
+    assert row["ratio"] == pytest.approx(1.52, rel=0.02)
+    assert row["nut_factor_that_would_agree"] == pytest.approx(0.30, rel=0.02)
+    assert 0.2 < row["nut_factor_that_would_agree"] < 0.35, (
+        "if the agreeing nut factor ever falls outside the usual dry range, "
+        "the nut factor stops explaining the gap and the bolt grade has to "
+        "be looked at instead")
+
+
+def test_the_catalogue_figures_are_marked_as_not_read_here():
+    """Provenance, which this project treats as part of a number.
+
+    Every actuator dimension in `interfaces.py` was read off a drawing by
+    this session and can be re-read. The THK figures were not: they were
+    quoted by another session. That is weaker than a drawing read here and
+    stronger than an assumption, and it has to be stored as its own kind
+    rather than levelled up to the other.
+    """
+    from projects.manipulator.bearings import THK_SOURCE
+    from projects.manipulator.stages import bearing_housing_stage
+
+    assert "NOT read by this one" in THK_SOURCE
+    assert any("NONE OF THIS WAS READ HERE" in item
+               for item in bearing_housing_stage().could_not)
+
+
+def test_the_severed_interfaces_are_not_a_volume_fraction_problem():
+    """Four hours and forty five minutes to answer this wrongly, 0.2 s to
+    answer it right.
+
+    The upper arm and the forearm both refuse to generate, with the
+    extraction dropping elements held solid for their interfaces. The obvious
+    reading is that the optimiser had too little material to join the
+    flanges, and a whole run was spent raising the volume fraction from 0.30
+    to 0.45 to test it. The failure counts came back IDENTICAL TO THE DIGIT,
+    64 of 70 and 38 of 106 both times. Nothing moved.
+
+    Fill the domain completely instead, leaving empty only what is
+    deliberately held empty, and the interfaces are STILL severed: 22 of 70
+    and 34 of 106. They are cut off by the void regions, so no volume
+    fraction can reach them. The domain is what is wrong.
+
+    Note the counts fall when the domain is full, from 64 to 22 and 38 to 34.
+    The optimiser makes it worse, but it does not cause it, and a floor of 22
+    and 34 is unreachable by any density whatsoever.
+    """
+    from projects.manipulator.links import interfaces_are_reachable
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    sections = loop.data["final_sections"]
+
+    verdicts = {}
+    for index, link in enumerate(SPEC.links()):
+        ok, why, counts = interfaces_are_reachable(SPEC, index, drives,
+                                                   sections)
+        verdicts[link.name] = (ok, counts)
+
+    severed = {name: counts for name, (ok, counts) in verdicts.items()
+               if not ok}
+    assert set(severed) == {"upper_arm", "forearm"}, (
+        "these are the two links that refuse to generate, so they should be "
+        "exactly the two whose interfaces cannot be reached")
+    assert severed["upper_arm"]["unreachable"] == 22
+    assert severed["forearm"]["unreachable"] == 34
+
+    for name in ("base_column", "wrist_roll_body", "wrist_pitch_body",
+                 "tool_flange"):
+        assert verdicts[name][0], f"{name} generates, so it has to pass this"
+        assert verdicts[name][1]["unreachable"] == 0
+
+
+def test_the_generator_refuses_an_unreachable_domain_before_it_optimises():
+    """The check is worthless unless it runs before the five hours, not after.
+
+    A preflight that a caller has to remember is a preflight that gets
+    skipped. This one sits in the same place as the undefined names check,
+    which exists for the same reason: two runs died ninety minutes in on a
+    misspelt variable.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path("scripts/generate_links.py").read_text()
+    tree = ast.parse(source)
+    main = next(node for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "main")
+
+    calls = [node.func.id for node in ast.walk(main)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+    assert "interfaces_are_reachable" in calls
+    assert "undefined_names" in calls
+
+    #: and it has to come before any work is dispatched, not after
+    body = ast.unparse(main)
+    assert body.index("interfaces_are_reachable") < body.index(
+        "ProcessPoolExecutor")
+    assert body.index("undefined_names") < body.index(
+        "interfaces_are_reachable"), (
+        "the cheaper check goes first: pyflakes is 1.4 s and this is 0.2, "
+        "but pyflakes catches the class of thing that kills a worker")
+
+
+def test_the_housing_shell_is_marked_as_a_part_that_does_not_exist():
+    """The out of plane chain leans on a housing nothing has designed.
+
+    Every generated link is a flat mounting disc, a bolt ring and optimised
+    struts, with the actuator hung off the face. There is no bearing bore, no
+    shoulder, no presser flange, no presser bolt circle. So the presser
+    flange is not one term missing from the chain, it is one member of a
+    whole sub assembly that is missing, and what the chain describes is the
+    actuator to link bolted face with a housing term added for a housing that
+    is not there.
+
+    That has to be said where the number is used, not only where it is
+    defined, or it is not said at all.
+    """
+    from projects.manipulator.stages import (HOUSING_IS_AN_IDEALISATION,
+                                             out_of_plane_stage)
+
+    assert "not measured" in HOUSING_IS_AN_IDEALISATION
+    assert any("DOES NOT EXIST" in item
+               for item in out_of_plane_stage().could_not)
+
+
+def test_no_link_domain_has_room_around_its_own_actuator():
+    """Why a coaxial bearing cannot simply be added to this arm.
+
+    Every domain's cross section is exactly its actuator's outside diameter:
+    98 mm around a 98 mm AK80, 79 around a 79 mm AK60. The radial clearance
+    is not small, it is ZERO, so there is nowhere to put a ring that goes
+    round the actuator without growing the domain. The smallest THK ring that
+    clears a 98 mm actuator is the RB 10020, whose housing outside diameter
+    is 180 mm: 1.8 times the domain.
+    """
+    import numpy as np
+
+    from projects.manipulator.bearings import RB_RINGS
+    from projects.manipulator.links import actuator_for, world_boxes
+    from projects.manipulator.loop import run_loop
+
+    loop = run_loop()
+    drives = dict(loop.data["history"][-1].selected)
+    boxes = world_boxes(SPEC, drives, loop.data["final_sections"])
+    joints = SPEC.joints()
+
+    for index, box in enumerate(boxes):
+        if not box.get("placed"):
+            continue
+        actuator = actuator_for(joints[index].name, drives)
+        if actuator is None or not actuator.outer_diameter_m:
+            continue
+        extent = np.asarray(box["high"]) - np.asarray(box["low"])
+        #: the two axes across the link, whichever they are
+        across = np.sort(extent)[:2]
+        assert across.min() == pytest.approx(actuator.outer_diameter_m,
+                                             abs=1e-6), (
+            f"{box['link']}: the domain's smallest cross section is "
+            f"{across.min() * 1000:.1f} mm against an actuator of "
+            f"{actuator.outer_diameter_m * 1000:.1f}. If this ever stops "
+            f"being exact, the clearance question has changed")
+
+    clears = [ring for ring in RB_RINGS if ring.bore_m > 0.098]
+    assert {ring.model for ring in clears} == {"RB 10020", "RB 11015",
+                                               "RB 12016"}
+    tightest = min(clears, key=lambda ring: ring.housing_outer_m)
+    assert tightest.model == "RB 11015", (
+        "the smallest bore is not the smallest housing: THK's wall rule "
+        "scales with the ring's radial section, and the RB 10020 has the "
+        "narrowest bore of these three and the widest section")
+    assert tightest.housing_outer_m == pytest.approx(0.166)
+    assert tightest.housing_outer_m / 0.098 == pytest.approx(1.7, abs=0.05)

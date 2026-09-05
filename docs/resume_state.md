@@ -277,6 +277,93 @@ would have reported 3.9 times the requirement instead of 2.63. A third of
 the answer sits in a term that was nearly left out. A term measured and
 found not to dominate is not the same as a term never looked at.
 
+THERE IS NO HOUSING. This is worse than the wall being thin and it was
+found by the Fusion session measuring the generated STLs directly. Every
+link on disk is a flat mounting disc, a bolt ring, and optimised struts
+behind it, with the actuator hung off the face and reaching outwards. There
+is no bearing bore, no shoulder, no presser flange and no presser bolt
+circle anywhere in the model. Confirmed here: `HOUSING_DIAMETER_M`,
+`HOUSING_WALL_M` and `HOUSING_LENGTH_M` are CHOSEN constants and are not
+measured off any generated part.
+
+So the presser flange is not one term missing from the out of plane chain,
+it is one member of a whole sub assembly that is missing, and what that
+chain describes is the ACTUATOR TO LINK BOLTED FACE with a housing term
+added for a housing that does not exist. The 1,759,305 keeps its optimistic
+marking for a bigger reason than before.
+
+AND THERE IS NOWHERE TO PUT ONE. Confirmed independently here: every link
+domain's smallest cross section is EXACTLY its actuator's outside diameter,
+98 mm around a 98 mm AK80 and 79 around a 79 mm AK60. The radial clearance
+is not small, it is zero. A ring that goes round the actuator needs a bore
+over 98, and the tightest housing among those is 166 mm across on an RB
+11015, which is 1.7 times the domain. Not the RB 10020 at 180: it has the
+narrowest bore of the three that clear and the widest ring section, and
+THK's wall rule scales with the section rather than the bore. Stacking a
+smaller ring axially instead fits an RB 5013 at exactly 98.0 mm with zero
+margin, and its 50 mm bore then collides with the cable routing that
+base_column already lists as unresolved.
+
+So the first question is not which ring, it is WHETHER A SEPARATE RING IS
+ADDED AT ALL. The AK80 has its own output bearing. If one is added the price
+is a domain 1.7 times wider or a 50 mm bore, and either changes the domain,
+which means the links are regenerated. If one is not added, the actuator's
+own bearing tilt stiffness becomes the unknown, and CubeMars does not
+publish it any more than it publishes torsional stiffness.
+
+THE HOUSING THAT SHELL TERM IS ABOUT CANNOT HOLD A CROSSED ROLLER RING.
+`bearing_housing_stage`. THK's A18-36 puts the housing thickness at 0.6 of
+the ring's own radial section, and against every candidate ring the drawn 4
+mm wall is short by 2.2 to 3.7 times:
+
+| ring | d | D | B | wall needed | housing OD | shell if compliant | flange range |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RB 8016 | 80 | 120 | 16 | 12.0 | 144 | x3.6 | 8.0 to 19.2 |
+| RB 9016 | 90 | 130 | 16 | 12.0 | 154 | x4.5 | 8.0 to 19.2 |
+| RB 10020 | 100 | 150 | 20 | 15.0 | 180 | x8.8 | 10.0 to 24.0 |
+| RB 11015 | 110 | 145 | 15 | 10.5 | 166 | x5.2 | 7.5 to 18.0 |
+| RB 12016 | 120 | 150 | 16 | 9.0 | 168 | x4.7 | 8.0 to 19.2 |
+
+This is the SAME SHAPE OF MISTAKE as the unpreloaded bolt ring, one layer
+out. The 2,620,553 is not a conservative stiffness, it is a correct
+stiffness about a part its own maker says will not hold the ring round. Both
+are right answers to a design nobody would build.
+
+Meeting the guide moves the shell the right way and the envelope the wrong
+way: 3.6 to 8.8 times stiffer, so it stops being the weak term at all, and a
+housing outside diameter between 144 and 180 mm around a 98 mm motor, on an
+arm whose links are 98 mm boxes. Growing the joint, or moving the bearing
+off the reducer's diameter and making the joint longer instead, is a
+decision about the whole arm's proportions. Both were sized and neither was
+chosen.
+
+NAMING THE BEARING DOES NOT SETTLE THE FLANGE, which was the reason to
+choose it first. A18-38 allows the flange thickness anywhere between 0.5 and
+1.2 times the ring width, and any plate's bending stiffness goes as
+thickness cubed, so the term spans 13.8 times inside what the catalogue
+permits whichever ring is named. That needs no flange model to establish,
+which is what makes it worth having. Whoever picks the ring has to pick F
+with it or the chain stays open.
+
+Model RU needs no presser flange and is REFUSED anyway. THK prints no moment
+rigidity curve for it: the diagrams carry sixteen RA curves and twenty eight
+RB, and no RU at all. Choosing it would delete a term this project can
+compute and replace it with one it cannot read.
+
+THK's bolt torques and this project's preloads disagree by 1.52 at M3 and
+the likely reason is the NUT FACTOR, not the bolt grade. They agree at 0.30
+against the 0.2 used here, and 0.2 to 0.3 is the usual dry range. It cannot
+be settled because A18-38 Table 4 prints neither a grade nor a nut factor,
+and the two sets belong to different joints in any case: THK's bolts hold a
+presser flange down and this project's hold a housing to a link.
+
+PROVENANCE, WHICH IS PART OF THE NUMBER HERE. None of the THK figures were
+read by this session. They were quoted out of 513-2E by the Fusion session,
+page by page. Every actuator dimension in `interfaces.py` was read off a
+drawing here and can be re-read; these cannot. That is weaker than the one
+and stronger than an assumption, and it is stored as its own kind rather
+than levelled up.
+
 It rests on a pressure cone half angle of 30 degrees, which is the usual
 figure and which this project has no source for; the clamped area is
 proportional to it. The clamped stack is treated as a short beam of the grip
@@ -379,6 +466,20 @@ Defects found by standing the parts up, none of which a check here could see:
   the only thing that found it was a test that actually generates a mount, 17
   minutes of it. The two parameters are gone now, and the mount holes are
   pinned by their coordinates rather than by their count.
+- THE UPPER ARM AND FOREARM DO NOT LACK MATERIAL, THEIR DOMAINS ARE WRONG.
+  Both refuse to generate because the extraction drops elements held solid
+  for their interfaces, and the obvious reading was that the optimiser had
+  too little to join the flanges with. A whole run was spent raising the
+  volume fraction from 0.30 to 0.45 to test that: 4 h 45 min, and the failure
+  counts came back IDENTICAL TO THE DIGIT, 64 of 70 and 38 of 106 both times.
+  Filling the domain completely, leaving empty only what is deliberately held
+  empty, still severs them: 22 of 70 and 34 of 106. They are cut off by the
+  void regions and no volume fraction reaches them. The lost elements are the
+  proximal mounting disc, lying in one extreme z plane with everything
+  between it and the body held empty. `interfaces_are_reachable` answers this
+  for all six links in 0.2 seconds and now runs as a preflight in
+  `scripts/generate_links.py`, so the same mistake costs seconds instead of
+  five hours.
 - The build volume test pinned 238.7 mm as the widest part, and 238.7 was
   right about the MARGIN and wrong about the AXIS. When the crossing axis
   rule put a drive's bolt circle inside the domain, the upper arm's long
@@ -590,6 +691,11 @@ writes a timestamp into its header.
   width, used neither, and the mount generator went on passing both while
   omitting the coordinates the function actually reads. Argument counts
   matched, so no static check and no smoke test could see it.
+- BEFORE SPENDING HOURS ON A HYPOTHESIS, ASK WHETHER IT CAN BE FALSIFIED IN
+  SECONDS. Four hours and forty five minutes went into raising a volume
+  fraction to reconnect a flange, and a 0.2 second check with the domain
+  completely full says no density can reach it. The expensive experiment was
+  not wrong to want, it was wrong to run first.
 - A TERM MEASURED AND FOUND NOT TO DOMINATE IS NOT A TERM NEVER LOOKED AT.
   The face contact stiffness was about to be treated as rigid on the grounds
   that the housing would dominate. It came out 1.8 times the housing and cost

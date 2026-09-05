@@ -573,6 +573,57 @@ def _near_axis(mesh, axis, at_x, height_m, width_m, box, radius_m):
     return radial <= radius_m
 
 
+def interfaces_are_reachable(spec: ManipulatorSpec, link_index: int,
+                             drives: dict[str, str],
+                             sections: dict | None = None
+                             ) -> tuple[bool, str, dict]:
+    """Can a link's interfaces be connected to its body AT ALL?
+
+    THIS ANSWERS IN SECONDS WHAT COST FOUR HOURS AND FORTY FIVE MINUTES TO
+    ANSWER WRONGLY. The upper arm and the forearm both refused to generate,
+    with the extraction dropping elements that were held solid for their
+    interfaces, and the obvious reading was that the optimiser had too little
+    material to join them. A whole run was spent raising the volume fraction
+    from 0.30 to 0.45 to test that, and it came back with the FAILURE COUNTS
+    IDENTICAL TO THE DIGIT. Nothing about the outcome moved.
+
+    So fill the domain completely, leaving empty only what is deliberately
+    held empty, and ask whether the interfaces are still severed. If they are,
+    no volume fraction can reach them and the domain itself is wrong. The
+    optimiser is not being asked a hard question, it is being asked an
+    impossible one.
+
+    Returns whether every interface is reachable, why not, and the counts.
+    """
+    import numpy as np
+
+    from optimization.topology.export import largest_connected_component
+
+    built, reason = link_domain(spec, link_index, drives, sections=sections)
+    if built is None:
+        return False, reason, {}
+    mesh, passive_solid, passive_void, _span, _height, _width, _note = built
+
+    density = np.ones(mesh.n_elements)
+    density[passive_void] = 0.0
+    kept = largest_connected_component(mesh, density, ISO_LEVEL)
+    unreachable = passive_solid & (kept < ISO_LEVEL)
+    lost = int(unreachable.sum())
+    held = int(passive_solid.sum())
+    counts = {"held_solid": held, "unreachable": lost,
+              "held_void": int(passive_void.sum())}
+    if not lost:
+        return True, (f"{spec.links()[link_index].name}: all {held} interface "
+                      f"elements are reachable when the domain is full"), counts
+
+    return False, (
+        f"{spec.links()[link_index].name}: {lost} of {held} elements held "
+        f"solid for its interfaces are UNREACHABLE even with the domain "
+        f"completely full. They are cut off by what is held empty, not by a "
+        f"shortage of material, so no volume fraction will connect them and "
+        f"the domain is what has to change"), counts
+
+
 def generate_link(spec: ManipulatorSpec, link_index: int,
                   drives: dict[str, str], torques: dict[str, float],
                   out_dir: Path, iterations: int = 60,

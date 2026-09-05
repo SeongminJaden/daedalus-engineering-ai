@@ -24,7 +24,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from projects.manipulator.arm import build_arm
-from projects.manipulator.links import EXPORT_SCALE, world_boxes
+from projects.manipulator.links import (EXPORT_SCALE, interfaces_are_reachable,
+                                        world_boxes)
 from projects.manipulator.loop import run_loop
 from projects.manipulator.spec import SPEC
 from projects.manipulator.stages import dynamics_stage
@@ -180,6 +181,28 @@ def main(iterations: int = 60, volume_fraction: float = 0.3,
                 if not only or link.name in only]
     if not payloads:
         print(json.dumps({"refused": "no link matched", "asked": sorted(only)}))
+        return 1
+
+    # CAN THE INTERFACES BE REACHED AT ALL? Fill each domain completely and
+    # ask whether anything held solid is still cut off. It takes 0.2 seconds
+    # for all six and it would have saved four hours and forty five minutes:
+    # the upper arm and forearm were regenerated at a volume fraction of 0.45
+    # to test the theory that they lacked material to join their flanges, and
+    # the failure counts came back IDENTICAL TO THE DIGIT. They are severed by
+    # what is held empty, and no volume fraction reaches them.
+    unreachable = []
+    for index, name, *_ in payloads:
+        ok, why, counts = interfaces_are_reachable(SPEC, index, drives,
+                                                   sections)
+        if not ok:
+            unreachable.append({"link": name, "why": why, **counts})
+    if unreachable:
+        print(json.dumps({
+            "refused": "an interface cannot be reached inside its own domain",
+            "note": ("this is a domain defect, not a volume fraction one. "
+                     "Raising the volume fraction was tried and changed "
+                     "nothing, at a cost of 4 h 45 min"),
+            "links": unreachable}, indent=1))
         return 1
     if workers > 1:
         # SPAWN, not fork. The parent has already touched Warp to size the

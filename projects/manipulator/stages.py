@@ -22,6 +22,11 @@ from physics.joints import analyze_joint, tightening_torque_nm
 from physics.joints.bolted import PropertyClass
 from projects.manipulator.interfaces import (AK80_64_HOUSING,
                                              ISO_273_MEDIUM_M)
+from projects.manipulator.bearings import (RB_RINGS, RU_IS_REFUSED,
+                                            flange_bolt_torque_disagreement,
+                                            flange_thickness_spread,
+                                            housing_meets_thk,
+                                            shell_bending_nm_rad)
 from projects.manipulator.mounts import base_mount_loads
 from projects.manipulator.cycloidal import (CycloidalGeometry,
                                             disc_shear_stiffness_nm_rad,
@@ -1929,9 +1934,27 @@ MINIMUM_DISC_LIGAMENT_M = 0.003
 #: that this is not the calculation in `joint_module_stiffness_stage`, which
 #: uses E and a bending second moment and answers the out of plane question.
 #: Torsion needs G and J, and G here is E over 2(1 + nu) for the link alloy.
+#:
+#: THESE THREE NUMBERS ARE AN IDEALISATION AND THEY ARE NOT MEASURED OFF
+#: ANYTHING. No generated link contains a bearing housing: the parts on disk
+#: are a flat mounting disc, a bolt ring and optimised struts behind it, with
+#: the actuator hung off the face and reaching outwards. There is no bearing
+#: bore, no shoulder, no presser flange and no presser bolt circle anywhere
+#: in the model. So every stiffness computed from these constants describes a
+#: part that has not been designed, and the chain the out of plane budget
+#: reports is really about the ACTUATOR TO LINK BOLTED FACE that does exist,
+#: with a housing term added for a housing that does not.
+#:
+#: `bearing_housing_stage` then shows the wall is 2.2 to 3.7 times under what
+#: THK asks for the rings this joint would need, which is a second thing
+#: wrong with the same number.
 HOUSING_DIAMETER_M = 0.124
 HOUSING_WALL_M = 0.004
 HOUSING_LENGTH_M = 0.080
+HOUSING_IS_AN_IDEALISATION = (
+    "CHOSEN and not measured. No generated part contains a bearing housing, "
+    "a bearing bore, a shoulder or a presser flange, so this shell is an "
+    "idealisation of a part that has not been designed")
 HOUSING_POISSON = 0.33
 
 
@@ -2245,11 +2268,7 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
     #: DOES THE JOINT OPEN? Everything after this turns on the answer, and
     #: the preload is not an unknown: the same M3 class 8.8 figure the
     #: spigot work took off the proof load, 2188 N, applies here.
-    preload = analyze_joint(
-        size=pattern.thread, grade=PropertyClass.C8_8,
-        grip_length_m=spec.flange_thickness_m, external_load_n=0.0,
-        external_load_min_n=0.0, member_material="aluminium",
-        member_modulus_pa=modulus).preload_n
+    preload = _base_yaw_preload_n(spec)
     opens_at = bolt_ring_separation_moment_nm(preload, pattern.count,
                                               pattern.bolt_circle_m)
     lowest = PRELOAD_SCATTER * opens_at
@@ -2318,6 +2337,31 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "0.47 N m. Together under 2 N m against the base yaw's 43.3, a factor "
         "of twenty two")
     result.could_not.append(
+        "THE HOUSING SHELL IS AN IDEALISATION OF A PART THAT DOES NOT EXIST. "
+        "No generated link contains a bearing housing: the parts on disk are "
+        "a flat mounting disc, a bolt ring and optimised struts, with the "
+        "actuator hung off the face. There is no bearing bore, no shoulder, "
+        "no presser flange and no presser bolt circle in the model at all. "
+        "So the presser flange is not one term missing from this chain, it "
+        "is one member of a whole sub assembly that is missing, and what the "
+        "chain actually describes is the actuator to link bolted face with a "
+        "housing term bolted on to it.")
+    result.could_not.append(
+        "THE HOUSING SHELL TERM IS ABOUT A HOUSING THAT CANNOT HOLD THE "
+        "BEARING. Its wall is 4 mm and THK's A18-36 asks for 0.6 of the "
+        "ring's radial section, which is 9 to 15 mm for every candidate "
+        "ring, so the wall is short by 2.2 to 3.7 times. See "
+        "`bearing_housing_stage`. Meeting it makes the shell 3.6 to 8.8 "
+        "times stiffer and takes it out of contention, and puts the joint's "
+        "outside diameter between 144 and 180 mm, which is a decision about "
+        "the whole arm.")
+    result.could_not.append(
+        "The presser flange is still not in this chain, so 1,759,305 is "
+        "optimistic. It is a series term and can only reduce the number, and "
+        "choosing the bearing does not pin it: A18-38 allows 0.5 to 1.2 "
+        "times the ring width and plate bending goes as thickness cubed, so "
+        "it is free to move by 13.8 times until someone names the thickness.")
+    result.could_not.append(
         "The face contact rests on a pressure cone half angle of 30 degrees, "
         "which is the usual figure and which this project has no source for. "
         "The clamped area is proportional to it and so is the stiffness, so "
@@ -2328,11 +2372,6 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "and the members rigid. It clears by six times at the low end of the "
         "scatter, so neither assumption has to be tight for the conclusion "
         "to survive, but the number itself is a first estimate.")
-    result.could_not.append(
-        "The presser flange THK names as the third contributor is not in "
-        "this calculation because no presser flange has been designed. So "
-        "the structural number is optimistic by an unknown amount even at "
-        "its upper end.")
     result.could_not.append(
         "The overturning moment is a FLOOR, not the final number. It uses "
         "the loop's parametric structure estimate of 4.802 kg, and the "
@@ -2349,6 +2388,130 @@ def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
         "bearing is 1.08e6 N m/rad. Against an upper bound of 1.7e6 read "
         "where this arm works under five percent along the chart, that is "
         "not settled either way.")
+    return result
+
+
+def _base_yaw_preload_n(spec: ManipulatorSpec = SPEC) -> float:
+    """The base yaw interface's preload, from 75 percent of an ISO 898-1
+    class 8.8 proof load, which is where the spigot work takes it from too."""
+    return analyze_joint(
+        size=AK80_64_HOUSING.patterns[0].thread, grade=PropertyClass.C8_8,
+        grip_length_m=spec.flange_thickness_m, external_load_n=0.0,
+        external_load_min_n=0.0, member_material="aluminium",
+        member_modulus_pa=get_material(
+            spec.materials["link"]).youngs_modulus_pa).preload_n
+
+
+def bearing_housing_stage(spec: ManipulatorSpec = SPEC,
+                          wall_m: float = HOUSING_WALL_M,
+                          length_m: float = HOUSING_LENGTH_M) -> StageResult:
+    """The housing this joint was drawn with cannot hold a crossed roller ring.
+
+    THE WALL IS 4 mm AND THK ASKS FOR 9 TO 15. A18-36 puts the housing
+    thickness at 0.6 times the ring's own radial section, and against every
+    candidate ring in the range this joint could use that makes the drawn
+    wall between 2.2 and 3.7 times too thin.
+
+    That is not a conservative stiffness. The 2,620,553 N m/rad the out of
+    plane budget leans on was computed on a housing its maker says will not
+    hold the ring round, so it is a number about a different part, in the
+    same way that the unpreloaded bolt ring was a number about a different
+    joint. Both errors have the same shape: a quantity computed correctly for
+    a design nobody would build.
+
+    Meeting the guide moves the shell term the RIGHT way and the envelope the
+    wrong way. The shell becomes 3.6 to 8.8 times stiffer, so it stops being
+    the weak link in the series at all. But the housing outside diameter goes
+    to between 144 and 180 mm around a motor that is 98, and this arm's links
+    are 98 mm boxes. That is a decision about the whole arm and it is not
+    made here.
+
+    The flange is worse than unknown, it is unbounded by the choice that was
+    supposed to settle it. A18-38 allows its thickness anywhere between 0.5
+    and 1.2 times the ring width, and any plate's bending stiffness goes as
+    thickness cubed, so the term spans 13.8 times inside what the catalogue
+    permits. NAMING THE BEARING DOES NOT NARROW IT. Whoever picks the ring
+    must pick F as well or the chain stays open.
+    """
+    result = StageResult(name="the housing THK asks for, against the one drawn")
+    modulus = get_material(spec.materials["link"]).youngs_modulus_pa
+    drawn = shell_bending_nm_rad(HOUSING_DIAMETER_M, wall_m, length_m, modulus)
+    result.data["drawn_wall_m"] = wall_m
+    result.data["drawn_shell_nm_rad"] = drawn
+
+    for ring in RB_RINGS:
+        meets, why = housing_meets_thk(ring, wall_m)
+        thickness = ring.housing_thickness_m
+        compliant = shell_bending_nm_rad(ring.outer_m + thickness, thickness,
+                                         length_m, modulus)
+        low, high = ring.flange_thickness_range_m
+        result.rows.append({
+            "ring": ring.model, "bore_m": ring.bore_m,
+            "outer_m": ring.outer_m, "width_m": ring.width_m,
+            "housing_thickness_needed_m": thickness,
+            "meets_thk": meets, "why": why,
+            "housing_outer_m": ring.housing_outer_m,
+            "shell_if_compliant_nm_rad": compliant,
+            "shell_gain": compliant / drawn,
+            "flange_thickness_low_m": low, "flange_thickness_high_m": high,
+            "flange_spread": flange_thickness_spread(ring)})
+
+    assert not any(row["meets_thk"] for row in result.rows)
+    result.notes.append(
+        f"not one candidate ring is satisfied by the {wall_m * 1000:.0f} mm "
+        f"wall this joint was drawn with. A18-36 wants between "
+        f"{min(r['housing_thickness_needed_m'] for r in result.rows) * 1000:.1f} "
+        f"and {max(r['housing_thickness_needed_m'] for r in result.rows) * 1000:.1f} "
+        f"mm, so the drawn wall is short by 2.2 to 3.7 times")
+    result.notes.append(
+        f"meeting it would make the shell "
+        f"{min(r['shell_gain'] for r in result.rows):.1f} to "
+        f"{max(r['shell_gain'] for r in result.rows):.1f} times stiffer, which "
+        f"takes it out of contention as the weak term, and would put the "
+        f"housing outside diameter between "
+        f"{min(r['housing_outer_m'] for r in result.rows) * 1000:.0f} and "
+        f"{max(r['housing_outer_m'] for r in result.rows) * 1000:.0f} mm "
+        f"around a 98 mm motor, on an arm whose links are 98 mm boxes")
+    result.notes.append(
+        f"the presser flange is not settled by choosing the ring. A18-38 "
+        f"allows 0.5 to 1.2 times the ring width and plate bending goes as "
+        f"thickness cubed, so the term spans "
+        f"{flange_thickness_spread(RB_RINGS[0]):.1f} times inside what the "
+        f"catalogue permits, whichever ring is named")
+    result.notes.append(RU_IS_REFUSED)
+
+    disagreement = flange_bolt_torque_disagreement(
+        "M3", _base_yaw_preload_n(spec))
+    result.data["thk_m3_torque_nm"] = disagreement["thk_torque_nm"]
+    result.data["thk_m3_implied_preload_n"] = disagreement["implied_preload_n"]
+    result.data["nut_factor_that_would_agree"] = disagreement[
+        "nut_factor_that_would_agree"]
+    result.notes.append(
+        f"THK's own bolt torques and this project's preloads disagree by "
+        f"{disagreement['ratio']:.2f} at M3, and the likely reason is the nut "
+        f"factor rather than the bolt grade: they would agree at "
+        f"{disagreement['nut_factor_that_would_agree']:.2f} against the 0.2 "
+        f"used here, and 0.2 to 0.3 is the usual dry range. It cannot be "
+        f"settled because A18-38 Table 4 prints neither a grade nor a nut "
+        f"factor, and the two sets belong to different joints anyway")
+
+    result.could_not.append(
+        "NONE OF THIS WAS READ HERE. Every figure above was quoted out of "
+        "THK 513-2E by the Fusion session and this session has not opened "
+        "that catalogue. That is weaker than the actuator dimensions, which "
+        "were read off drawings here and can be re-read, and stronger than "
+        "an assumption. It is recorded as its own kind rather than levelled "
+        "up to the other.")
+    result.could_not.append(
+        "The out of plane chain still has no flange term in it, so the "
+        "1,759,305 N m/rad it reports is optimistic, and now by a stated "
+        "amount rather than an unknown one: the flange is a series term that "
+        "can only reduce it, and it is free to move by 13.8 times.")
+    result.could_not.append(
+        "Whether to grow the joint to hold a proper ring, or to move the "
+        "bearing off the reducer's diameter and make the joint longer "
+        "instead, is a decision about the whole arm's proportions. Both were "
+        "sized here and neither was chosen.")
     return result
 
 
