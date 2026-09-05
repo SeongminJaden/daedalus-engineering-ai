@@ -107,11 +107,11 @@ plane shear alongside. At the 22.76 N m static shoulder torque:
 
 | term | N m/rad | share of the compliance |
 |---|---:|---:|
-| output pin contact | 446,246 | 54% |
-| ring pin contact | 758,834 | 32% |
-| housing, in torsion | 1,970,341 | 12% |
-| discs, in plane shear | 14,413,851 | 2% |
-| **four known terms in series** | **241,801** | **4.8 times the requirement** |
+| output pin contact | 412,943 | 61% |
+| ring pin contact | 1,052,131 | 24% |
+| housing, in torsion | 1,970,341 | 13% |
+| discs, in plane shear | 12,834,595 | 2% |
+| **four known terms in series** | **252,682** | **5.0 times the requirement** |
 
 WHAT IS CONFIRMED HERE IS A DIRECTION AND NOTHING MORE. The reducer is not
 obviously the thing that fails the 1 mm limit. That limit stays UNVERIFIED,
@@ -124,10 +124,50 @@ The fifth term, the eccentric bearing, has no value at all. Its lever is
 derived: a tangential shift d of the disc centre is indistinguishable from
 the input angle being larger by d / e, so the disc's rotation errs by
 d / (e N), and the torsional stiffness is the bearing's radial stiffness
-times (e N) squared. e N is the pitch radius, 25 mm, NOT the eccentricity,
-2.5 mm; those two readings differ by a hundred. Asked in reverse, the
-bearing needs at least 5.13e7 N/m radial for the joint to reach 50,689 at
+times (e N) squared. e N is the pitch radius, 30 mm, NOT the eccentricity,
+3.0 mm; those two readings differ by a hundred. Asked in reverse, the
+bearing needs at least 3.52e7 N/m radial for the joint to reach 50,689 at
 all. That is the requirement to carry into bearing selection.
+
+THE ECCENTRICITY IS NOT A FREE VARIABLE and this is where the design moved.
+It is K1 times the pin circle radius over the pin count, and K1 carries the
+usual design band, 0.5 to 0.75. It was 2.5 mm and K1 0.611; it is 3.0 mm and
+K1 0.733, which takes the pitch radius from 25 to 30 mm. That is the ring
+pins' moment arm bound and the eccentric bearing's lever squared, so it
+raised the chain from 241,801 to 252,682 and cut the bearing requirement
+from 5.13e7 to 3.52e7 N/m, for no change in the module's outer diameter at
+all. The output pin circle went from Ø50 to Ø48 to hold its 5 mm web, since
+a larger eccentricity moves the disc's root inward.
+
+Opening the pin circle to 48 mm at the same K1 would give 275,497 and
+2.90e7, but the pins' outer edge then stands at 53.0 mm against a 53.4 mm
+motor radius, and the ring body has to go outside them, so it costs about 6
+mm on the joint's outside diameter. Not taken.
+
+3.5 mm was considered and refused: K1 would be 0.856, outside the band.
+Rather than trust the band, `undercut_margin_m` computes what it stands in
+for, the curvature left at the lobe tips before an inward offset by the pin
+radius eats the profile. It is 7.09 mm at K1 0.733, 0.55 mm at 0.95, and
+negative past 1.0. So the band is conservative and not a cliff edge, and the
+refusal rests on pressure angle and contact stress rather than on undercut.
+
+The objection that raising e helps the bearing's stiffness requirement while
+hurting its load is real in mechanism and small in size. The tangential
+component is T / (N e) and falls, 455 to 375 N; the radial component grows
+with the pressure angle, 465 to 493 N; the resultant moves from 648 to 619.
+And the radial share does not enter the stiffness at all, because only the
+tangential deflection turns the output and an isotropic radial stiffness has
+no cross term. The tangential component computed from the full disc
+equilibrium agrees with T / (N e) to three figures, which is the independent
+check on the whole force model.
+
+The orbiting discs' unbalanced couple is not a design factor AT THIS SPEED.
+The arm's duty is 90 degrees in 2 seconds, so a joint peaks near 1.2 rad/s
+and the reducer input at ten times that. Two 0.31 kg discs at 180 degrees
+cancel their centrifugal resultant and leave m e omega squared times their
+spacing, which is 0.0012 N m against a 23.35 N m peak joint torque. At a few
+thousand rpm input it would be four orders larger, so the finding carries its
+operating point.
 
 CORRECTION WITHIN THE DAY. This first read 682,012 N m/rad and a factor of
 13.5. It was optimistic by 2.8 and the whole of the error was in lever arms,

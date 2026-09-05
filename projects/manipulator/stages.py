@@ -18,11 +18,14 @@ from core.assembly.statics import joint_torques
 from core.materials import get_material
 from projects.manipulator.cycloidal import (CycloidalGeometry,
                                             disc_shear_stiffness_nm_rad,
+                                            eccentric_bearing_load_n,
+                                            orbit_couple_nm,
                                             output_pin_moment_arms,
                                             pin_set_stiffness_nm_rad,
                                             required_bearing_stiffness_n_m,
                                             ring_pin_moment_arms,
-                                            shell_torsion_nm_rad)
+                                            shell_torsion_nm_rad,
+                                            undercut_margin_m)
 from physics.dynamics import inverse_dynamics, plan_move, torque_profile
 from physics.dynamics.actuator import (DriveDemand, best_ratio,
                                        inertia_matched_ratio, motor_torque_nm,
@@ -1863,16 +1866,17 @@ def backlash_stage(dynamics: StageResult, drivetrain: StageResult,
 #: So the thickness is not carried by either of the loads it obviously
 #: carries, and calling it a strength result would be false. Disc stiffness
 #: was the last open candidate and `joint_torsion_stage` closes it: the in
-#: plane shear of the annulus between the two pin circles is 284 times the
-#: requirement and linear in thickness, so 0.028 mm of steel would carry it
+#: plane shear of the annulus between the two pin circles is 253 times the
+#: requirement and linear in thickness, so 0.032 mm of steel would carry it
 #: alone. The two contacts in series go as thickness to the 0.8 and put their
-#: own floor at 0.940 mm, which is the largest of the four and still an order
+#: own floor at 0.879 mm, which is the largest of the four and still an order
 #: of magnitude under 8.
 #:
-#: That 0.940 replaces a 0.292 written earlier the same day, from a contact
-#: model whose lever arms were too long. The conclusion did not move, but the
-#: margin did, by a factor of three, and that is the sort of thing worth
-#: recording rather than quietly overwriting.
+#: That 0.879 has been 0.292 and 0.940 on the same day, the first from a
+#: contact model whose lever arms were too long and the second before K1 was
+#: raised. The conclusion never moved. The margin moved by a factor of three
+#: between the first two, and that is the sort of thing worth recording
+#: rather than quietly overwriting.
 #:
 #: The thickness is therefore CHOSEN, and it is chosen for what a wire cut
 #: disc can be handled, stacked and kept flat at, which is not something this
@@ -1883,8 +1887,8 @@ CYCLOIDAL_DISC_THICKNESS_BASIS = (
     "CHOSEN, for handling and flatness of a wire cut disc, which is not "
     "computed here. Four floors were computed and none of them binds: pin "
     "contact stress is six times under its allowable, output pin hole "
-    "bearing needs 0.20 mm, disc in plane shear stiffness needs 0.028 mm, "
-    "and the pin contacts in series need 0.940 mm")
+    "bearing needs 0.20 mm, disc in plane shear stiffness needs 0.032 mm, "
+    "and the pin contacts in series need 0.879 mm")
 
 
 #: CHOSEN, and the gate that refuses a disc. A wire cut steel disc needs
@@ -1949,6 +1953,21 @@ def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
 
     The housing is in the chain now, in torsion. The discs' in plane shear
     barely appears.
+
+    THE ECCENTRICITY MOVED FROM 2.5 TO 3.0 mm with this, and the output pin
+    circle from Ø50 to Ø48 to keep its web. The eccentricity is not a free
+    variable: it is K1 times the pin circle radius over the pin count, and
+    the usual design band for K1 is 0.5 to 0.75. At 2.5 mm K1 was 0.611 and
+    at 3.0 it is 0.733, still inside. It buys the pitch radius, 25 mm to 30,
+    and the pitch radius is the ring pins' lever and the eccentric bearing's
+    lever squared, so the bearing requirement falls by nearly a third for no
+    change in the module's outer diameter at all.
+
+    Opening the pin circle to 48 mm instead would buy a little more, but the
+    pins' outer edge then stands at 53 mm against a 53.4 mm motor radius, so
+    the ring body would push the joint's outside diameter out by 6 mm. The
+    same K1 at the pin circle already drawn takes most of the gain and costs
+    nothing, so that is what is taken.
     """
     geometry = geometry or CycloidalGeometry()
     result = StageResult(name="joint torsion, which is what the budget asks")
@@ -2000,13 +2019,40 @@ def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
         f"is the pitch radius {geometry.pitch_radius_m * 1000:.1f} mm, "
         f"SQUARED. Asked in reverse, its radial stiffness has to be at least "
         f"{needed:.2e} N/m for the joint to reach the requirement at all")
+    loads = [eccentric_bearing_load_n(geometry, torque_nm, float(angle))
+             for angle in angles]
+    heaviest = max(loads, key=lambda row: row["magnitude_n"])
+    result.data["eccentric_bearing_load_n"] = heaviest["magnitude_n"]
+    result.data["eccentric_bearing_tangential_n"] = heaviest["tangential_n"]
+    result.data["eccentric_bearing_radial_n"] = heaviest["radial_n"]
+    result.data["k1_factor"] = geometry.k1_factor
+    result.data["undercut_margin_m"] = undercut_margin_m(geometry)
+
+    result.notes.append(
+        f"K1 is {geometry.k1_factor:.3f}, inside the usual 0.5 to 0.75 band, "
+        f"and the profile has {undercut_margin_m(geometry) * 1000:.2f} mm of "
+        f"curvature left at the lobe tips before an inward offset by the pin "
+        f"radius would undercut. That margin is computed rather than taken "
+        f"from the band, and it reaches zero near K1 = 1.0, so the band is "
+        f"conservative and not a cliff edge")
+    result.notes.append(
+        f"raising the eccentricity pulls the bearing's two load components "
+        f"in OPPOSITE directions and only the arithmetic says which wins. "
+        f"The tangential part is T / (N e) and falls; the radial part comes "
+        f"from the pressure angle and rises with K1. Here they are "
+        f"{heaviest['tangential_n']:.0f} and {heaviest['radial_n']:.0f} N for "
+        f"{heaviest['magnitude_n']:.0f} N resultant, and across the band the "
+        f"resultant barely moves. It matters for bearing selection and life; "
+        f"it does not enter the stiffness, because only the tangential "
+        f"deflection turns the output and an isotropic radial stiffness has "
+        f"no cross term")
     result.notes.append(
         f"a Ø{2000 * geometry.output_pin_circle_radius_m:.0f} output pin "
         f"circle leaves {geometry.output_web_m * 1000:.2f} mm of web to the "
         f"disc's ROOT radius and {geometry.output_ligament_m * 1000:.2f} mm "
-        f"between holes. Ø60 was proposed and it is not available: measured "
-        f"to the root rather than the tip the web comes out 0.00 mm exactly, "
-        f"so the hole breaks out of the disc")
+        f"between holes. A Ø60 circle was proposed and it is not available: "
+        f"measured to the root rather than the tip its web comes out 0.00 mm "
+        f"exactly, so the hole breaks out of the disc")
     result.could_not.append(
         "Not a verified result. The load share now falls out of the geometry "
         "rather than being assumed, and the housing is in the chain, but "

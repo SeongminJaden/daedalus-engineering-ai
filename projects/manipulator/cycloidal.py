@@ -74,8 +74,8 @@ class CycloidalGeometry:
     ring_pin_circle_radius_m: float = 0.045
     ring_pin_radius_m: float = 0.005
     lobes: int = 10
-    eccentricity_m: float = 0.0025
-    output_pin_circle_radius_m: float = 0.025
+    eccentricity_m: float = 0.003
+    output_pin_circle_radius_m: float = 0.024
     output_pin_radius_m: float = 0.005
     output_pin_count: int = 6
     disc_thickness_m: float = 0.008
@@ -89,6 +89,20 @@ class CycloidalGeometry:
     @property
     def ratio(self) -> int:
         return self.lobes
+
+    @property
+    def k1_factor(self) -> float:
+        """The eccentricity, expressed the way a cycloidal design states it.
+
+        THE ECCENTRICITY IS NOT A FREE VARIABLE. It is K1 times the pin
+        circle radius over the pin count, and K1 is what the usual design
+        band is written in. Raising e alone at a fixed pin circle raises K1,
+        and past the band the lobe tips sharpen, the pressure angle grows and
+        the profile eventually undercuts. `undercut_margin_m` measures the
+        last of those directly rather than trusting the band.
+        """
+        return (self.eccentricity_m * self.ring_pin_count
+                / self.ring_pin_circle_radius_m)
 
     @property
     def pitch_radius_m(self) -> float:
@@ -155,26 +169,123 @@ def _locus(geometry: CycloidalGeometry, index: int, angles):
                     axis=1)
 
 
-def ring_pin_moment_arms(geometry: CycloidalGeometry, input_angle: float,
-                         step: float = 1e-6):
-    """Signed moment arm of each ring pin's contact normal about the disc centre.
+def ring_pin_contacts(geometry: CycloidalGeometry, input_angle: float,
+                      step: float = 1e-6):
+    """Contact point, outward normal and signed moment arm for every ring pin.
 
-    The normal is the locus normal at the pin's own point, taken outward. A
-    positive arm drives, a negative one is on the trailing side and carries
-    nothing in a single direction of torque.
+    The normal is the locus normal at the pin's own point. A positive arm
+    drives, a negative one is on the trailing side and carries nothing under
+    a single direction of torque.
     """
-    arms = np.empty(geometry.ring_pin_count)
+    points = np.empty((geometry.ring_pin_count, 2))
+    normals = np.empty((geometry.ring_pin_count, 2))
     for index in range(geometry.ring_pin_count):
         here = _locus(geometry, index, input_angle)[0]
-        ahead = _locus(geometry, index, input_angle + step)[0]
-        behind = _locus(geometry, index, input_angle - step)[0]
-        tangent = ahead - behind
+        tangent = (_locus(geometry, index, input_angle + step)[0]
+                   - _locus(geometry, index, input_angle - step)[0])
         tangent /= np.linalg.norm(tangent)
         normal = np.array([tangent[1], -tangent[0]])
         if float(np.dot(normal, here)) < 0.0:
             normal = -normal
-        arms[index] = float(here[0] * normal[1] - here[1] * normal[0])
-    return arms
+        points[index] = here
+        normals[index] = normal
+    arms = points[:, 0] * normals[:, 1] - points[:, 1] * normals[:, 0]
+    return points, normals, arms
+
+
+def ring_pin_moment_arms(geometry: CycloidalGeometry, input_angle: float,
+                         step: float = 1e-6):
+    return ring_pin_contacts(geometry, input_angle, step)[2]
+
+
+def undercut_margin_m(geometry: CycloidalGeometry, samples: int = 20001
+                      ) -> float:
+    """How much curvature is left before the profile eats itself.
+
+    The disc profile is the pin centre locus offset INWARD by the pin radius,
+    and an inward offset is singular wherever the centre of curvature already
+    lies inward at less than that radius. That happens at the lobe tips, and
+    it is what a K1 band is a proxy for. Returns the tightest such radius
+    less the pin radius: positive is clear, negative undercuts.
+
+    Computed, because the band is a convention this project has no source
+    for. The margin falls smoothly with K1 and reaches zero near 1.0, so the
+    usual 0.5 to 0.75 band is conservative rather than a cliff edge.
+    """
+    angles = np.linspace(0.0, 2.0 * np.pi, samples)
+    curve = _locus(geometry, 0, angles)
+    first = np.gradient(curve, angles, axis=0)
+    second = np.gradient(first, angles, axis=0)
+    speed = np.linalg.norm(first, axis=1)
+    curvature = (first[:, 0] * second[:, 1]
+                 - first[:, 1] * second[:, 0]) / speed ** 3
+    left = np.stack([-first[:, 1], first[:, 0]], axis=1) / speed[:, None]
+    centre = curve + left / curvature[:, None]
+    inward = np.linalg.norm(centre, axis=1) < np.linalg.norm(curve, axis=1)
+    if not inward.any():
+        return float("inf")
+    return float(np.abs(1.0 / curvature)[inward].min()
+                 - geometry.ring_pin_radius_m)
+
+
+def eccentric_bearing_load_n(geometry: CycloidalGeometry, torque_nm: float,
+                             input_angle: float) -> dict:
+    """What the eccentric bearing carries, from the disc's own equilibrium.
+
+    Worth computing rather than estimating, because raising the eccentricity
+    pulls the two components in OPPOSITE directions and only the arithmetic
+    says which wins. The tangential component follows from power, T / (N e),
+    and so falls as e rises. The radial component comes from the pressure
+    angle, which grows with K1, and so rises. The magnitudes turn out to be
+    close enough that the resultant barely moves.
+
+    It matters for bearing SELECTION and life. It does not enter the
+    stiffness relation: only the tangential deflection turns the output, and
+    an isotropic radial stiffness has no cross term, so
+    `eccentric_bearing_stiffness_nm_rad` is unaffected by the radial share.
+    """
+    points, normals, arms = ring_pin_contacts(geometry, input_angle)
+    rotation = pin_set_rotation(torque_nm, arms, geometry.disc_thickness_m,
+                                geometry.disc_count)
+    forces = np.where(arms > 0.0,
+                      line_contact_force_n(rotation * np.maximum(arms, 0.0),
+                                           geometry.disc_thickness_m), 0.0)
+    from_ring = -(forces[:, None] * normals).sum(axis=0)
+
+    output_arms = output_pin_moment_arms(geometry, input_angle)
+    output_rotation = pin_set_rotation(torque_nm, output_arms,
+                                       geometry.disc_thickness_m,
+                                       geometry.disc_count)
+    output_forces = np.where(
+        output_arms > 0.0,
+        line_contact_force_n(output_rotation * np.maximum(output_arms, 0.0),
+                             geometry.disc_thickness_m), 0.0)
+    offset = np.array([math.cos(input_angle), math.sin(input_angle)])
+    from_output = -float(output_forces.sum()) * offset
+
+    load = -(from_ring + from_output)
+    tangential = np.array([-offset[1], offset[0]])
+    return {
+        "magnitude_n": float(np.linalg.norm(load)),
+        "tangential_n": float(np.dot(load, tangential)),
+        "radial_n": float(np.dot(load, offset)),
+        "power_estimate_n": torque_nm / (geometry.ratio
+                                         * geometry.eccentricity_m
+                                         * geometry.disc_count),
+        "largest_ring_pin_force_n": float(forces.max()),
+    }
+
+
+def orbit_couple_nm(geometry: CycloidalGeometry, input_speed_rad_s: float,
+                    disc_mass_kg: float, disc_spacing_m: float) -> float:
+    """The rocking couple two opposed discs leave behind as they orbit.
+
+    Each disc's centrifugal force is m e omega squared, and two discs at 180
+    degrees cancel the resultant, so what survives is the couple of two equal
+    and opposite forces separated along the axis.
+    """
+    force = disc_mass_kg * geometry.eccentricity_m * input_speed_rad_s ** 2
+    return force * disc_spacing_m
 
 
 def output_pin_moment_arms(geometry: CycloidalGeometry, input_angle: float):

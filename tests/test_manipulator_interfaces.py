@@ -947,7 +947,7 @@ def test_no_ring_pin_gets_a_lever_longer_than_the_pitch_radius():
                                                 ring_pin_moment_arms)
 
     geometry = CycloidalGeometry()
-    assert geometry.pitch_radius_m == pytest.approx(0.025)
+    assert geometry.pitch_radius_m == pytest.approx(0.030)
     assert geometry.pitch_radius_m < geometry.ring_pin_circle_radius_m
 
     worst = 0.0
@@ -969,9 +969,12 @@ def test_the_output_pin_circle_cannot_be_opened_to_sixty():
     circle less the pin radius less the eccentricity, which is 37.5, and an
     output pin hole is the pin plus the eccentricity across its own radius.
 
-    At Ø50 that leaves a 5 mm web. At Ø60 it leaves 0.00 mm exactly: the hole
-    breaks out through the root. The tip and the root differ by twice the
-    eccentricity and that is the whole of the error.
+    At the eccentricity this was proposed against, 2.5 mm, the drawn Ø50
+    circle left a 5 mm web and Ø60 left 0.00 mm exactly. The eccentricity is
+    3.0 mm now, which moves the root in by half a millimetre, so the circle
+    is Ø48 for the same 5 mm web and Ø60 is a millimetre worse than it was.
+    The tip and the root differ by twice the eccentricity and that is the
+    whole of the error.
     """
     import dataclasses
 
@@ -983,8 +986,12 @@ def test_the_output_pin_circle_cannot_be_opened_to_sixty():
     assert geometry.output_web_m == pytest.approx(0.005, abs=1e-9)
 
     wider = dataclasses.replace(geometry, output_pin_circle_radius_m=0.030)
-    assert wider.output_web_m == pytest.approx(0.0, abs=1e-9)
+    assert wider.output_web_m == pytest.approx(-0.001, abs=1e-9)
     assert wider.output_web_m < MINIMUM_DISC_LIGAMENT_M
+
+    as_proposed = dataclasses.replace(geometry, eccentricity_m=0.0025,
+                                      output_pin_circle_radius_m=0.030)
+    assert as_proposed.output_web_m == pytest.approx(0.0, abs=1e-9)
 
 
 def test_the_eccentric_bearings_lever_is_the_pitch_radius_squared():
@@ -999,8 +1006,8 @@ def test_the_eccentric_bearings_lever_is_the_pitch_radius_squared():
     stiffness is the radial stiffness times (e * N) squared, and each disc
     brings its own bearing in parallel.
 
-    The lever is therefore the pitch radius, 25 mm, not the eccentricity,
-    2.5 mm. Those two readings differ by a hundred in the answer, which is
+    The lever is therefore the pitch radius, 30 mm, not the eccentricity,
+    3.0 mm. Those two readings differ by a hundred in the answer, which is
     why this is a test and not a comment.
     """
     from projects.manipulator.cycloidal import (
@@ -1012,7 +1019,7 @@ def test_the_eccentric_bearings_lever_is_the_pitch_radius_squared():
     stiffness = eccentric_bearing_stiffness_nm_rad(radial, geometry)
     assert stiffness == pytest.approx(
         radial * geometry.pitch_radius_m ** 2 * geometry.disc_count)
-    assert stiffness == pytest.approx(125_000.0, rel=1e-9)
+    assert stiffness == pytest.approx(180_000.0, rel=1e-9)
     assert required_bearing_stiffness_n_m(stiffness, geometry) == (
         pytest.approx(radial, rel=1e-9))
 
@@ -1025,12 +1032,14 @@ def test_the_reducers_torsion_clears_the_requirement_but_only_as_an_estimate():
     pins and the housing, with the discs' in plane shear alongside. Four
     terms have numbers and one, the eccentric bearing, has none.
 
-    241,801 N m/rad, a factor of 4.8. THIS REPLACES 682,012 AND A FACTOR OF
+    252,682 N m/rad, a factor of 5.0. THIS REPLACES 682,012 AND A FACTOR OF
     13.5 reported the same day, and the whole of the difference is in lever
     arms rather than loads: the ring pins were given their pin circle radius
     instead of the pitch radius bound, and the output pins were given a hand
     picked count of engaged pins at full radius instead of a load share
-    solved from their arms. Both errors made the drive look stiffer.
+    solved from their arms. Both errors made the drive look stiffer. The
+    corrected model first read 241,801, and raising K1 from 0.611 to 0.733
+    took it to 252,682 while cutting the bearing requirement by a third.
 
     It is a pass and it is not verified. Palmgren's approach is still a
     roller bearing relation applied to a cycloidal flank and to a pin in a
@@ -1047,19 +1056,20 @@ def test_the_reducers_torsion_clears_the_requirement_but_only_as_an_estimate():
     assert terms["output pin contact"] < terms["ring pin contact"]
     assert terms["ring pin contact"] < terms["housing, in torsion"]
     assert terms["housing, in torsion"] < terms["discs, in plane shear"]
+    assert stage.data["k1_factor"] == pytest.approx(0.7333, rel=1e-3)
 
     shares = {row["term"]: row["share_of_compliance"] for row in stage.rows}
     assert shares["output pin contact"] + shares["ring pin contact"] == (
-        pytest.approx(0.86, abs=0.02))
+        pytest.approx(0.85, abs=0.02))
 
     known = stage.data["known_terms_nm_rad"]
     assert known < min(terms.values())
-    assert known == pytest.approx(241_801, rel=0.01)
-    assert stage.data["margin_before_the_bearing"] == pytest.approx(4.77,
+    assert known == pytest.approx(252_682, rel=0.01)
+    assert stage.data["margin_before_the_bearing"] == pytest.approx(4.98,
                                                                     rel=0.02)
     assert stage.data[
         "eccentric_bearing_radial_stiffness_needed_n_m"] == pytest.approx(
-            5.13e7, rel=0.02)
+            3.52e7, rel=0.02)
     assert any("not a verified result" in item.lower()
                for item in stage.could_not)
 
@@ -1084,13 +1094,14 @@ def test_no_computed_floor_comes_near_the_discs_eight_millimetres():
     assert geometry.disc_thickness_m == CYCLOIDAL_DISC_THICKNESS_M
     floor = CYCLOIDAL_DISC_THICKNESS_M * required / disc_shear_stiffness_nm_rad(
         geometry)
-    assert floor == pytest.approx(2.8e-5, rel=0.05)
+    assert floor == pytest.approx(3.2e-5, rel=0.05)
     assert floor < CYCLOIDAL_DISC_THICKNESS_M / 100.0
     assert CYCLOIDAL_DISC_THICKNESS_BASIS.startswith("CHOSEN")
     assert "handling" in CYCLOIDAL_DISC_THICKNESS_BASIS
-    assert "0.940 mm" in CYCLOIDAL_DISC_THICKNESS_BASIS, (
+    assert "0.879 mm" in CYCLOIDAL_DISC_THICKNESS_BASIS, (
         "the contact floor moved from 0.292 to 0.940 when the lever arms "
-        "were corrected; the basis string has to carry the current number")
+        "were corrected, and to 0.879 when K1 rose; the basis string has to "
+        "carry the current number")
 
 
 def test_disc_shear_stiffness_is_linear_in_thickness():
@@ -1106,3 +1117,122 @@ def test_disc_shear_stiffness_is_linear_in_thickness():
     two = disc_shear_stiffness_nm_rad(dataclasses.replace(base,
                                                           disc_thickness_m=0.008))
     assert two == pytest.approx(2.0 * one, rel=1e-12)
+
+
+def test_the_eccentricity_is_not_a_free_variable():
+    """K1, and the band it has to stay inside.
+
+    Raising the eccentricity was the strongest lever available on this
+    reducer, because the pitch radius is the ring pins' moment arm bound and
+    the eccentric bearing's lever squared. But e is not free: it is K1 times
+    the pin circle radius over the pin count, and K1 carries the design band,
+    usually 0.5 to 0.75. 2.5 mm was 0.611 and 3.0 is 0.733, which takes the
+    pitch radius from 25 to 30 mm and stays inside. 3.5 mm would have been
+    0.856 and outside it.
+
+    The band is a convention this project has no source for, so what is
+    actually asserted is the thing the band stands in for: how much curvature
+    is left at the lobe tips before offsetting inward by the pin radius
+    undercuts the profile. That is computed from the envelope.
+    """
+    import dataclasses
+
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                undercut_margin_m)
+
+    geometry = CycloidalGeometry()
+    assert geometry.k1_factor == pytest.approx(
+        geometry.eccentricity_m * geometry.ring_pin_count
+        / geometry.ring_pin_circle_radius_m)
+    assert 0.5 <= geometry.k1_factor <= 0.75
+    assert geometry.pitch_radius_m == pytest.approx(0.030)
+
+    margins = []
+    for factor in (0.60, 0.75, 0.95, 1.05):
+        wider = dataclasses.replace(
+            geometry, eccentricity_m=factor * geometry.ring_pin_circle_radius_m
+            / geometry.ring_pin_count)
+        margins.append(undercut_margin_m(wider))
+    assert margins[0] > margins[1] > margins[2] > 0.0
+    assert margins[3] < 0.0, "the profile has to undercut somewhere past K1 = 1"
+    assert undercut_margin_m(geometry) == pytest.approx(0.0071, abs=0.0005)
+
+
+def test_raising_the_eccentricity_moves_the_bearings_two_loads_apart():
+    """The objection to raising e, answered with the arithmetic rather than
+    with a judgement.
+
+    Raising the eccentricity lowers the eccentric bearing's TANGENTIAL load,
+    which is T / (N e) straight from power, and raises its RADIAL load,
+    because the pressure angle grows with K1. The two have opposite signs and
+    only the numbers say which wins. They very nearly cancel: across the band
+    the resultant moves by a few percent while the requirement on the
+    bearing's stiffness falls by a third.
+
+    And the radial share does not touch the stiffness at all. Only the
+    tangential deflection turns the output, and an isotropic radial stiffness
+    has no cross term between the two directions.
+    """
+    import dataclasses
+
+    import numpy as np
+
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                eccentric_bearing_load_n)
+
+    torque = 22.76
+    tighter = dataclasses.replace(CycloidalGeometry(), eccentricity_m=0.0025,
+                                  output_pin_circle_radius_m=0.025)
+    looser = CycloidalGeometry()
+
+    def worst(geometry):
+        rows = [eccentric_bearing_load_n(geometry, torque, float(angle))
+                for angle in np.linspace(0.0, 2.0 * np.pi / 11.0, 16)]
+        return max(rows, key=lambda row: row["magnitude_n"])
+
+    low, high = worst(tighter), worst(looser)
+    assert high["tangential_n"] < low["tangential_n"]
+    assert high["radial_n"] > low["radial_n"]
+    assert high["magnitude_n"] < 1.05 * low["magnitude_n"]
+
+    for row, geometry in ((low, tighter), (high, looser)):
+        assert row["tangential_n"] == pytest.approx(row["power_estimate_n"],
+                                                    rel=0.02), (
+            "the tangential component has to agree with T / (N e), which is "
+            "the independent check on the whole force model")
+
+
+def test_the_orbiting_discs_leave_a_couple_too_small_to_design_for():
+    """Checked because it was raised, and it is not a factor AT THIS SPEED.
+
+    Two discs at 180 degrees cancel each other's centrifugal force and leave
+    a rocking couple, m e omega squared times their spacing. The arm's own
+    duty is 90 degrees in 2 seconds, so a joint turns at about 1.2 rad/s at
+    its trapezoidal peak and the reducer input at ten times that. The couple
+    comes out under a thousandth of a newton metre against a 23.35 N m peak
+    joint torque.
+
+    The speed is the whole of the reason. A reducer running its input at a
+    few thousand rpm would see this term four orders larger, so the finding
+    is written with its operating point attached and not as a general one.
+    """
+    import numpy as np
+
+    from projects.manipulator.cycloidal import (CycloidalGeometry,
+                                                orbit_couple_nm)
+
+    geometry = CycloidalGeometry()
+    mass = 7850.0 * np.pi * (geometry.disc_tip_radius_m ** 2 - 0.015 ** 2) * (
+        geometry.disc_thickness_m)
+    assert mass == pytest.approx(0.31, abs=0.02)
+
+    joint_speed = 1.5 * (SPEC.move_angle_rad / SPEC.move_time_s)
+    couple = orbit_couple_nm(geometry, geometry.ratio * joint_speed, mass,
+                             0.009)
+    assert couple == pytest.approx(0.0012, abs=0.0002)
+    assert couple < 1.0e-4 * 23.35
+
+    fast = orbit_couple_nm(geometry, 300.0, mass, 0.009)
+    assert fast > 100.0 * couple, (
+        "the conclusion is about this operating point and has to fail at a "
+        "high speed input, or it is not saying anything")
