@@ -312,6 +312,18 @@ CUBEMARS_AK70_10 = SourceDocument(
     url="https://www.cubemars.com/product/ak70-10-kv100-robotic-actuator.html",
     read_on="2026-09-04")
 
+CUBEMARS_GL100 = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="GL100 gimbal motor product page",
+    url="https://www.cubemars.com/product/gl100-gimbal-motor.html",
+    read_on="2026-09-05")
+
+CUBEMARS_GL100_DRAWING = SourceDocument(
+    publisher="CubeMars (T-Motor)",
+    title="GL100 Gimbal Motor 2D drawing",
+    url="https://www.cubemars.com/data/cms/202602/gl100-gimbal-motor-2d-drawing.pdf",
+    read_on="2026-09-05", kind=DocumentKind.MANUFACTURER_DATASHEET)
+
 CUBEMARS_AK60_6 = SourceDocument(
     publisher="CubeMars (T-Motor)",
     title="AK60-6 V3.0 KV80 actuator product page",
@@ -488,6 +500,56 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "2026-09-05 and prints backlash, inertia and back drive "
                "torque but no stiffness, so it is withheld rather than "
                "unmeasured.")),
+    SourcedMotor(
+        id="cubemars_gl100",
+        manufacturer="CubeMars", part_number="GL100 gimbal motor",
+        documents=[CUBEMARS_GL100, CUBEMARS_GL100_DRAWING],
+        grade=PartGrade.ROBOTICS_MODULE, bus_voltage_v=24.0,
+        peak_torque_condition="printed without a duration or duty",
+        nominal_voltage_v=24.0,
+        nominal_torque_nm=3.0,
+        peak_torque_nm=7.7,
+        no_load_speed_rad_s=223.0 * RPM_TO_RAD_S,
+        nominal_speed_rad_s=130.0 * RPM_TO_RAD_S,
+        mass_kg=0.698,
+        outer_diameter_m=0.1068,
+        axial_length_m=0.0342,
+        rotor_bore_m=0.030,
+        rated_current_a=2.9,
+        peak_current_a=7.8,
+        torque_constant_nm_a=1.030,
+        value_sources=[
+            ValueSource("nominal_torque_nm", "Rated Torque 3 N.m", CUBEMARS_GL100.title),
+            ValueSource("peak_torque_nm", "Peak Torque 7.7 N.m", CUBEMARS_GL100.title),
+            ValueSource("no_load_speed_rad_s", "No-load Speed 223 rpm", CUBEMARS_GL100.title),
+            ValueSource("nominal_speed_rad_s", "Rated Speed 130 rpm", CUBEMARS_GL100.title),
+            ValueSource("mass_kg", "Weight 698 g", CUBEMARS_GL100.title),
+            ValueSource("torque_constant_nm_a", "Kt 1.030 N.m/A", CUBEMARS_GL100.title),
+            ValueSource("rated_current_a", "Rated Current 2.9 A", CUBEMARS_GL100.title),
+            ValueSource("peak_current_a", "Peak Current 7.8 A", CUBEMARS_GL100.title),
+            ValueSource("outer_diameter_m", "the drawing dimensions the outer circle 106.8", CUBEMARS_GL100_DRAWING.title),
+            ValueSource("axial_length_m", "the drawing's section dimensions 34.2 overall", CUBEMARS_GL100_DRAWING.title),
+            ValueSource("rotor_bore_m", "the drawing dimensions the central through hole 30", CUBEMARS_GL100_DRAWING.title),
+        ],
+        notes=("A GIMBAL MOTOR, not an actuator: no gearbox, no housing to "
+               "bolt a link to, and no bearing that can take a joint's "
+               "moment. It is here because its drawing dimensions every "
+               "feature a reducer has to mate with, which the frameless "
+               "motors' selection guide does not.\n\n"
+               "The drawing prints, on one face, 4-M4 depth 3.5 on a 50 mm "
+               "circle around a 30 mm through bore; on the other, 4-M4 depth "
+               "6 on 60 and 6-M2.5 depth 4 on 100, with the three phase "
+               "solder pads marked at one position. Section 34.2 overall, "
+               "33.7 to a step, 106.8 outside over 104.8.\n\n"
+               "WHICH FACE TURNS IS AN INFERENCE, not a label: the drawing "
+               "names neither. The face carrying the phase solder pads has "
+               "to be the stationary one, because the windings are on it. "
+               "That is physics rather than a printed word, and it is "
+               "written here as an inference so that nobody later reads it "
+               "as a dimension.\n\n"
+               "NO ROTOR INERTIA IS PUBLISHED, so no inertia ratio can be "
+               "computed for a joint built on it."),
+        ),
     SourcedMotor(
         id="cubemars_ak60_6_v3_kv80",
         manufacturer="CubeMars", part_number="AK60-6 V3.0 KV80",
