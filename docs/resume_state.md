@@ -62,7 +62,7 @@ check in this repository.
 | mounting interfaces | `projects/manipulator/interfaces.py`, from CubeMars 2D drawings and their own 3D models. Bolt circles, thread depths, face insets, clock angles, dowels, and what each drawing does NOT print |
 | placement | every drive's output face lies in the arm's z = 0 plane and each link sits on the far side of whichever faces it bolts to. Three links are unions of a centred and an offset box, which is a crank, and each holds every other link's box empty |
 | links | `projects/manipulator/links.py`, `scripts/generate_links.py`. Six bodies in millimetres, watertight, clipped to their domains, with clearance holes, bores and dowels cut after extraction |
-| mounts | `projects/manipulator/mounts.py`, `scripts/generate_mounts.py`. Base mount 1.372 kg, tool plate 0.576 kg |
+| mounts | `projects/manipulator/mounts.py`, `scripts/generate_mounts.py`. Base mount 1.372 kg, tool plate 0.576 kg. THOSE TWO FILES ON DISK PREDATE A BREAK: the generator has been unable to run since `cut_holes` started reading endpoints, so they are stale artefacts until it is run again |
 | spigot and friction | `spigot_stage`: no friction coefficient is assumed, the coefficient the joint NEEDS is reported. Worst joint 0.027; dowel bearing 66.3 N m against a 22.6 N m shoulder peak |
 | assembly access | `scripts/check_assembly_access.py`: every drive comes out along its axis and none of the 120 bolt holes is blocked |
 | build volume | EOS M 290, 250 x 250 x 325 mm as printed. The upper arm is 238.7 on its TIGHTEST axis, so 11.3 mm spare there, and 291.0 on its longest, which is past the 250 mm bed. It fits only lying along the build height, which the sheet says includes the platform and is application dependent |
@@ -216,6 +216,68 @@ floors, the largest still an order of magnitude under 8 mm. The thickness is
 CHOSEN, for what a wire cut disc can be handled, stacked and kept flat at,
 which this repository cannot compute and no longer pretends to.
 
+THE OUT OF PLANE BUDGET IS THE BASE YAW'S, and it is nearly all of it.
+`out_of_plane_stage`. The split between the two budgets is not the same at
+every joint and it turns on nothing but which way the axis points. At the
+shoulder, elbow and wrist pitch the gravity moment lies exactly ALONG the
+joint axis, so the bearing cannot resist it and the drive train carries it.
+At the base yaw the axis is vertical and the gravity moment is exactly
+PERPENDICULAR to it, so the drive train never sees it and the bearing carries
+all of it. Same arm, same gravity, opposite answers.
+
+The whole arm stands on the base yaw and the tool is 618.5 mm away along the
+hypotenuse of the reach and the base height, so that bearing's tilt goes
+straight into the tip at full lever. At 43.28 N m of overturning:
+
+| tip allowance | required tilt stiffness | against the 1.7e6 upper bound |
+|---|---:|---:|
+| 0.02 mm | 1,338,441 | 79% |
+| 0.04 mm | 669,221 | 39% |
+| 0.08 mm | 334,610 | 20% |
+| 0.10 mm | 267,688 | 16% |
+
+What is already in the way of it: the housing shell IN BENDING is 2,620,553
+N m/rad and the ring of eight M3 on the 85 mm circle is 581,468 with NO
+PRELOAD, which is 475,877 in series. That is under the 0.04 mm figure BEFORE
+any bearing is added. So a 0.04 mm allowance at the tip is not clearly
+affordable and a 0.08 mm one probably is. That is a narrower question than
+the one this started as, and it is as far as it goes without a preload
+figure and a bearing curve at this arm's operating moment.
+
+The bolt ring number is a LOWER BOUND, treating each bolt as E A / L with no
+preload, which is the case where the faces have already parted. A preloaded
+joint whose faces stay closed carries the moment through face contact and
+that term mostly disappears into the housing. No preload is specified
+anywhere in this design. The presser flange THK names as its third
+contributor is not in the calculation at all, because none has been
+designed.
+
+The other joints' out of plane loads are small and the size is written down
+rather than the word negligible. Gravity contributes nothing at the shoulder,
+elbow or wrist pitch. What is left is the payload's own z offset, which
+exists only because the payload is a stated 100 mm cube, worth 1.47 N m, and
+the sideways force the base yaw makes while accelerating, worth 0.47 N m.
+Under 2 N m against 43.3, a factor of twenty two.
+
+A DOCUMENTED RESERVE rather than an open question. Opening the cycloidal ring
+pin circle from 45 to 48 mm at the same K1 gives 275,497 N m/rad instead of
+252,682 and drops the eccentric bearing requirement from 3.52e7 to 2.90e7
+N/m, but costs about 6 mm on the joint's outside diameter, and 6 mm on a
+joint sets the link section, the section sets mass, and mass returns as
+torque. The trigger is written into `RING_PIN_CIRCLE_RESERVE`: if a measured
+eccentric bearing comes in under 3.52e7 N/m radial, move to the 48 mm circle.
+Until then the requirement is an order of magnitude under what a needle
+roller is usually worth and the 6 mm buys nothing.
+
+Every stage that reports a stiffness now says WHICH stiffness in its first
+paragraph, and a test asserts it. This is the fix for the mistake made twice
+in one day: a bending stiffness was computed, called the joint stiffness, and
+used to conclude the bearing was the whole of it. The number was right and
+the question was the wrong one. `compliance_stage` had a one line docstring
+and no scope at all; it is torsional, off the gear units' own sheets, and its
+tool error is an upper bound because it uses the full lever rather than the
+component perpendicular to the axis.
+
 On the out of plane side, THK's A18-1 page 18 carries NO FORMULA, only the
 diagram, and it prints two conditions that both matter. The diagram's
 condition is RADIAL CLEARANCE ZERO, so it is neither a preloaded nor a
@@ -272,6 +334,17 @@ Defects found by standing the parts up, none of which a check here could see:
   itself passed throughout, because it uses the joint origins; the wrong
   number lived only inside the deflection weighting and appeared the moment
   that was written. A right length and a wrong reach.
+- `cut_holes` took a height and a width and used NEITHER, and that dead
+  pair is what hid a broken caller. When every cutter started carrying its
+  own endpoints, so a shoulder's bolt circle would stop being drilled
+  sideways through the link, the mount generator was not changed with it. It
+  went on describing its holes by a y, a z and two x values that the cutter
+  no longer reads, while still passing its height and width to a function
+  that had stopped using them. The call therefore looked complete and raised
+  a KeyError on the first hole. Nothing in the signature said otherwise, and
+  the only thing that found it was a test that actually generates a mount, 17
+  minutes of it. The two parameters are gone now, and the mount holes are
+  pinned by their coordinates rather than by their count.
 - The build volume test pinned 238.7 mm as the widest part, and 238.7 was
   right about the MARGIN and wrong about the AXIS. When the crossing axis
   rule put a drive's bolt circle inside the domain, the upper arm's long

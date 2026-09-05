@@ -582,7 +582,7 @@ def test_a_drive_is_subtracted_from_the_body_not_merely_avoided():
                  "start_m": [0.05, 0.05, -0.02],
                  "end_m": [0.05, 0.05, 0.12],
                  "y_m": 0.0, "z_m": 0.0, "x0_m": 0.0, "x1_m": 0.0}]
-    cut, report = cut_holes(block, envelope, 0.1, 0.1, scale=1000.0)
+    cut, report = cut_holes(block, envelope, scale=1000.0)
     assert cut.is_watertight
     # A 40 mm bore through a 100 mm cube takes pi r squared h out of it.
     removed = float(abs(block.volume) - abs(cut.volume))
@@ -1236,3 +1236,109 @@ def test_the_orbiting_discs_leave_a_couple_too_small_to_design_for():
     assert fast > 100.0 * couple, (
         "the conclusion is about this operating point and has to fail at a "
         "high speed input, or it is not saying anything")
+
+
+def test_the_base_yaws_gravity_moment_is_perpendicular_to_its_axis():
+    """The mirror image of the shoulder, and the reason there are two budgets.
+
+    At the shoulder the gravity moment lies exactly ALONG the joint axis, so
+    the bearing cannot resist it and the drive train does. At the base yaw
+    the axis is vertical and the gravity moment is exactly PERPENDICULAR to
+    it, so the drive train never sees it and the bearing carries all of it.
+
+    Same arm, same gravity, opposite answers, turning on nothing more than
+    which way the axis points. A stage that computes "the joint stiffness"
+    without saying which of the two it means is wrong at half the joints, and
+    that is what happened here once already.
+    """
+    axis = np.array([0.0, 1.0, 0.0])
+    lever = np.array([SPEC.reach_m, SPEC.base_height_m, 0.0])
+    moment = np.cross(lever, np.array([0.0, -1.0, 0.0]))
+    along = float(np.dot(moment / np.linalg.norm(moment), axis))
+    assert abs(along) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_the_base_yaws_structure_alone_misses_a_forty_micron_allowance():
+    """The out of plane requirement, and what is already in the way of it.
+
+    The whole arm stands on the base yaw and the tool is 618.5 mm off along
+    the hypotenuse of the reach and the base height, so the bearing's tilt
+    multiplies straight into the tip. At 43.3 N m of overturning a 0.04 mm
+    allowance asks 669,221 N m/rad and a 0.08 mm one asks 334,610.
+
+    The housing shell in bending gives 2.62 million and the ring of eight M3
+    on the 85 mm circle gives 581,468 with no preload, which is 475,877 in
+    series. That is already under the 0.04 mm figure BEFORE any bearing is
+    added, so a 0.04 mm allowance is not clearly affordable and a 0.08 mm one
+    probably is. That is narrower than the question this started as and it is
+    as far as it can be taken without a preload and a bearing curve.
+    """
+    from projects.manipulator.stages import out_of_plane_stage
+
+    stage = out_of_plane_stage()
+    assert stage.data["overturning_nm"] == pytest.approx(43.28, rel=0.01)
+    assert stage.data["lever_m"] == pytest.approx(0.6185, rel=0.001)
+
+    required = {row["tip_allowance_m"]: row["stiffness_nm_rad"]
+                for row in stage.rows}
+    assert required[4.0e-5] == pytest.approx(669_221, rel=0.01)
+    assert required[8.0e-5] == pytest.approx(334_610, rel=0.01)
+
+    structure = stage.data["structure_lower_bound_nm_rad"]
+    assert structure == pytest.approx(475_877, rel=0.01)
+    assert structure < required[4.0e-5]
+    assert structure > required[8.0e-5]
+    assert any("LOWER BOUND" in item for item in stage.could_not)
+    assert any("presser flange" in item for item in stage.could_not)
+
+
+def test_the_pitch_joints_out_of_plane_load_is_twenty_times_smaller():
+    """Measured rather than dismissed, because negligible is not a number.
+
+    Gravity makes NO out of plane moment at the shoulder, elbow or wrist
+    pitch, since it lies along those axes. What is left is the payload's own
+    z offset, which exists only because the payload is a stated 100 mm cube,
+    and the sideways force the base yaw makes while it accelerates. Together
+    they are under 2 N m against the base yaw's 43.3.
+    """
+    gravity = 9.80665
+    offset = 0.5 * SPEC.payload_extent_m
+    payload = float(np.linalg.norm(np.cross(
+        np.array([0.0, 0.0, offset]),
+        np.array([0.0, -SPEC.payload_kg * gravity, 0.0]))))
+    assert payload == pytest.approx(1.471, rel=0.01)
+
+    from projects.manipulator.stages import out_of_plane_stage
+
+    stage = out_of_plane_stage()
+    assert payload + 0.4737 < stage.data["overturning_nm"] / 20.0
+
+
+def test_every_stage_that_reports_a_stiffness_says_which_one():
+    """The check that would have caught the mistake this session made twice.
+
+    A bending stiffness was computed, called the joint stiffness, and used to
+    conclude that the bearing was the whole of it. The number was right and
+    the question was the wrong one. The fix is not a better number, it is a
+    docstring that says what the value is a value OF before it says anything
+    else, so the next reader cannot take it for the other quantity.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path("projects/manipulator/stages.py").read_text()
+    wanted = {"compliance_stage", "joint_stiffness_stage",
+              "joint_torsion_stage", "out_of_plane_stage",
+              "joint_module_stiffness_stage"}
+    seen = set()
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.FunctionDef) or node.name not in wanted:
+            continue
+        seen.add(node.name)
+        doc = ast.get_docstring(node) or ""
+        opening = doc[:900]
+        assert any(word in opening for word in
+                   ("TORSIONAL", "OUT OF PLANE", "along the joint axis",
+                    "ACROSS", "SCOPE")), (
+            f"{node.name} does not say which stiffness it means")
+    assert seen == wanted

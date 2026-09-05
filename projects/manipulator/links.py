@@ -670,7 +670,7 @@ def generate_link(spec: ManipulatorSpec, link_index: int,
     holes, unresolved = mounting_holes(spec, link_index, drives, span,
                                        height_m=height, width_m=width,
                                        box=mine)
-    body, hole_report = cut_holes(body, holes + envelopes, height, width,
+    body, hole_report = cut_holes(body, holes + envelopes,
                                   scale=EXPORT_SCALE)
     after_mm3 = float(abs(body.volume))
     body.export(str(out_dir / f"{link.name}.stl"))
@@ -1237,9 +1237,18 @@ def add_solids(body, solids, scale: float = 1.0, sections: int = 48):
     return body, report
 
 
-def cut_holes(body, holes: list[dict], height_m: float, width_m: float,
-              scale: float = 1.0, sections: int = 24):
+def cut_holes(body, holes: list[dict], scale: float = 1.0,
+              sections: int = 24):
     """Subtract the holes from the extracted body.
+
+    IT TOOK A HEIGHT AND A WIDTH AND USED NEITHER. They were left behind
+    when every cutter started carrying its own endpoints, and a dead
+    parameter is worse than no parameter: the mount generator went on
+    passing its own height and width, which made the call look like it had
+    supplied the geometry, while the coordinates the function actually reads
+    were missing entirely. It failed with a KeyError on the first hole, and
+    only because a test generated a mount. Nothing about the signature said
+    anything was wrong.
 
     The holes are cut AFTER the optimisation, not held void during it. A 3.4
     mm clearance hole is under half an element on this grid, so the density

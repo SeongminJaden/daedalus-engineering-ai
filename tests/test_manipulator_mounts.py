@@ -57,12 +57,12 @@ def test_the_world_side_pattern_is_a_square_of_four_and_is_a_choice():
     it holds, so these two patterns are CHOSEN. They are the first thing a
     real installation replaces, and the design says so rather than presenting
     them as sourced."""
-    floor = _world_holes("floor", 0.060, 0.009)
+    floor = _world_holes("floor", 0.060, 0.009, 0.140, 0.140)
     assert len(floor) == 4
     assert {round(abs(h["y_m"]), 6) for h in floor} == {
         round(0.5 * FLOOR_BOLT_SQUARE_M, 6)}
     assert {h["thread"] for h in floor} == {"M8"}
-    tool = _world_holes("tool", 0.040, 0.009)
+    tool = _world_holes("tool", 0.040, 0.009, 0.090, 0.090)
     assert {round(abs(h["z_m"]), 6) for h in tool} == {
         round(0.5 * TOOL_BOLT_SQUARE_M, 6)}
     assert {h["thread"] for h in tool} == {"M5"}
@@ -108,3 +108,55 @@ def test_the_base_mount_generates_and_keeps_both_its_faces():
         assert made.mass_kg > 0.0
         assert any("CHOSEN" in note for note in made.notes)
         assert made.unresolved
+
+
+def test_a_mounts_holes_are_where_the_pattern_says_and_go_through_the_plate():
+    """A position check, because the count check could not see this break.
+
+    `cut_holes` was changed so that every cutter carries its own endpoints,
+    which is what let a shoulder's bolt circle stop being drilled sideways
+    through the link. The mount generator was not changed with it. It went on
+    describing its holes by a y, a z and two x values, which the cutter no
+    longer reads, and it went on passing a height and a width to a function
+    that had stopped using them. So the call still looked complete and it
+    raised a KeyError on the first hole.
+
+    The dead parameters are gone now, so a caller cannot supply plausible
+    arguments and believe it has given the geometry. This test asserts the
+    coordinates themselves: the actuator side on the drawing's own bolt
+    circle, the world side on the square that is CHOSEN, both centred in the
+    part, and every hole running clear through the plate it goes into.
+    """
+    from projects.manipulator.interfaces import bolt_holes, face_for
+    from projects.manipulator.mounts import _world_holes
+
+    height = width = 0.140
+    length, plate = 0.060, SPEC.flange_thickness_m
+    centre = np.array([0.5 * height, 0.5 * width])
+
+    world = _world_holes("floor", length, plate, height, width)
+    assert len(world) == 4
+    for hole in world:
+        start = np.asarray(hole["start_m"])
+        end = np.asarray(hole["end_m"])
+        assert np.allclose(start[1:], end[1:]), "the hole has to run along x"
+        offset = np.abs(start[1:] - centre)
+        assert np.allclose(offset, 0.5 * FLOOR_BOLT_SQUARE_M)
+        assert start[0] < length - plate and end[0] > length
+
+    face = face_for("cubemars_ak80_64_kv80", "housing")
+    for hole in bolt_holes(face):
+        position = centre + np.array([hole["y_m"], hole["z_m"]])
+        radius = float(np.linalg.norm(position - centre))
+        assert radius == pytest.approx(0.5 * hole["bolt_circle_m"])
+        assert np.all(position > 0.0) and np.all(position < height)
+
+
+def test_cut_holes_no_longer_takes_the_two_arguments_it_ignored():
+    """The signature is the fix, so the signature is what is pinned."""
+    import inspect
+
+    from projects.manipulator.links import cut_holes
+
+    parameters = list(inspect.signature(cut_holes).parameters)
+    assert parameters == ["body", "holes", "scale", "sections"]

@@ -16,6 +16,8 @@ import numpy as np
 from core.assembly import Assembly
 from core.assembly.statics import joint_torques
 from core.materials import get_material
+from projects.manipulator.interfaces import AK80_64_HOUSING
+from projects.manipulator.mounts import base_mount_loads
 from projects.manipulator.cycloidal import (CycloidalGeometry,
                                             disc_shear_stiffness_nm_rad,
                                             eccentric_bearing_load_n,
@@ -1026,7 +1028,20 @@ def drive_comparison_stage(drivetrain: StageResult, spec: ManipulatorSpec = SPEC
 
 def compliance_stage(arm: Assembly, drivetrain: StageResult,
                      spec: ManipulatorSpec = SPEC) -> StageResult:
-    """Joint compliance and backlash, now that the gear units print them."""
+    """TORSIONAL compliance and backlash, from what the gear units print.
+
+    SCOPE, because a stage that does not state one gets misused and this
+    project has now done that twice. Every stiffness here is
+    `torsional_stiffness_nm_rad` off a gear unit's own sheet, so it is about
+    twist ALONG the joint axis. Moments ACROSS the joint are a different
+    load path through a different part and they are in `out_of_plane_stage`.
+
+    The tool error is the twist times the full distance from the joint to
+    the tool, which is an upper bound rather than the true displacement: only
+    the component of that lever perpendicular to the joint axis actually
+    moves the tool. It is left as the upper bound deliberately, since the
+    stage's purpose is to say whether a printed compliance matters at all.
+    """
     import numpy as np
 
     from core.assembly.kinematics import forward_kinematics
@@ -1630,7 +1645,14 @@ TIP_DEFLECTION_STATUS = "UNVERIFIED: not met, not missed, undecidable"
 def joint_stiffness_stage(dynamics: StageResult, drivetrain: StageResult,
                           arm: Assembly, spec: ManipulatorSpec = SPEC,
                           margin: float = 0.8) -> StageResult:
-    """What joint stiffness this arm would NEED, since none is published.
+    """What TORSIONAL joint stiffness this arm would NEED, since none is published.
+
+    SCOPE. This is stiffness about the joint axis, which is what the tool's
+    sag at full reach draws on at the shoulder, elbow and wrist pitch,
+    because at those three the gravity moment lies exactly along the axis.
+    It is NOT the base yaw's number: there the axis is vertical and the
+    gravity moment is perpendicular to it, so the bearing carries it and
+    `out_of_plane_stage` is where that lives.
 
     THE DEFLECTION NUMBERS IN THIS DESIGN ARE LINK ELASTICITY ONLY. Six
     actuators sit between the links and every one of them has been treated as
@@ -2065,10 +2087,163 @@ def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
     return result
 
 
+#: ISO 898-1 tensile stress areas, for the bolts this project already uses.
+TENSILE_STRESS_AREA_M2 = {"M3": 5.03e-6, "M4": 8.78e-6, "M5": 14.2e-6}
+
+#: A DOCUMENTED RESERVE, not an open question. Opening the cycloidal ring pin
+#: circle from 45 to 48 mm at the same K1 gives 275,497 N m/rad instead of
+#: 252,682, nine percent, and drops the eccentric bearing requirement from
+#: 3.52e7 to 2.90e7 N/m, eighteen percent. It is not taken, because the pins'
+#: outer edge would then stand at 53.0 mm against a 53.4 mm motor radius and
+#: the ring body has to go outside them, so it costs about six millimetres on
+#: the joint's outside diameter. Six millimetres on a joint sets the link
+#: section, the link section sets mass, and mass returns as torque, so the
+#: real price is another turn of that loop.
+#:
+#: The trigger is written down so the decision is already made when a number
+#: arrives: if a real eccentric bearing comes in under 3.52e7 N/m radial,
+#: move to the 48 mm circle. Until then the requirement is an order of
+#: magnitude under what a needle roller is usually worth and the six
+#: millimetres buys nothing.
+RING_PIN_CIRCLE_RESERVE = (
+    "If the eccentric bearing's measured radial stiffness comes in under "
+    "3.52e7 N/m, open the ring pin circle from 45 to 48 mm: +9 percent on the "
+    "drive train stiffness, -18 percent on the bearing requirement, +6 mm on "
+    "the joint outside diameter")
+
+
+def bolt_ring_tilt_stiffness_nm_rad(thread: str, count: int,
+                                    bolt_circle_m: float, grip_m: float,
+                                    modulus_pa: float = 200e9) -> float:
+    """Tilt stiffness of a ring of bolts, WITH NO PRELOAD. A lower bound.
+
+    Each bolt is a spring of E A / L along the axis, and a ring of them
+    resists tilt with the sum of the squares of their distances from the tilt
+    axis, which for an even ring is count times the radius squared over two.
+
+    This is the worst case and it is the only case this project can compute.
+    A preloaded joint whose faces stay closed carries the moment through face
+    contact instead, and then this term largely disappears into the housing's
+    own stiffness. Which end the truth sits at depends on a preload that has
+    not been specified here, so the answer is a range and it is reported as
+    one.
+    """
+    area = TENSILE_STRESS_AREA_M2[thread]
+    return modulus_pa * area / grip_m * count * bolt_circle_m ** 2 / 8.0
+
+
+def out_of_plane_stage(spec: ManipulatorSpec = SPEC,
+                       arm_mass_kg: float = 8.712,
+                       base_yaw_peak_nm: float = 0.4737) -> StageResult:
+    """The OTHER half of the deflection budget, and j1 is nearly all of it.
+
+    THIS STAGE IS ABOUT MOMENTS ACROSS A JOINT, the ones a joint bearing
+    actually resists. `joint_torsion_stage` is about moments along the joint
+    axis, which a bearing cannot resist and the drive train has to. Both are
+    tip deflection. They are different load paths through different parts and
+    neither substitutes for the other.
+
+    The interesting thing is that the split is not the same at every joint.
+    At the shoulder, elbow and wrist pitch the gravity moment lies exactly
+    along the joint axis, so it is entirely the drive train's. At the base
+    yaw the axis is vertical and the gravity moment is exactly PERPENDICULAR
+    to it, so it is entirely the bearing's. Same arm, same gravity, opposite
+    answers, and it turns on nothing more than which way the axis points.
+
+    So the base yaw's tilt goes straight into the tip. The whole arm stands
+    on it, and the tool is 618.5 mm away along the hypotenuse of the reach
+    and the base height, so a tilt angle multiplies by that lever.
+    """
+    result = StageResult(name="out of plane, which is the base yaw's budget")
+    loads = base_mount_loads(arm_mass_kg, spec.payload_kg, base_yaw_peak_nm,
+                             spec)
+    moment = loads["overturning_nm"]
+    lever = float(np.hypot(spec.reach_m, spec.base_height_m))
+    result.data["overturning_nm"] = moment
+    result.data["lever_m"] = lever
+
+    for allowance_mm in (0.02, 0.04, 0.08, 0.10):
+        needed = moment * lever / (allowance_mm * 1e-3)
+        result.rows.append({
+            "term": f"required at {allowance_mm:.2f} mm of tip drop",
+            "tip_allowance_m": allowance_mm * 1e-3,
+            "stiffness_nm_rad": needed,
+            "share_of_catalogue_upper_bound": needed / 1.7e6})
+
+    #: What is actually in hand, against those.
+    modulus = get_material(spec.materials["link"]).youngs_modulus_pa
+    shell = modulus * np.pi * (0.5 * HOUSING_DIAMETER_M) ** 3 * HOUSING_WALL_M         / HOUSING_LENGTH_M
+    pattern = AK80_64_HOUSING.patterns[0]
+    grip = spec.flange_thickness_m + 0.5 * pattern.thread_depth_m
+    bolts = bolt_ring_tilt_stiffness_nm_rad(pattern.thread, pattern.count,
+                                            pattern.bolt_circle_m, grip)
+    structure = 1.0 / (1.0 / shell + 1.0 / bolts)
+    result.data["housing_shell_nm_rad"] = shell
+    result.data["bolt_ring_lower_bound_nm_rad"] = bolts
+    result.data["structure_lower_bound_nm_rad"] = structure
+
+    at_four = moment * lever / 4.0e-5
+    at_eight = moment * lever / 8.0e-5
+    result.notes.append(
+        f"the base yaw carries {moment:.1f} N m of overturning at full reach "
+        f"and the tool is {lever * 1000:.1f} mm away, so an allowance of "
+        f"0.04 mm at the tip asks {at_four:,.0f} N m/rad and 0.08 mm asks "
+        f"{at_eight:,.0f}. Against the 1.7e6 an RB10020 shows on THK 382-5E "
+        f"page 16 those are {at_four / 1.7e6:.0%} and {at_eight / 1.7e6:.0%}, "
+        f"and that 1.7e6 is an upper bound read at 0.4 kN m where this arm "
+        f"works under five percent along the chart")
+    result.notes.append(
+        f"the structure around the bearing is not negligible here, which is "
+        f"the point THK makes itself. The housing shell in BENDING is "
+        f"{shell:,.0f} N m/rad and the ring of {pattern.count} {pattern.thread} "
+        f"on a {pattern.bolt_circle_m * 1000:.0f} mm circle is {bolts:,.0f} "
+        f"with NO PRELOAD, giving {structure:,.0f} in series. That is already "
+        f"under the {at_four:,.0f} a 0.04 mm allowance asks, before the "
+        f"bearing is added at all")
+    result.notes.append(
+        "the other joints' out of plane loads are small and it is worth "
+        "saying by how much rather than saying negligible. Gravity makes no "
+        "out of plane moment at the shoulder, elbow or wrist pitch at all, "
+        "because it lies along their axes. What is left is the payload's own "
+        "z offset, a stated 100 mm cube so 50 mm of arm, worth 1.47 N m, and "
+        "the sideways force the base yaw makes while accelerating, worth "
+        "0.47 N m. Together under 2 N m against the base yaw's 43.3, a factor "
+        "of twenty two")
+    result.could_not.append(
+        "The bolt ring figure is a LOWER BOUND and the only one this project "
+        "can compute. It treats each bolt as E A / L with no preload, which "
+        "is the case where the faces have already parted. A preloaded joint "
+        "whose faces stay closed carries the moment through face contact and "
+        "this term mostly disappears into the housing. No preload is "
+        "specified anywhere in this design, so the true structural stiffness "
+        "is somewhere between that lower bound and the shell alone, and "
+        "which end it sits at is not decidable here.")
+    result.could_not.append(
+        "The presser flange THK names as the third contributor is not in "
+        "this calculation because no presser flange has been designed. So "
+        "the structural number is optimistic by an unknown amount even at "
+        "its upper end.")
+    result.could_not.append(
+        "The overturning moment is a FLOOR, not the final number. It uses "
+        "the loop's parametric structure estimate of 4.802 kg, and the "
+        "topology generated links come out heavier: four of the six already "
+        "weigh 3.544 kg at a volume fraction of 0.3 with the upper arm and "
+        "forearm still to land. So the requirement above will rise when the "
+        "generation finishes, and it rises in the direction that is already "
+        "difficult.")
+    result.could_not.append(
+        "No bearing stiffness is known at this arm's operating moment. The "
+        "requirement is decidable and the answer is not. What this stage "
+        "establishes is that a 0.04 mm allowance at the tip is NOT clearly "
+        "affordable and a 0.08 mm one probably is, which is a narrower "
+        "question than the one it started with.")
+    return result
+
+
 def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,
                                  required_nm_rad: float = 50_689.0
                                  ) -> StageResult:
-    """Which part of a built joint decides its stiffness.
+    """Which part of a built joint decides its OUT OF PLANE stiffness.
 
     READ THE SCOPE OF THIS STAGE FIRST. Every number below uses E and a
     BENDING second moment, so what it computes is the housing's resistance to

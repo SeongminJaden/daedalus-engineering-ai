@@ -159,19 +159,34 @@ def _mount_cases(mesh, loads: dict, height_m: float, width_m: float
                  weight=1.0)]
 
 
-def _world_holes(kind: str, at_x: float, thickness_m: float) -> list[dict]:
-    """The four bolts on the world side, on a square, CHOSEN not sourced."""
+def _world_holes(kind: str, at_x: float, thickness_m: float,
+                 height_m: float, width_m: float) -> list[dict]:
+    """The four bolts on the world side, on a square, CHOSEN not sourced.
+
+    The endpoints are in the PART's frame, which runs from 0 to its length,
+    height and width, so the pattern is centred by adding half of each. The
+    holes used to be described by a y, a z and two x values and the cutter no
+    longer reads those.
+    """
     if kind == "floor":
         half, diameter, thread = (0.5 * FLOOR_BOLT_SQUARE_M,
                                   FLOOR_CLEARANCE_M, FLOOR_BOLT_THREAD)
     else:
         half, diameter, thread = (0.5 * TOOL_BOLT_SQUARE_M,
                                   TOOL_CLEARANCE_M, TOOL_BOLT_THREAD)
-    return [{"end": kind, "kind": "clearance", "face": kind, "thread": thread,
-             "diameter_m": diameter, "y_m": sy * half, "z_m": sz * half,
-             "x0_m": at_x - thickness_m - 0.002, "x1_m": at_x + 0.002,
-             "bolt_circle_m": None}
-            for sy in (-1.0, 1.0) for sz in (-1.0, 1.0)]
+    holes = []
+    for sy in (-1.0, 1.0):
+        for sz in (-1.0, 1.0):
+            centre_y = 0.5 * height_m + sy * half
+            centre_z = 0.5 * width_m + sz * half
+            holes.append({
+                "end": kind, "kind": "clearance", "face": kind,
+                "thread": thread, "diameter_m": diameter,
+                "start_m": [at_x - thickness_m - 0.002, centre_y, centre_z],
+                "end_m": [at_x + 0.002, centre_y, centre_z],
+                "y_m": sy * half, "z_m": sz * half,
+                "bolt_circle_m": None})
+    return holes
 
 
 def generate_mount(name: str, actuator_id: str, face_name: str,
@@ -231,12 +246,15 @@ def generate_mount(name: str, actuator_id: str, face_name: str,
                                    EXPORT_SCALE)
     holes = [{"end": "actuator", "kind": "clearance", "face": face.face,
               "thread": h["thread"], "diameter_m": h["diameter_m"],
+              "start_m": [-0.002, 0.5 * height_m + h["y_m"],
+                          0.5 * width_m + h["z_m"]],
+              "end_m": [plate + 0.002, 0.5 * height_m + h["y_m"],
+                        0.5 * width_m + h["z_m"]],
               "y_m": h["y_m"], "z_m": h["z_m"],
-              "x0_m": -0.002, "x1_m": plate + 0.002,
               "bolt_circle_m": h["bolt_circle_m"]}
              for h in bolt_holes(face)]
-    holes += _world_holes(world_side, length_m, plate)
-    body, report = cut_holes(body, holes, height_m, width_m, scale=EXPORT_SCALE)
+    holes += _world_holes(world_side, length_m, plate, height_m, width_m)
+    body, report = cut_holes(body, holes, scale=EXPORT_SCALE)
     body.export(str(out_dir / f"{name}.stl"))
 
     volume_m3 = float(abs(body.volume)) / EXPORT_SCALE ** 3
