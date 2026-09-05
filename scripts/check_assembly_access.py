@@ -148,6 +148,21 @@ def check_link(index: int, spec, drives, sections, path: Path,
     if not path.exists():
         row["reason"] = f"{path.name} has not been generated"
         return row
+
+    # A REFUSED LINK LEAVES ITS LAST FILE BEHIND. The generator writes
+    # nothing when it refuses, so the STL on disk is whatever an earlier run
+    # left, and checking it reports an old part's problems as though they
+    # were this one's. The upper arm and the forearm were refused in the run
+    # this reads, and their stale files came back with 188.6 and 35.3 cubic
+    # millimetres inside their motors, from a drop generated under different
+    # rules. The summary says which links this run actually produced.
+    made = {entry["link"] for entry in published.get("links", [])
+            if entry.get("generated")}
+    if published.get("links") and link.name not in made:
+        row["reason"] = (f"{link.name} was REFUSED by the run that wrote this "
+                         f"summary, so the file on disk is stale and says "
+                         f"nothing about the current design")
+        return row
     body = trimesh.load(str(path))
     built, reason = link_domain(spec, index, drives, sections=sections)
     if built is None:
