@@ -733,20 +733,25 @@ SOURCED_MOTORS: list[SourcedMotor] = [
     # is refused for it.
     SourcedMotor(
         id="kollmorgen_tbm_6013_a",
-        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
-        # catalogue's outline drawings page prints the whole frameless
-        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
-        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
-        # model. What it does not print is a housing or a bolt pattern, and
-        # that is not an omission: a frameless motor has neither, which is
-        # the point of buying one. Refusing it for "no published outline"
-        # confused the two, and the numbers to design a housing around it
-        # were on a page of the same PDF that had not been read.
-        outer_diameter_m=0.06035,
-        axial_length_m=0.0127,
+        # THE OUTLINE PAGE EXISTS AND ITS DIAMETERS ARE NOT ASSIGNED HERE.
+        # This entry briefly carried a stator outside diameter, a bore and a
+        # rotor outside read off that page. Those feature names were NOT on
+        # the drawing. The drawing prints diameters with annotations, and the
+        # names were inferred and then written down as if read, which is the
+        # one thing this project does not do.
+        #
+        # They were also wrong. Taken as stator outside 60.35 and stator bore
+        # 59.06 the stator would be 0.645 mm thick in the radial direction,
+        # with a yoke, teeth and windings inside it; a torque motor stator is
+        # eight to fifteen. The impossibility is the proof that the reading
+        # was an inference.
+        #
+        # What the page prints, verbatim and unassigned: 60.35/60.30,
+        # 59.06 MAX 2 PL FLUIDIZE, 57.79 MAX 2 PL, 39.37 MIN 2 PL,
+        # 28.70 +/-0.0127, 5.08 MAX 2 PL. The stack lengths ARE labelled, "A"
+        # STATOR and "B" ROTOR, and only those are stored.
         stator_stack_m=0.0127,
         rotor_stack_m=0.01676,
-        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
@@ -780,20 +785,25 @@ SOURCED_MOTORS: list[SourcedMotor] = [
                "the speed check conservative.")),
     SourcedMotor(
         id="kollmorgen_tbm_6025_a",
-        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
-        # catalogue's outline drawings page prints the whole frameless
-        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
-        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
-        # model. What it does not print is a housing or a bolt pattern, and
-        # that is not an omission: a frameless motor has neither, which is
-        # the point of buying one. Refusing it for "no published outline"
-        # confused the two, and the numbers to design a housing around it
-        # were on a page of the same PDF that had not been read.
-        outer_diameter_m=0.06035,
-        axial_length_m=0.0254,
+        # THE OUTLINE PAGE EXISTS AND ITS DIAMETERS ARE NOT ASSIGNED HERE.
+        # This entry briefly carried a stator outside diameter, a bore and a
+        # rotor outside read off that page. Those feature names were NOT on
+        # the drawing. The drawing prints diameters with annotations, and the
+        # names were inferred and then written down as if read, which is the
+        # one thing this project does not do.
+        #
+        # They were also wrong. Taken as stator outside 60.35 and stator bore
+        # 59.06 the stator would be 0.645 mm thick in the radial direction,
+        # with a yoke, teeth and windings inside it; a torque motor stator is
+        # eight to fifteen. The impossibility is the proof that the reading
+        # was an inference.
+        #
+        # What the page prints, verbatim and unassigned: 60.35/60.30,
+        # 59.06 MAX 2 PL FLUIDIZE, 57.79 MAX 2 PL, 39.37 MIN 2 PL,
+        # 28.70 +/-0.0127, 5.08 MAX 2 PL. The stack lengths ARE labelled, "A"
+        # STATOR and "B" ROTOR, and only those are stored.
         stator_stack_m=0.0254,
         rotor_stack_m=0.02946,
-        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
@@ -822,20 +832,25 @@ SOURCED_MOTORS: list[SourcedMotor] = [
         notes="Frameless, same caveat as the 6013."),
     SourcedMotor(
         id="kollmorgen_tbm_6051_a",
-        # THE OUTLINE IS PUBLISHED and this entry said it was not. The
-        # catalogue's outline drawings page prints the whole frameless
-        # geometry: stator 60.35/60.30 outside, 59.06 max bore, rotor 57.79
-        # max outside on a 28.70 +/-0.0127 shaft bore, and a stack length per
-        # model. What it does not print is a housing or a bolt pattern, and
-        # that is not an omission: a frameless motor has neither, which is
-        # the point of buying one. Refusing it for "no published outline"
-        # confused the two, and the numbers to design a housing around it
-        # were on a page of the same PDF that had not been read.
-        outer_diameter_m=0.06035,
-        axial_length_m=0.0508,
+        # THE OUTLINE PAGE EXISTS AND ITS DIAMETERS ARE NOT ASSIGNED HERE.
+        # This entry briefly carried a stator outside diameter, a bore and a
+        # rotor outside read off that page. Those feature names were NOT on
+        # the drawing. The drawing prints diameters with annotations, and the
+        # names were inferred and then written down as if read, which is the
+        # one thing this project does not do.
+        #
+        # They were also wrong. Taken as stator outside 60.35 and stator bore
+        # 59.06 the stator would be 0.645 mm thick in the radial direction,
+        # with a yoke, teeth and windings inside it; a torque motor stator is
+        # eight to fifteen. The impossibility is the proof that the reading
+        # was an inference.
+        #
+        # What the page prints, verbatim and unassigned: 60.35/60.30,
+        # 59.06 MAX 2 PL FLUIDIZE, 57.79 MAX 2 PL, 39.37 MIN 2 PL,
+        # 28.70 +/-0.0127, 5.08 MAX 2 PL. The stack lengths ARE labelled, "A"
+        # STATOR and "B" ROTOR, and only those are stored.
         stator_stack_m=0.0508,
         rotor_stack_m=0.05486,
-        rotor_bore_m=0.02870,
         grade=PartGrade.INDUSTRIAL, bus_voltage_v=48.0,
         peak_torque_condition="peak STALL torque at a 25 C winding "
                               "temperature, printed with that condition",
