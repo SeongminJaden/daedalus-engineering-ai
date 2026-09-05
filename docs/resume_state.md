@@ -65,7 +65,7 @@ check in this repository.
 | mounts | `projects/manipulator/mounts.py`, `scripts/generate_mounts.py`. Base mount 1.372 kg, tool plate 0.576 kg |
 | spigot and friction | `spigot_stage`: no friction coefficient is assumed, the coefficient the joint NEEDS is reported. Worst joint 0.027; dowel bearing 66.3 N m against a 22.6 N m shoulder peak |
 | assembly access | `scripts/check_assembly_access.py`: every drive comes out along its axis and none of the 120 bolt holes is blocked |
-| build volume | EOS M 290, 250 x 250 x 325 mm as printed. The upper arm is 238.7 across, so 11.3 mm spare |
+| build volume | EOS M 290, 250 x 250 x 325 mm as printed. The upper arm is 238.7 on its TIGHTEST axis, so 11.3 mm spare there, and 291.0 on its longest, which is past the 250 mm bed. It fits only lying along the build height, which the sheet says includes the platform and is application dependent |
 | mass | 8.312 kg of links at a volume fraction of 0.3, which is a fraction OF A DOMAIN and the domains grew. Meaningless until the per link search finishes |
 | not done | the volume fraction search, covers, wiring, bearings beyond a seat tolerance, the spigot fit (no boss tolerance is printed), the AK80-9 dowel angles (not published and not measurable on its model) |
 
@@ -82,6 +82,50 @@ over stiffness. That is 1.15 times the stiffest gear unit this catalogue
 prints, 44,000, so the limit sits at the edge of what is available rather
 than beyond it. With every joint at that 44,000 the joints alone would use
 0.461 mm of the 1 mm limit and leave 0.539 for the links and any margin.
+
+CORRECTION, 2026-09-05. It was written here that the bearing is the whole
+of the joint stiffness. That is wrong, and the load path says so in one
+line. The shoulder turns about z; at full reach the tool hangs out along x
+and gravity pulls along minus y, so the moment is the cross product of
+those and points along minus z. Its component on the joint axis is exactly
+one. A joint bearing resists moments about the two axes ACROSS the joint,
+and the single direction it does not resist is the one the joint turns in,
+which is precisely where this moment sits. The tool sags because the DRIVE
+TRAIN twists.
+
+So 50,689 N m/rad is a torsional requirement on the reducer. The crossed
+roller's tilting rigidity answers a different question, the out of plane
+budget, and both are needed. A catalogue figure of about 1.7e6 N m/rad read
+off THK 382-5E page 16 for an RB10020 at 0.4 kN m is an UPPER BOUND only:
+this arm's operating moment is under five percent of that chart's range,
+where the curve is steepest and unreadable.
+
+`joint_torsion_stage` computes the reducer's own number. The chain is the
+output flange, six output pins on a 50 mm circle, the disc, eleven ring pins
+on a 90 mm circle, the housing, with the two contact interfaces in series
+with the discs' in plane shear. At the 22.76 N m static shoulder torque:
+output pin contact 851,687, ring pin contact 4,489,678, two discs in shear
+14,413,851, and 682,012 N m/rad in series. That is 13.5 times the
+requirement. The output pins dominate because they sit at half the ring
+pins' radius and carry three times the force each; the discs barely appear.
+
+It is an estimate and not a verified result. The pressure angle is dropped,
+so the contact approach is taken as fully tangential. The eccentric bearing
+is not in the chain. Housing and output flange torsion are not in it. The
+engaged pin fractions are assumed rather than solved. Palmgren's line
+contact relation is a ROLLER BEARING formula being used on a cycloidal
+flank. A factor of thirteen is room to be wrong in. What it does establish
+is a direction: the reducer is not obviously the thing that fails the 1 mm
+budget, and that budget stays UNVERIFIED either way.
+
+The same calculation closes the disc thickness question that was left open.
+In plane shear is linear in thickness, so 0.028 mm would carry the
+stiffness alone; the contact terms go as thickness to the 0.8, putting their
+floor at 0.292 mm; pin contact stress was already six times under its
+allowable and output pin hole bearing needs 0.20 mm. Four computed floors
+and not one of them within an order of magnitude of 8 mm. The thickness is
+CHOSEN, for what a wire cut disc can be handled, stacked and kept flat at,
+which this repository cannot compute and no longer pretends to.
 
 CORRECTION, same day. This was first reported as 205,000 N m/rad and 4.7
 times the stiffest available, and that was wrong by a factor of four in the
@@ -129,6 +173,16 @@ Defects found by standing the parts up, none of which a check here could see:
   itself passed throughout, because it uses the joint origins; the wrong
   number lived only inside the deflection weighting and appeared the moment
   that was written. A right length and a wrong reach.
+- The build volume test pinned 238.7 mm as the widest part, and 238.7 was
+  right about the MARGIN and wrong about the AXIS. When the crossing axis
+  rule put a drive's bolt circle inside the domain, the upper arm's long
+  axis took half an AK80-64 outer diameter at each end and became 291.0 mm,
+  past the 250 mm bed. 238.7 is now its second longest axis, and the 11.3 mm
+  it leaves is still exact. Neither assertion could see the change: `fits`
+  accepts a part that fits only standing up, and the margin check compared
+  250 against a number that had grown past 250, so the difference went
+  negative and the check passed for the wrong reason. The upper arm's
+  manufacturability is conditional now, not plain.
 
 Operational notes: killing a `ProcessPoolExecutor` parent does NOT kill its
 spawned workers, and two abandoned runs once held 11.7 of 16 cores while a

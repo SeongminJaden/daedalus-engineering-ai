@@ -8,6 +8,7 @@ pipeline cannot do.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -1854,14 +1855,123 @@ def backlash_stage(dynamics: StageResult, drivetrain: StageResult,
 #: 100 MPa, or 0.03 of hardened steel. At 8 mm the hole sees 2.45 MPa.
 #:
 #: So the thickness is not carried by either of the loads it obviously
-#: carries, and calling it a strength result would be false. What is left is
-#: disc stiffness, which has not been computed, and what a wire cut disc can
-#: be handled and stacked at. It is a choice until one of those is done.
+#: carries, and calling it a strength result would be false. Disc stiffness
+#: was the last open candidate and `joint_torsion_stage` has now closed it:
+#: the in plane shear of the annulus between the two pin circles is
+#: 7.21e6 N m/rad per disc, 284 times the arm's requirement, and it is linear
+#: in thickness, so 0.028 mm of steel would carry the stiffness on its own.
+#: The contact stiffness floor is 0.292 mm. Every computed floor is now more
+#: than an order of magnitude below 8 mm.
+#:
+#: The thickness is therefore CHOSEN, and it is chosen for what a wire cut
+#: disc can be handled, stacked and kept flat at, which is not something this
+#: repository can compute. That is a weaker claim than a strength result and
+#: it is the true one.
 CYCLOIDAL_DISC_THICKNESS_M = 0.008
 CYCLOIDAL_DISC_THICKNESS_BASIS = (
-    "CHOSEN. Not set by pin contact, which is six times under its allowable, "
-    "and not by output pin hole bearing, which needs 0.20 mm. Disc stiffness "
-    "and handling are the remaining candidates and neither has been computed")
+    "CHOSEN, for handling and flatness of a wire cut disc, which is not "
+    "computed here. Four floors were computed and none of them binds: pin "
+    "contact stress is six times under its allowable, output pin hole "
+    "bearing needs 0.20 mm, disc in plane shear stiffness needs 0.028 mm, "
+    "and contact stiffness needs 0.292 mm")
+
+
+#: Palmgren's empirical approach for a steel line contact, delta in mm from
+#: F in newtons and L in millimetres. It is a ROLLER BEARING formula and it
+#: is used here on a cycloidal flank, which is the largest of several
+#: approximations in the torsion estimate below.
+def line_contact_approach_mm(force_n: float, length_mm: float) -> float:
+    return 3.84e-5 * force_n ** 0.9 / length_mm ** 0.8
+
+
+#: In plane torsional stiffness of the annulus a cycloidal disc has between
+#: its output pin circle and its ring pin circle. Torque enters at the outer
+#: radius and leaves at the inner one, so the shear stress is T / (2 pi r^2 t)
+#: and the relative rotation integrates to T / (4 pi G t) * (1/a^2 - 1/b^2).
+#: The holes through the disc are ignored, which makes this an upper bound.
+def disc_shear_stiffness_nm_rad(thickness_m: float,
+                                inner_radius_m: float = 0.025,
+                                outer_radius_m: float = 0.045,
+                                shear_modulus_pa: float = 79.3e9) -> float:
+    return (4.0 * math.pi * shear_modulus_pa * thickness_m
+            / (1.0 / inner_radius_m ** 2 - 1.0 / outer_radius_m ** 2))
+
+
+def joint_torsion_stage(spec: ManipulatorSpec = SPEC,
+                        torque_nm: float = 22.76,
+                        required_nm_rad: float = 50_689.0) -> StageResult:
+    """The stiffness the deflection budget actually asks for, and where it is.
+
+    IT IS NOT THE BEARING'S. The tool sags because the joint output rotates
+    about its own axis, and at the shoulder the gravity moment lies entirely
+    along that axis: taking the cross product of the 600 mm lever with
+    gravity gives a moment whose component on the joint axis is exactly one.
+    That is the single direction a joint bearing does not resist, because it
+    is the direction the joint turns in. What resists it is the drive train.
+
+    So the 50,689 N m/rad is a TORSIONAL requirement on the reducer, and the
+    crossed roller's tilting rigidity answers a different question: the
+    out of plane budget, where the bearing carries moments about the two axes
+    across the joint. Both are needed and they are not the same number.
+
+    The chain here is flange, six output pins, disc, eleven ring pins,
+    housing, with the two contact interfaces in series.
+    """
+    result = StageResult(name="joint torsion, which is what the budget asks")
+    thickness_mm = CYCLOIDAL_DISC_THICKNESS_M * 1000.0
+    terms = []
+    for name, radius_m, engaged in (("output pins on 50", 0.025, 3.0),
+                                    ("ring pins on 90", 0.045, 5.5)):
+        force = torque_nm / radius_m / engaged / 2.0      # two discs share it
+        approach = line_contact_approach_mm(force, thickness_mm) / 1000.0
+        rotation = approach / radius_m
+        stiffness = torque_nm / rotation
+        terms.append(stiffness)
+        result.rows.append({
+            "term": name, "radius_m": radius_m,
+            "force_per_pin_per_disc_n": force,
+            "approach_m": approach, "rotation_rad": rotation,
+            "stiffness_nm_rad": stiffness,
+            "times_required": stiffness / required_nm_rad})
+
+    disc = 2.0 * disc_shear_stiffness_nm_rad(CYCLOIDAL_DISC_THICKNESS_M)
+    terms.append(disc)
+    result.rows.append({
+        "term": "two discs, in plane shear", "radius_m": None,
+        "force_per_pin_per_disc_n": None, "approach_m": None,
+        "rotation_rad": torque_nm / disc, "stiffness_nm_rad": disc,
+        "times_required": disc / required_nm_rad})
+
+    series = 1.0 / sum(1.0 / value for value in terms)
+    result.data["torsional_stiffness_nm_rad"] = series
+    result.data["required_nm_rad"] = required_nm_rad
+    result.data["margin"] = series / required_nm_rad
+    result.notes.append(
+        f"the three terms in series give {series:,.0f} N m/rad against the "
+        f"{required_nm_rad:,.0f} the arm needs, a factor of "
+        f"{series / required_nm_rad:.1f}. The output pin contact dominates, "
+        f"because those pins sit at half the radius of the ring pins and so "
+        f"carry three times the force each; the discs themselves are stiff "
+        f"enough to be almost absent from the sum")
+    result.notes.append(
+        "this also closes the disc thickness question. In plane shear is "
+        "linear in thickness, so 0.028 mm would carry the stiffness alone, "
+        "and the contact terms go as thickness to the 0.8, putting their "
+        "floor at 0.292 mm. With pin contact stress and hole bearing already "
+        "clear by a factor of six and forty, no computed floor comes within "
+        "an order of magnitude of 8 mm: the thickness is chosen for handling")
+    result.could_not.append(
+        "This is a first estimate and every simplification in it is either "
+        "optimistic or unquantified: the pressure angle is ignored so the "
+        "contact approach is taken as fully tangential, the eccentric "
+        "bearing is not in the chain at all, the housing and output flange "
+        "torsion are not in it, the engaged pin fractions are assumed rather "
+        "than solved, and Palmgren's relation is a roller bearing formula "
+        "applied to a cycloidal flank. A factor of thirteen is room to be "
+        "wrong in and it is not a verified result. What it does establish is "
+        "the direction: the reducer is not obviously the thing that fails "
+        "the 1 mm budget, and the budget stays UNVERIFIED either way.")
+    return result
 
 
 def joint_module_stiffness_stage(spec: ManipulatorSpec = SPEC,

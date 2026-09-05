@@ -8,6 +8,7 @@ the drawings do not print are recorded as absent here, and a design that fills
 any of them in with a plausible number breaks a test.
 """
 
+import numpy as np
 import pytest
 
 from projects.manipulator.interfaces import (AK80_9_HOUSING, AK80_9_OUTPUT,
@@ -431,36 +432,66 @@ def test_two_links_are_asked_for_a_shape_a_box_cannot_be():
             assert "cannot do both" in row["conflict"]
 
 
-def test_every_link_fits_the_machine_its_material_comes_from():
+def test_the_upper_arm_fits_the_machine_only_by_standing_it_up():
     """A part that does not fit cannot be made, whatever else is true of it.
 
     The material in this design is AlSi10Mg with its strength and fatigue
     numbers read off the EOS M 290 sheet, so the M 290's own construction
     volume is the one that applies: 250 by 250 by 325 mm, with the height
-    including the build platform and stated to be application dependent. The
-    widest part is the upper arm at 238.7 mm across its cranked domain, which
-    leaves 11.3 mm, so this is a live constraint rather than a formality.
+    including the build platform and stated to be application dependent.
+
+    THIS TEST USED TO CLAIM THE WIDEST PART WAS 238.7 mm AND IT WAS STALE.
+    That number was the upper arm's tightest axis, and the 11.3 mm it leaves
+    against 250 is still exactly right. What changed underneath it is the
+    other axis. When the crossing axis rule was written, so that a bolt
+    circle centred on a drive is inside the domain rather than half outside
+    it, the upper arm's long axis took half an AK80-64 outer diameter at each
+    end: 193.0 mm of link between the joints, plus 98.0 mm of motor, is
+    291.0. That is past the 250 mm bed.
+
+    The part still fits, but only lying along the 325 mm build height, and
+    the sheet says that height includes the build platform and is
+    application dependent. So the upper arm's manufacturability is now
+    conditional where it used to be plain, and neither of the old assertions
+    could see it: `fits` accepts a conditional fit, and the margin check
+    compared 250 against a number that had grown PAST 250, which makes the
+    difference negative and the check pass for the wrong reason. Both are
+    replaced with assertions that name the axis they are about.
     """
     import numpy as np
 
-    from projects.manipulator.links import fits_the_build_volume, world_boxes
+    from projects.manipulator.links import (EOS_M290_BUILD_VOLUME_M,
+                                            fits_the_build_volume, world_boxes)
     from projects.manipulator.loop import run_loop
 
     loop = run_loop()
     boxes = world_boxes(SPEC, dict(loop.data["history"][-1].selected),
                         loop.data["final_sections"])
-    widest = 0.0
+    standing = {}
+    extents = {}
     for box in boxes:
         if not box.get("placed"):
             continue
-        extent = np.asarray(box["high"]) - np.asarray(box["low"])
+        extent = np.sort(np.asarray(box["high"]) - np.asarray(box["low"]))
         fits, why = fits_the_build_volume(extent)
         assert fits, f"{box['link']}: {why}"
-        widest = max(widest, float(extent.max()))
-    assert widest == pytest.approx(0.2387, abs=0.002)
-    assert 0.250 - widest < 0.015, (
-        "the widest part has more room than expected, so either the domains "
-        "shrank or the machine changed; re-read both")
+        extents[box["link"]] = extent
+        if "standing it up" in why:
+            standing[box["link"]] = extent
+
+    assert set(standing) == {"upper_arm"}, (
+        "exactly one part is supposed to need the build height; if this set "
+        "changed, the domains or the machine did")
+
+    bed = sorted(EOS_M290_BUILD_VOLUME_M)[1]
+    upper = extents["upper_arm"]
+    assert upper[-1] == pytest.approx(0.2910, abs=0.002)
+    assert upper[-1] > bed
+    assert upper[1] == pytest.approx(0.2387, abs=0.002)
+    assert bed - upper[1] == pytest.approx(0.0113, abs=0.002), (
+        "the tightest axis has moved; this is the margin the docstring "
+        "quotes and it has to be read off the second longest axis, not the "
+        "longest, because the longest no longer fits the bed at all")
 
 
 def test_the_mounting_planes_do_not_drift_along_the_chain():
@@ -872,3 +903,89 @@ def test_the_inner_bolt_circle_gets_a_seat_on_the_boss_end():
         assert kinds.count("seat") == 1, (link.name, kinds)
         seat = next(s for s in solids if s["kind"] == "seat")
         assert seat["inner_diameter_m"] == 0.0, "a seat is a disc, not a ring"
+
+
+def test_the_gravity_moment_at_the_shoulder_lies_on_the_joint_axis():
+    """Why the bearing is not the answer to the deflection budget.
+
+    An earlier reading of this had the crossed roller bearing carrying the
+    tool sag, and it was wrong. The shoulder turns about z. At full reach the
+    tool hangs off along x and gravity pulls along minus y, so the moment it
+    makes is the cross product of those, which points along minus z. That is
+    the joint axis itself, to the last digit.
+
+    A joint bearing resists moments about the two axes ACROSS the joint. The
+    one direction it cannot resist is the one the joint turns in, and that is
+    exactly where this moment sits. So the sag comes out of the drive train's
+    torsional compliance, not the bearing's tilting rigidity, and the two
+    belong to different budgets.
+    """
+    axis = np.array([0.0, 0.0, 1.0])
+    lever = np.array([SPEC.reach_m, 0.0, 0.0])
+    moment = np.cross(lever, np.array([0.0, -1.0, 0.0]))
+    along = float(np.dot(moment / np.linalg.norm(moment), axis))
+    assert abs(along) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_the_reducers_torsion_clears_the_requirement_but_only_as_an_estimate():
+    """The drive train's own stiffness, against the 50,689 the arm asks for.
+
+    The chain is the output flange, six output pins, the disc, eleven ring
+    pins and the housing. Two contact interfaces in series with the discs'
+    own in plane shear. The output pins dominate because they sit at half the
+    ring pins' radius and carry three times the force each, and the discs are
+    stiff enough to barely appear in the sum.
+
+    The factor is thirteen, which is a pass and is not a verified one: the
+    pressure angle is dropped, the eccentric bearing is absent, the housing
+    torsion is absent, the engaged pin counts are assumed, and Palmgren's
+    approach is a roller bearing relation being used on a cycloidal flank.
+    The test pins the number so that a later correction is visible as a
+    change rather than as a new opinion.
+    """
+    from projects.manipulator.stages import joint_torsion_stage
+
+    stage = joint_torsion_stage()
+    terms = {row["term"]: row["stiffness_nm_rad"] for row in stage.rows}
+    assert set(terms) == {"output pins on 50", "ring pins on 90",
+                          "two discs, in plane shear"}
+    assert terms["output pins on 50"] < terms["ring pins on 90"]
+    assert terms["ring pins on 90"] < terms["two discs, in plane shear"]
+
+    series = stage.data["torsional_stiffness_nm_rad"]
+    assert series < min(terms.values())
+    assert series == pytest.approx(682_012, rel=0.01)
+    assert stage.data["margin"] == pytest.approx(13.5, rel=0.02)
+    assert any("not a verified result" in item for item in stage.could_not)
+
+
+def test_no_computed_floor_comes_near_the_discs_eight_millimetres():
+    """The thickness stays CHOSEN, and now four computations say so.
+
+    In plane shear is linear in thickness, so the stiffness floor is 0.028
+    mm. The contact terms go as thickness to the 0.8, putting theirs at 0.292
+    mm. Pin contact stress and output pin hole bearing were already clear by
+    factors of six and forty. Nothing computed reaches within an order of
+    magnitude of 8 mm, so the thickness answers to handling and flatness of a
+    wire cut part, which this repository cannot compute and does not claim to.
+    """
+    from projects.manipulator.stages import (CYCLOIDAL_DISC_THICKNESS_BASIS,
+                                             CYCLOIDAL_DISC_THICKNESS_M,
+                                             disc_shear_stiffness_nm_rad)
+
+    required = 50_689.0
+    floor = CYCLOIDAL_DISC_THICKNESS_M * required / (
+        2.0 * disc_shear_stiffness_nm_rad(CYCLOIDAL_DISC_THICKNESS_M))
+    assert floor == pytest.approx(2.8e-5, rel=0.05)
+    assert floor < CYCLOIDAL_DISC_THICKNESS_M / 100.0
+    assert CYCLOIDAL_DISC_THICKNESS_BASIS.startswith("CHOSEN")
+    assert "handling" in CYCLOIDAL_DISC_THICKNESS_BASIS
+
+
+def test_disc_shear_stiffness_is_linear_in_thickness():
+    """The property the floor above is read off, asserted rather than assumed."""
+    from projects.manipulator.stages import disc_shear_stiffness_nm_rad
+
+    one = disc_shear_stiffness_nm_rad(0.004)
+    two = disc_shear_stiffness_nm_rad(0.008)
+    assert two == pytest.approx(2.0 * one, rel=1e-12)
